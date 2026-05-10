@@ -1,0 +1,25 @@
+# eDiscovery Test Suite — Python dependencies
+# Install: pip install -r requirements.txt
+# Or for the dr-load CLI (editable install): pip install -e .
+
+# HTTP client
+requests>=2.31.0
+
+# Functional test framework
+pytest>=7.4.0
+pytest-html>=4.1.0
+pytest-xdist>=3.5.0
+
+# Load testing
+locust>=2.20.0
+
+# CLI framework
+typer>=0.9.0
+rich>=13.0.0
+
+# Config / environment
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+
+# Database (Postgres, used by JobPoller in dr-load)
+psycopg2-binary>=2.8.0
