@@ -261,6 +261,16 @@ async def _walk_jobs_monitor() -> None:
         s.value = "anything"
         await pilot.pause()
 
+        # v0.11: operation-type Select + Log button must exist.
+        from textual.widgets import Select as _S
+        sel = app.screen.query_one("#jobs-type-select", _S)
+        assert sel is not None, "jobs-type-select missing"
+        log_btn = app.screen.query_one("#jobs-act-log", _B)
+        assert log_btn is not None, "Log action button missing"
+        # Log on a finished/empty selection should hint, not crash.
+        log_btn.action_press()
+        await pilot.pause()
+
         # Esc closes.
         await pilot.press("escape")
         await pilot.pause()

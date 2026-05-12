@@ -14,7 +14,7 @@ The two user roles take different paths:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Optional
 
 from helpers.api_client import APIError, EDiscoveryClient
 
@@ -477,6 +477,153 @@ def list_realm_jobs(client: EDiscoveryClient) -> tuple[list[dict], int]:
     except APIError:
         return [], 0
     return (resp.get("jobs") or []), int(resp.get("totalCores") or 0)
+
+
+# --- v0.11: realm-wide task list (replaces per-project fan-out) -------------
+def list_realm_tasks(
+    client: EDiscoveryClient,
+    *,
+    operation_type: str = "",
+) -> tuple[list["JobRow"], int]:
+    """Realm-wide task list from `realmManager/listRealmTasks`.
+
+    Returns `(rows, total_count)`. Each row is a `JobRow` built directly
+    from the endpoint's pre-flat fields — no per-project fan-out, no
+    `currentStatus` walk to extract orgName/owner/duration. `RUNNING`
+    vs everything-else is decided by the `operationState` enum
+    (CREATED / RUNNING / SUCCESS / FAILURE / CANCELLED / …).
+
+    The body always sends a `SYNTAXERROR EQUALS false` filter — mirrors
+    the DR Web UI, which uses this sentinel to mean "give me everything".
+    When `operation_type` is supplied, an additional
+    `OPERATION_TYPE EQUALS <value>` filter is appended.
+    """
+    filters = [
+        {"attribute": "SYNTAXERROR", "operator": "EQUALS", "value": "false"},
+    ]
+    if operation_type:
+        filters.append({
+            "attribute": "OPERATION_TYPE",
+            "operator": "EQUALS",
+            "value": operation_type,
+        })
+    try:
+        resp = client.post(
+            "realmManager/listRealmTasks",
+            extra_body={
+                "contextHandle": "super_system_customer",
+                "startIndex": 0,
+                "count": 500,
+                "filters": filters,
+            },
+        )
+    except APIError:
+        return [], 0
+
+    out: list[JobRow] = []
+    for t in resp.get("tasks") or []:
+        op_state = str(t.get("operationState") or "").upper()
+        # RUNNING / PAUSED / CREATED-ish are "active"; everything else
+        # is history. The Jobs Monitor filter buckets use this split.
+        state = "RUNNING" if op_state in (
+            "RUNNING", "PAUSED", "CREATED", "QUEUED", "PENDING",
+        ) else (op_state or "COMPLETE")
+        out.append(JobRow(
+            project=str(t.get("projectName") or "?"),
+            job=str(t.get("description") or "Task"),
+            task_handle=str(t.get("handle") or "")[:16],
+            state=state,
+            started=str(t.get("dateStarted") or ""),
+            completed=str(t.get("dateCompleted") or ""),
+            duration=str(t.get("secondsElapsed") or ""),
+            org=str(t.get("orgName") or ""),
+            user=str(t.get("owner") or ""),
+            raw=t,
+        ))
+    return out, int(resp.get("totalCount") or len(out))
+
+
+def list_operation_types(client: EDiscoveryClient) -> list[str]:
+    """Enum of task operation types from `realmManager/listOperationTypes`.
+
+    Used to populate the Jobs Monitor "filter by type" dropdown.
+    Sentinel values `INVALID` and `NONE` are filtered out — they exist
+    in the enum for protocol completeness but never appear on real tasks.
+    """
+    try:
+        resp = client.post(
+            "realmManager/listOperationTypes",
+            extra_body={
+                "contextHandle": "super_system_customer",
+                "startIndex": 0,
+                "count": 0,         # 0 = all (server-side default)
+                "filters": [],
+            },
+        )
+    except APIError:
+        return []
+    raw = resp.get("workbasketTypes") or []
+    skip = {"INVALID", "NONE", ""}
+    return sorted(str(w) for w in raw if str(w) not in skip)
+
+
+def get_task_sri(
+    client: EDiscoveryClient, *, task_handle: str,
+) -> Optional[str]:
+    """Look up the per-task SRI ("Instance ID") needed by `getSRITaskLog`.
+
+    The SRI is only exposed inside the task's `currentStatus → Service
+    Node Debug State → Instance ID` field — it's not in `listRealmTasks`
+    or `listJobs`. We have to fetch the full task via
+    `taskManager/getTasks` with `includeDrDebug: true`.
+
+    Returns the SRI string (e.g. "593"), or None if the task has already
+    finished and the AE no longer has a debug section for it.
+    """
+    try:
+        resp = client.post(
+            "taskManager/getTasks",
+            extra_body={
+                "taskHandles": [task_handle],
+                "includeDrDebug": True,
+                "includeResourceStatistics": False,
+            },
+        )
+    except APIError:
+        return None
+    for t in resp.get("tasks") or []:
+        for sec in t.get("currentStatus") or []:
+            if str(sec.get("name") or "") != "Service Node Debug State":
+                continue
+            for kv in sec.get("data") or []:
+                if str(kv.get("name") or "") == "Instance ID":
+                    v = str(kv.get("value") or "").strip()
+                    if v:
+                        return v
+    return None
+
+
+def get_sri_task_log(
+    client: EDiscoveryClient, *, task_sri: str, num_lines: int = 1000,
+) -> list[str]:
+    """Tail the per-task AE log via `taskManager/getSRITaskLog`.
+
+    Returns up to `num_lines` lines (server may return fewer for short
+    logs). Empty list on any error — caller decides how to surface that
+    to the user.
+    """
+    try:
+        resp = client.post(
+            "taskManager/getSRITaskLog",
+            extra_body={
+                "numLines": int(num_lines),
+                "taskSri": str(task_sri),
+            },
+        )
+    except APIError:
+        return []
+    lines = resp.get("logLines") or []
+    return [str(line) for line in lines]
 
 
 def list_deleted_projects(client: EDiscoveryClient) -> list[DeletedProject]:

@@ -1,5 +1,75 @@
 # Changelog
 
+## v0.11.0 — 2026-05-12
+
+### Added: dr-tui — Jobs Monitor v2 (realm-wide tasks, type filter, live log)
+
+Three changes that together turn the F3 Jobs Monitor from "a useful
+inventory" into "the thing you reach for when something is wrong."
+
+**1. Single-call realm-wide task list.** v0.10 fanned out
+`projectManager/listTasks` once per project — `N` round trips, no
+operationState, no orgName/owner pre-filled. v0.11 replaces that with
+one call to `realmManager/listRealmTasks`:
+
+```json
+{
+  "contextHandle": "super_system_customer",
+  "startIndex": 0, "count": 500,
+  "filters": [{"attribute": "SYNTAXERROR", "operator": "EQUALS", "value": "false"}]
+}
+```
+
+The `SYNTAXERROR EQUALS false` filter is a sentinel — it's what the
+DR Web UI sends to mean "give me everything". The response items are
+already flat (`orgName`, `owner`, `projectName`, `dateStarted`,
+`dateCompleted`, `secondsElapsed`, `operationState`, `operationType`)
+so the modal builds `JobRow` instances directly without descending
+into `currentStatus[]`. State buckets are now based on the proper
+`operationState` enum (`RUNNING` / `PAUSED` / `SUCCESS` / `FAILURE` /
+`CANCELLED` / …) instead of the old "dateCompleted present ⇒ done"
+heuristic.
+
+**2. Operation-type filter dropdown.** A new `Select` widget on the
+filter row, populated lazily on first fetch from
+`realmManager/listOperationTypes` (100 entries: `DOCUMENT_ADD_FROM_FILE_LIST`,
+`PREPARE_FOR_ANALYTICS`, `COLLECTION_WEIGHT`, …). Selection adds an
+`OPERATION_TYPE EQUALS <value>` filter to `listRealmTasks` server-side
+— no client-side filtering, no fetch-everything-then-discard.
+
+**3. Per-task live log viewer.** New `TaskLogModal` (bound to `L`)
+tails the AE log for the selected running task via
+`taskManager/getSRITaskLog`. Two-step lookup:
+
+  1. `taskManager/getTasks` with `includeDrDebug: true` to find the
+     `"Instance ID"` under the `"Service Node Debug State"` status
+     section — that's the `taskSri` (the SRI is the AE worker's
+     instance number, e.g. `593`; it is **not** exposed in
+     `listRealmTasks` or `listJobs`).
+  2. `taskManager/getSRITaskLog` with `{ taskSri, numLines }` returns
+     `logLines[]` straight from the AE.
+
+`r` re-fetches, `n` cycles 1000 → 2000 → 3000 lines (matches the
+"View More" button in the DR Web UI). Log is only viable while the
+worker is running; for finished/cancelled tasks the modal hints
+"Live log only available for RUNNING tasks" instead of doing a
+doomed lookup.
+
+**Files touched:**
+
+- `dr_tui/data.py` — added `list_realm_tasks`, `list_operation_types`,
+  `get_task_sri`, `get_sri_task_log`. `collect_jobs` / `list_tasks_for_project`
+  are kept (still used by the landing dashboard's "Running jobs"
+  micro-table, where the operationState detail isn't needed).
+- `dr_tui/app.py` — `JobsMonitorModal._fetch_blocking` now does one
+  fetch instead of N; new `_type_filter` + `_op_types` state; new
+  `TaskLogModal` (`RichLog`-backed log viewer with `r` / `n` / Esc).
+- `dr_tui/app.tcss` — `#tasklog-card` + `#jobs-type-select` styles.
+- `tests/test_dr_tui_dashboard_layout.py` — extended `_walk_jobs_monitor`
+  to verify the new Select + Log button.
+
+All 9 pilot tests pass.
+
 ## v0.10.2 — 2026-05-12
 
 ### Fixed: dr-tui terminal compatibility (PuTTY + other legacy SSH clients)

@@ -445,6 +445,44 @@ JobsMonitorModal {
     content-align: center middle;
 }
 
+#jobs-type-select {
+    width: 26;
+    margin: 0 1;
+}
+
+/* ---------------------------------------------------------- v0.11 task log */
+TaskLogModal {
+    align: center middle;
+}
+
+#tasklog-card {
+    width: 90%;
+    height: 90%;
+    padding: 1 2;
+    border: round $accent;
+    background: $panel;
+}
+
+#tasklog-title {
+    content-align: center middle;
+    color: $accent;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#tasklog-status {
+    height: 1;
+    padding: 0 1;
+    color: grey;
+    margin-bottom: 1;
+}
+
+#tasklog-body {
+    height: 1fr;
+    border: round grey;
+    padding: 0 1;
+}
+
 /* ---------------------------------------------------------- F2 docs side-pane */
 .help-pane {
     width: 35%;

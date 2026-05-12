@@ -659,13 +659,13 @@ systemScope):
 Captured all three enum values during the v0.10.1 round (`NORMAL` →
 `HIGH` → `LOW`); each call returned 204 with empty body.
 
-### Bonus endpoints (same capture)
+### Bonus endpoints (same capture) — all wired in v0.11
 
-| Endpoint | Returns | Useful for |
+| Endpoint | Returns | Wired in |
 |---|---|---|
-| `realmManager/listRealmTasks` | 200 + `tasks[]` | Realm-wide task list with `operationState`, `dateStarted`, `dateCompleted`, filterable by `attribute/operator/value`. Cleaner data source for the Jobs Monitor than per-project `listTasks` fan-out. |
-| `realmManager/listOperationTypes` | 200 + `workbasketTypes[]` | Enum of all task types — `DOCUMENT_ADD_FROM_FILE_LIST`, `PREPARE_FOR_ANALYTICS`, `COLLECTION_WEIGHT`, etc. Source for a future "filter by type" dropdown. |
-| `taskManager/getSRITaskLog` | 200 + log lines | Per-task live log payload — used by the "View Live Log" UI option. Future Jobs Monitor enhancement. |
+| `realmManager/listRealmTasks` | 200 + `tasks[]` | **v0.11** — single-call data source for Jobs Monitor (replaced per-project `listTasks` fan-out). Filterable via `attribute/operator/value`; `SYNTAXERROR EQUALS false` is the "all rows" sentinel the DR Web UI sends. |
+| `realmManager/listOperationTypes` | 200 + `workbasketTypes[]` | **v0.11** — populates the Jobs Monitor "filter by type" Select. Selection adds `OPERATION_TYPE EQUALS <value>` to `listRealmTasks` server-side. |
+| `taskManager/getSRITaskLog` | 200 + `logLines[]` | **v0.11** — per-task AE log viewer (`L` in Jobs Monitor → `TaskLogModal`). Requires the `taskSri` (instance ID) which is only exposed in `taskManager/getTasks(includeDrDebug=true)` under `currentStatus → "Service Node Debug State" → "Instance ID"`. |
 
 ---
 

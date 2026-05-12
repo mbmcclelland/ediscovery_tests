@@ -602,6 +602,7 @@ class JobsMonitorModal(ModalScreen[None]):
         Binding("c",      "filter_complete",  "Complete",  show=False),
         Binding("d",      "filter_deleted",   "Deleted",   show=False),
         Binding("slash",  "focus_search",     "Search",    show=False),
+        Binding("l",      "view_log",         "Log",       show=False),
     ]
 
     # Filter state — "all" / "running" / "complete" / "deleted".
@@ -623,6 +624,12 @@ class JobsMonitorModal(ModalScreen[None]):
         self._total_cores = 0
         self._displayed = []
         self._search = ""
+        # v0.11 — operation-type filter. Empty string = "any type".
+        # _op_types is populated on first fetch (listOperationTypes);
+        # _op_types_populated flips True once set_options() has run.
+        self._type_filter: str = ""
+        self._op_types: list[str] = []
+        self._op_types_populated: bool = False
 
     def compose(self) -> ComposeResult:
         with Container(id="jobs-card"):
@@ -633,6 +640,12 @@ class JobsMonitorModal(ModalScreen[None]):
                 yield Button("Running",   id="jobs-flt-running",  variant="success")
                 yield Button("Complete",  id="jobs-flt-complete", variant="default")
                 yield Button("Deleted",   id="jobs-flt-deleted",  variant="warning")
+                # Operation-type dropdown. Populated lazily on first
+                # fetch; "" sentinel means "any type".
+                yield Select(
+                    [("Any type", "")], id="jobs-type-select",
+                    prompt="Any type", allow_blank=False, value="",
+                )
                 yield Input(placeholder="search (org / project / job)…",
                             id="jobs-search")
             with Horizontal(id="jobs-action-row"):
@@ -640,12 +653,14 @@ class JobsMonitorModal(ModalScreen[None]):
                 yield Button("Resume",   id="jobs-act-resume",  variant="success")
                 yield Button("Cancel",   id="jobs-act-cancel",  variant="error")
                 yield Button("Priority", id="jobs-act-priority", variant="warning")
+                yield Button("Log",      id="jobs-act-log",     variant="primary")
             with Horizontal(id="jobs-body"):
                 yield DataTable(id="jobs-table", zebra_stripes=True, cursor_type="row")
                 yield Static("[dim]Select a row to see full job detail.[/]",
                              id="jobs-detail", classes="detail-body")
             yield Static(
-                "[dim][r] refresh · [a/u/c/d] filter · [/] search · [Esc] close[/]",
+                "[dim][r] refresh · [a/u/c/d] filter · [/] search · "
+                "[l] log · [Esc] close[/]",
                 id="jobs-hint",
             )
 
@@ -700,6 +715,18 @@ class JobsMonitorModal(ModalScreen[None]):
         elif bid == "jobs-act-resume":  self._action_on_selected("resume")
         elif bid == "jobs-act-cancel":  self._action_on_selected("cancel")
         elif bid == "jobs-act-priority": self._action_on_selected("priority")
+        elif bid == "jobs-act-log":     self._action_on_selected("log")
+
+    def on_select_changed(self, evt) -> None:
+        if getattr(evt, "select", None) is None or evt.select.id != "jobs-type-select":
+            return
+        self._type_filter = "" if evt.value in ("", Select.BLANK) else str(evt.value)
+        # Re-fetch with the new server-side filter (listRealmTasks takes
+        # an OPERATION_TYPE filter directly — cheaper than client-side).
+        self.action_refresh()
+
+    def action_view_log(self) -> None:
+        self._action_on_selected("log")
 
     def _selected_job(self):
         try:
@@ -758,6 +785,21 @@ class JobsMonitorModal(ModalScreen[None]):
             self.app.push_screen(
                 PriorityModal(job_label=job.job, current=current),
                 lambda new_pri: self._after_priority_pick(new_pri, job),
+            )
+        elif action == "log":
+            # v0.11 — tail the per-task AE log. Only viable for running
+            # tasks (AE retains the Service Node Debug State only while
+            # the worker is alive). For finished tasks we show a hint
+            # rather than fire a doomed lookup.
+            if job.state != "RUNNING":
+                self.query_one("#jobs-detail", Static).update(
+                    f"[yellow]Live log only available for RUNNING tasks "
+                    f"(this one is {job.state}).[/]"
+                )
+                return
+            full_handle = (job.raw or {}).get("handle", job.task_handle)
+            self.app.push_screen(
+                TaskLogModal(job_label=job.job, task_handle=full_handle),
             )
 
     def _after_cancel_confirm(self, ok: bool, job) -> None:
@@ -849,20 +891,33 @@ class JobsMonitorModal(ModalScreen[None]):
         client = self._client()
         if client is None:
             return
-        # Realm jobs (running) + per-project listTasks (history).
+        # v0.11: single `realmManager/listRealmTasks` call gives us
+        # every task in the realm with pre-flat fields — no more
+        # per-project listTasks fan-out. listJobs is still useful for
+        # totalCores; we keep it as a cheap secondary call.
         try:
             _, total_cores = drdata.list_realm_jobs(client)
         except Exception:
             total_cores = 0
         try:
-            projects = self._projects(client)
-            running, completed = drdata.collect_jobs(client, projects)
+            rows, _ = drdata.list_realm_tasks(
+                client, operation_type=self._type_filter,
+            )
         except Exception:
-            running, completed = [], []
+            rows = []
+        running = [r for r in rows if r.state == "RUNNING"]
+        completed = [r for r in rows if r.state != "RUNNING"]
         try:
             deleted = drdata.list_deleted_projects(client)
         except Exception:
             deleted = []
+        # Populate the operation-type dropdown lazily on first fetch —
+        # one call per session is plenty (the enum doesn't change).
+        if not self._op_types:
+            try:
+                self._op_types = drdata.list_operation_types(client)
+            except Exception:
+                self._op_types = []
         self.app.call_from_thread(
             self._apply, running, completed, deleted, total_cores,
         )
@@ -871,32 +926,6 @@ class JobsMonitorModal(ModalScreen[None]):
         app = self.app
         return app.sys_client or app.org_client
 
-    def _projects(self, client) -> list:
-        """Project list used to fan out per-project listTasks.
-
-        For DRSysAdmin we use `realmManager/listProjects` directly (it
-        returns the full realm view), then shape it like
-        `list_projects_sys` so `collect_jobs` can consume it. For org
-        users we fall back to the existing `list_projects_org` which
-        already gives the org-scoped view.
-        """
-        from dr_tui.app import ROLE_SYS as _RS
-        if self.app.role == _RS and self.app.sys_client is not None:
-            try:
-                resp = client.post(
-                    "realmManager/listProjects",
-                    extra_body={
-                        "contextHandle": "super_system_customer",
-                        "systemScope": True,
-                        "startIndex": 0, "count": 500, "filters": [],
-                    },
-                )
-            except Exception:
-                resp = {}
-            return [(p.get("orgName") or "?", p)
-                    for p in (resp.get("projects") or [])]
-        return drdata.list_projects_org(client)
-
     def _apply(
         self, running, completed, deleted, total_cores,
     ) -> None:
@@ -904,6 +933,19 @@ class JobsMonitorModal(ModalScreen[None]):
         self._completed = completed
         self._deleted = deleted
         self._total_cores = total_cores
+        # Populate the operation-type dropdown once we have the enum.
+        # `_op_types_populated` guards against repopulating on every
+        # 5 s refresh tick (Textual's Select has no public options-len
+        # accessor, so we track state ourselves).
+        if self._op_types and not self._op_types_populated:
+            try:
+                sel = self.query_one("#jobs-type-select", Select)
+                options = [("Any type", "")] + [(t, t) for t in self._op_types]
+                sel.set_options(options)
+                sel.value = self._type_filter or ""
+                self._op_types_populated = True
+            except Exception:
+                pass
         self._render_rows()
 
     def _render_rows(self) -> None:
@@ -1033,6 +1075,114 @@ class PriorityModal(ModalScreen[Optional[str]]):
 
     def action_cancel(self) -> None:
         self.dismiss(None)
+
+
+class TaskLogModal(ModalScreen[None]):
+    """v0.11 — live per-task AE log tail via `taskManager/getSRITaskLog`.
+
+    Lookup chain on open:
+      1. `taskManager/getTasks(includeDrDebug=true)` → find "Instance ID"
+         under the "Service Node Debug State" status section.
+      2. `taskManager/getSRITaskLog(taskSri, numLines=1000)` → render.
+
+    Esc closes. `r` re-fetches. `n` cycles 1000 / 2000 / 3000 lines —
+    same step the DR Web UI's "View More" button uses.
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Close"),
+        Binding("r",      "refresh", "Refresh"),
+        Binding("n",      "more",    "More lines", show=False),
+    ]
+
+    def __init__(self, *, job_label: str, task_handle: str) -> None:
+        super().__init__()
+        self._job_label = job_label
+        self._task_handle = task_handle
+        self._task_sri: Optional[str] = None
+        self._num_lines = 1000
+
+    def compose(self) -> ComposeResult:
+        with Container(id="tasklog-card"):
+            yield Static(
+                f"Task Log — {self._job_label}",
+                id="tasklog-title",
+            )
+            yield Static("[dim]Looking up taskSri…[/]", id="tasklog-status")
+            yield RichLog(id="tasklog-body",
+                          wrap=False, highlight=False, markup=False,
+                          max_lines=5000)
+            yield Static(
+                "[dim][r] refresh · [n] +1000 lines · [Esc] close[/]",
+                classes="modal-hint",
+            )
+
+    def on_mount(self) -> None:
+        self.action_refresh()
+
+    def action_dismiss(self, _result=None) -> None:
+        self.dismiss(None)
+
+    def action_refresh(self) -> None:
+        self.run_worker(self._fetch_blocking, thread=True,
+                        exclusive=True, group="tasklog-fetch")
+
+    def action_more(self) -> None:
+        # 1000 → 2000 → 3000 → wrap back to 1000. Matches DR UI behaviour.
+        self._num_lines = 1000 if self._num_lines >= 3000 else self._num_lines + 1000
+        self.action_refresh()
+
+    def _client(self):
+        app = self.app
+        return getattr(app, "sys_client", None) or getattr(app, "org_client", None)
+
+    def _fetch_blocking(self) -> None:
+        client = self._client()
+        if client is None:
+            self.app.call_from_thread(
+                self.query_one("#tasklog-status", Static).update,
+                "[red]No active API client.[/]",
+            )
+            return
+        # First call: discover the SRI if we don't have it yet.
+        if not self._task_sri:
+            try:
+                sri = drdata.get_task_sri(client, task_handle=self._task_handle)
+            except Exception as e:
+                sri = None
+                err = str(e)[:80]
+            else:
+                err = ""
+            if not sri:
+                self.app.call_from_thread(
+                    self.query_one("#tasklog-status", Static).update,
+                    f"[yellow]No taskSri found — task may have finished. "
+                    f"{err}[/]",
+                )
+                return
+            self._task_sri = sri
+        # Second call: pull log lines.
+        try:
+            lines = drdata.get_sri_task_log(
+                client, task_sri=self._task_sri, num_lines=self._num_lines,
+            )
+        except Exception as e:
+            self.app.call_from_thread(
+                self.query_one("#tasklog-status", Static).update,
+                f"[red]Log fetch failed: {e!r}[/]",
+            )
+            return
+        self.app.call_from_thread(self._apply_lines, lines)
+
+    def _apply_lines(self, lines: list[str]) -> None:
+        body = self.query_one("#tasklog-body", RichLog)
+        body.clear()
+        for line in lines:
+            body.write(line)
+        self.query_one("#tasklog-status", Static).update(
+            f"[dim]taskSri={self._task_sri}  "
+            f"lines={len(lines)}  buffer={self._num_lines}[/]"
+        )
 
 
 class HelpModal(ModalScreen[None]):
