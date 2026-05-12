@@ -1,5 +1,48 @@
 # Changelog
 
+## v0.08 — 2026-05-12
+
+### Added: docs/endpoints_v0.08.md — System Settings (advanced) capture
+
+Manual mitmproxy capture during a comprehensive System Settings walk
+yielded 170 entries covering 13 previously-undocumented endpoint
+families. Saved at `/tmp/dr_proxy_capture_v08_syssettings.json`,
+documented in `docs/endpoints_v0.08.md`. The new endpoints fall into
+these areas:
+
+| Area | New endpoints |
+|---|---|
+| Mail Server | `createMailServerConfig`, `setEmailNotificationCfg`, `listEmailIdsToNotify` |
+| Splash Message | `getSplashMessage`, `setSplashMessage` |
+| Realm Nodes | `createNode` (add worker — `listNodes` already in v0.07) |
+| Services | `listServices`, `createService`, `serviceManager/updateService`, `deleteService`, `serviceManager/listProjectsForService`, `connectorManager/getReefReviewConnector` |
+| Templates | `createTemplate`, `updateTemplate`, `deleteTemplate`, `listTemplates` |
+| Template ops | `copyFromTemplate`, `copyToTemplate`, `exportTemplates`, `importTemplates`, `getMetaTemplateProfileEntries`, `copyMetaTemplateProfileEntriesToOrganizations` |
+| Email Signatures | `listEmailSignatures`, `createEmailSignature` |
+| Project Analytics | `getAnalyticalSettings` (large nested object — every dedup / threading / inclusion knob) |
+| Permissions catalogue | `getSecureObjectGroups` (UI permission tree source) |
+| Tasks tracker | `taskManager/getTasks` (poll async ops by handle) |
+| Realm-user org cross-link | `realmManager/listSystemUserOrgs` |
+
+**Key findings:**
+
+- **Service create body** (`createService`) takes three node arrays —
+  `serviceExpressNodes`, `serviceOcrNodes`, `serviceRealmNodes` —
+  empty arrays mean "use system default" for that pipeline class.
+- **Service update** reuses the `requestHandle` field to carry the
+  service's handle (same pattern as `updateRemoteNFSStorageArea`).
+- **Template push to orgs** (`copyMetaTemplateProfileEntriesToOrganizations`)
+  is async — returns a `taskHandle`, poll with `taskManager/getTasks`.
+- **Template export** returns a `fileUrl` like
+  `/getfile?templatesDownload=…&token=…` — fetch with plain GET.
+- **`createMailServerConfig`** is also the update path; there's no
+  separate update endpoint for mail config.
+
+**Remaining capture gaps (v0.08.1 candidates):** `updateNode` /
+`deleteNode`, `setAnalyticalSettings`, `updateEmailSignature` /
+`deleteEmailSignature`, `updateNFSConnector`. Documented as such in
+the new doc's "Capture gaps remaining" section.
+
 ## v0.07.1 — 2026-05-12
 
 ### Added: Connector capture (last v0.06/v0.07 gap closed)
