@@ -13,6 +13,8 @@
 4. What Our Scripts Do vs. What the Browser Does
 5. Fresh-Install / Reinstall Toolchain
 6. Endpoint Capture Methodology (proxy + Playwright)
+7. The dr-tui Landing Dashboard
+8. Distribution / RPM Packaging
 
 ---
 
@@ -881,4 +883,144 @@ and the response status. That's enough to write the table in
 
 ---
 
-*Last updated: 2026-05-11*
+## 7. The dr-tui Landing Dashboard (v0.07)
+
+### 7.1 — What it shows
+
+The first tab a DRSysAdmin sees on login. Five panels, each refreshing
+independently:
+
+| Panel | Data | Refresh | Source |
+|---|---|---|---|
+| License | every label / value from `realmManager/getLicenseInfo` | 30 s | REST |
+| Realm Node — Status Details | `listNodes` + per-node `getNodeStatus` (components, connectors, storage mounts) — matches Monitoring → Node Status | 30 s | REST |
+| System Metrics | CPU %, Memory %, Network rx/tx, Disk read+write IOPS with sparklines + peak + average over a rolling 60-sample window | 2 s | `psutil` (local) |
+| Logs | `tail -f /home/auraria/AHS/output/*.log` with INFO / WARN / ERROR filter toggles, rotation-safe | 1 s | local file poll |
+| Top processes | top 5 by CPU%, ps-aux style | 3 s | `psutil` (local) |
+
+The local panels (Metrics, Logs, Processes) assume `dr-tui` runs on the
+DR host itself — which is the lab setup. Running `dr-tui` from a
+separate machine still shows the License + Node panels (REST) but the
+local panels then reflect that machine, not DR.
+
+### 7.2 — How the refresh loops are wired
+
+`DashboardScreen.on_mount` registers four independent `set_interval`
+timers (gated on `ROLE_SYS`):
+
+```python
+self.set_interval(2.0,  self._dash_tick_metrics)
+self.set_interval(1.0,  self._dash_tick_logs)
+self.set_interval(3.0,  self._dash_tick_procs)
+self.set_interval(30.0, self._dash_tick_realm)
+```
+
+The realm tick spawns a worker thread (`run_worker(thread=True)`) for
+the REST call; the local ticks run on the UI thread because `psutil`
+calls + file-stat polls are sub-millisecond. A slow REST round-trip
+cannot stall metrics or the log stream because they're on independent
+timers.
+
+The realm response gets applied via `call_from_thread(_dash_apply_realm, …)`
+so all DOM updates happen on the UI thread.
+
+### 7.3 — Log filter implementation
+
+`LogTailer.poll()` returns a `list[LogLine]` where each line carries a
+parsed `level` ("INFO" / "WARN" / "ERROR" / ""). The dashboard's
+`_dash_tick_logs` filters by membership in `self._log_filter`, which
+the three filter buttons toggle:
+
+```python
+def _toggle_log_filter(self, level):
+    if level in self._log_filter:
+        self._log_filter.discard(level)
+    else:
+        self._log_filter.add(level)
+```
+
+The buttons swap their `variant` (primary / warning / error vs.
+"default") so the visual state of each filter stays in sync.
+
+Unparsed lines (no INFO/WARN/ERROR substring — often stack-trace
+continuations) are always rendered. This avoids hiding the middle
+lines of a multi-line traceback when filters exclude its first line.
+
+---
+
+## 8. Distribution / RPM Packaging (v0.07)
+
+### 8.1 — The `dr-tools` RPM
+
+Build with `cd packaging && make rpm` on a Rocky / RHEL / Fedora host.
+Output:
+
+```
+packaging/rpmbuild/SRPMS/dr-tools-VERSION-1.el9.src.rpm    (~24 MB)
+packaging/rpmbuild/RPMS/x86_64/dr-tools-VERSION-1.el9.x86_64.rpm  (~20 MB)
+```
+
+The source RPM bundles a wheelhouse (`dist/wheelhouse/*.whl`) so the
+binary RPM is **offline-installable** — no internet needed at install
+time. Install with `sudo dnf install ./dr-tools-*.rpm`. The RPM lays
+down:
+
+| Path | Owner |
+|---|---|
+| `/opt/dr-tools/venv` | Self-contained Python 3 venv with every runtime dep |
+| `/opt/dr-tools/share/env.example` | Sample `.env` for `cp` + edit |
+| `/usr/bin/dr-tui` `/usr/bin/dr-load` | Launcher scripts (`exec /opt/dr-tools/venv/bin/<tool>`) |
+| `/usr/share/doc/dr-tools/` | README + CHANGELOG + endpoint docs |
+| `/usr/share/licenses/dr-tools/__version__.py` | Version stamp |
+
+The venv is independent of system Python — `dr-tools` co-exists with any
+other Python apps on the box. `dnf remove dr-tools` cleanly removes
+everything under `/opt/dr-tools` + the two launchers.
+
+### 8.2 — Wheelhouse strategy
+
+`make wheels` runs `pip wheel` against the local checkout, which:
+
+1. Builds the `dr-tools` project itself as a wheel.
+2. Fetches + builds every transitive runtime dep (from `install_requires`
+   in `setup.cfg`) as a wheel.
+3. Dumps everything into `dist/wheelhouse/`.
+
+Dev-only deps (`pytest`, `playwright`, `mitmproxy`) live in
+`extras_require[dev]` and are deliberately **not** in the wheelhouse —
+they bloat the RPM without serving the runtime, and `mitmproxy >= 10.0`
+isn't even installable on Python 3.9 (RHEL 9's default).
+
+To install dev deps locally:
+
+```bash
+pip install -e .[dev]
+```
+
+### 8.3 — Two spec-file gotchas
+
+When writing the `.spec`:
+
+1. **Don't name a macro `install_root`** — RPM's spec parser pre-scans
+   for section directives (`%install`, `%build`, …) and a `%install_root`
+   macro reference looks like a duplicate `%install` to the parser. Use
+   `%global drroot` or similar instead.
+2. **Don't put `%install` (or any `%section` keyword) inside a comment
+   in `%build` / `%post` / etc.** — the parser doesn't honor `#`
+   comment markers when scanning for section headers. Strip the leading
+   `%` from any literal mentions of section names in comments.
+
+### 8.4 — Reproducible builds
+
+The Makefile is idempotent: `make clean && make rpm` from a fresh
+checkout always produces an equivalent wheelhouse + RPM. The `_topdir`
+is anchored to `packaging/rpmbuild/` so the build doesn't touch
+`~/rpmbuild` and multiple builds can coexist on one machine.
+
+For aarch64, generate the wheelhouse on an arm64 host and flip
+`BuildArch: aarch64` in the spec — psutil + psycopg2 are the only C
+extensions and both have manylinux aarch64 wheels on PyPI.
+
+---
+
+*Last updated: 2026-05-12*
