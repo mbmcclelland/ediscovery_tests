@@ -11,6 +11,8 @@
 2. The auraria_mgmt Database — Table Reference
 3. The Full Workflow — Step by Step
 4. What Our Scripts Do vs. What the Browser Does
+5. Fresh-Install / Reinstall Toolchain
+6. Endpoint Capture Methodology (proxy + Playwright)
 
 ---
 
@@ -297,15 +299,19 @@ Who is a member of each secured object.
 
 #### `authorization_permissions_rolehandles`
 
-What roles each member has. Two role handles matter for our work:
+What roles each member has. Two role names matter for our work:
 
-| Role handle | Name | Grants `createCorpus`? |
-|---|---|---|
-| `000052762b86e562...` | Organization Administrator | Yes ✅ |
-| `00009d44952d7d8a...` | Project Administrator | No ❌ |
+| Role name | Grants `createCorpus`? |
+|---|---|
+| Organization Administrator | Yes ✅ |
+| Project Administrator | No ❌ |
 
+> Role *handles* are 40-char hex strings, regenerated whenever the org is recreated
+> (e.g. by `playwright_fresh_install.py`). Look them up via `orgManager/listRoles` and
+> match by `name`. `locustfile_indexing.py` v0.03 does this in `on_start`.
+>
 > The root cause of the `PERMISSION_DENIED` bug we debugged: our scripts were assigning
-> `Project Administrator` role. Switched to `Organization Administrator` in `.env` to fix it.
+> `Project Administrator` role. Switched to `Organization Administrator` to fix it.
 
 > **For Developers**
 >
@@ -415,25 +421,24 @@ INSERT con_fsdataarea_cfg
 INSERT authorization_objects     ← registers the data area for access control
   type = 'CORPUS_DATA_AREA'
 
-INSERT mgmtproject_attributes    × 18 rows (one per setting)
-  (214278, 'ALIAS_LISTS',             '316')
-  (214278, 'ANALYTICAL_SETTINGS',     '208')
-  (214278, 'BILLING_REPORT_SETTINGS', '324')
-  (214278, 'CUSTOM_FIELDS',           '321')
-  (214278, 'DOMAIN_LISTS',            '260')
-  (214278, 'DUPE_SURVIVORSHIP',       '268')
-  (214278, 'EMAIL_SIGNATURE',         '264')
-  (214278, 'EXPORT_FIELDS',           '203')
-  (214278, 'EXPORT_SETTINGS',         '253')
-  (214278, 'INDEX_SETTINGS',          '180')
-  (214278, 'IS_IMPORTED',             'false')
-  (214278, 'LOADFILE_SETTINGS',       '318')
-  (214278, 'REPORT_SETTINGS',         '310')
-  (214278, 'SEARCH_FIELDS',           '288')
-  (214278, 'SEARCH_SETTINGS',         '270')
-  (214278, 'TAG',                     '258')
-  (214278, 'USER_EXP',               '262')
-  (214278, 'DOCUMENT_METADATA',       '266')
+INSERT mgmtproject_attributes    × 17 rows (one per template attribute)
+  (214278, 'ALIAS_LISTS',             '<template_id>')
+  (214278, 'ANALYTICAL_SETTINGS',     '<template_id>')
+  (214278, 'BILLING_REPORT_SETTINGS', '<template_id>')
+  (214278, 'CUSTOM_FIELDS',           '<template_id>')
+  (214278, 'DOMAIN_LISTS',            '<template_id>')
+  (214278, 'DUPE_SURVIVORSHIP',       '<template_id>')
+  (214278, 'EMAIL_SIGNATURE',         '<template_id>')
+  (214278, 'EXPORT_FIELDS',           '<template_id>')
+  (214278, 'EXPORT_SETTINGS',         '<template_id>')
+  (214278, 'INDEX_SETTINGS',          '<template_id>')
+  (214278, 'LOADFILE_SETTINGS',       '<template_id>')
+  (214278, 'REPORT_SETTINGS',         '<template_id>')
+  (214278, 'SEARCH_FIELDS',           '<template_id>')
+  (214278, 'SEARCH_SETTINGS',         '<template_id>')
+  (214278, 'TAG',                     '<template_id>')
+  (214278, 'USER_EXP',                '<template_id>')
+  (214278, 'DOCUMENT_METADATA',       '<template_id>')
 
 INSERT authorization_objects     ← registers the project itself for access control
   type = 'CORPUS'
@@ -451,9 +456,16 @@ INSERT datamining_corpussets     ← the container that will hold this project's
   project_handle = '214278'
 ```
 
-> **Note — IS_IMPORTED:** The browser always writes `IS_IMPORTED = 'false'` as the 11th
-> attribute above. Our scripts currently skip it. This is the only confirmed difference between
-> a browser-created project and an API-created project in `mgmtproject_attributes`.
+> **Note — template IDs are environment-specific.** Each row's value is a handle into
+> `datamining_templates`. Get the current values via `orgManager/listTemplates` (scope
+> `ORG_LEVEL`, `defaultTemplate=true`). `locustfile_indexing.py` v0.03+ does this lookup
+> in `on_start`; `tests/test_indexing_workflow.py` still reads them from `.env` via
+> `DR_TEMPLATE_*`.
+>
+> **Note — `IS_IMPORTED`.** Older versions of this guide listed an 18th attribute
+> `IS_IMPORTED='false'`. The May 11 capture of the real browser flow shows only 17
+> template attributes — no `IS_IMPORTED`. If `mgmtproject_attributes` does end up with
+> an `IS_IMPORTED` row, the server is writing it server-side, not the client.
 
 ---
 
@@ -586,7 +598,7 @@ by two different people.
 
 **UI:** Return to project list, right-click the project, select **"Request Project Deletion"**.
 
-**API call:** `adminOrgManager/requestProjectDelete`
+**API call:** `orgManager/requestProjectDelete` *(as the org user, with `contextHandle=<org>`)*
 
 ```
 UPDATE mgmtproject
@@ -608,8 +620,9 @@ INSERT admin_request_table
 **UI:** Navigate to System Administration → Pending Deletions, select the project, click
 **"Approve Deletion"**.
 
-**API calls:** `adminOrgManager/listDeletePendingProjects` (read-only) then
-`adminOrgManager/approveProjectDeleteRequest`
+**API calls:** `realmManager/listDeletePendingProjects` (read-only) then
+`adminOrgManager/approveProjectDeleteRequest` — both as **DRSysAdmin** with
+`contextHandle=super_system_customer` and `systemScope=true`.
 
 ```
 DELETE import_activity_table        WHERE corpus_handle = '00003ad3...'
@@ -632,55 +645,240 @@ database marks the project deleted.
 
 ## 4. What Our Scripts Do vs. What the Browser Does
 
-The Angular source code and the Edge recorder confirm that our scripts call the **same API
-endpoints in the same order** as the browser. There is no hidden compound endpoint.
+The Angular source code, the Edge recorder, and the May 11 playwright capture
+(`/tmp/dr_api_capture.json`, 211 calls) all confirm that `locustfile_indexing.py` v0.03
+calls the **same API endpoints in the same order** as the browser. There is no hidden
+compound endpoint.
 
-The browser logs in as DRSysAdmin only. Our scripts use a dual-login (admin@training creates
-the project, DRSysAdmin handles everything else). Both approaches work — they produce the same
-database state — because what matters is that both users are listed in `membersRequestMessage`
-with `Organization Administrator` role.
+Both the captured browser flow and `locustfile_indexing.py` v0.03 log in as the org user
+(`admin@training`) for the project lifecycle and only swap to DRSysAdmin for the final
+**approve-delete** step. What matters for permissions is that the org user is added to
+`membersRequestMessage` with the `Organization Administrator` role at `createCase` time.
 
-| Step | Browser | Our Scripts | Match? |
+| Step | Browser (May 11 capture) | locustfile_indexing.py v0.03 | Match? |
 |---|---|---|---|
-| Login | DRSysAdmin only | Dual: admin@training + DRSysAdmin | Different, but both work |
-| createCase caller | DRSysAdmin | admin@training | Different, same result |
-| Both users in membersRequestMessage with Org Admin role | ✅ | ✅ | ✅ |
-| `IS_IMPORTED = 'false'` in project attributes | ✅ | ❌ missing | ⚠️ |
-| createDataArea | ✅ | ✅ | ✅ |
-| createCorpus | ✅ | ✅ | ✅ |
-| listCorpusSets + addCorpus | ✅ | ✅ | ✅ |
-| createRepresentation typeList | `['CONTENT_INDEX', 'VECTOR_SET']` | Same | ✅ |
-| IMPORT_ACTIVITY_TABLE row created | ✅ | ✅ | ✅ |
-| All 4 representation types created | ✅ | ✅ | ✅ |
+| Workflow user | `admin@training` | `admin@training` | ✅ |
+| Approve-delete user | `DRSysAdmin` | `DRSysAdmin` | ✅ |
+| `realmManager/initializeOrganization` before project ops | ✅ | ✅ | ✅ |
+| `ecaManager/createCase` with **17** template attributes | ✅ | ✅ (resolved via `orgManager/listTemplates`) | ✅ |
+| Org Admin role in `membersRequestMessage` | ✅ | ✅ (resolved via `orgManager/listRoles`) | ✅ |
+| `orgManager/createDataArea` (mode=`IMPORT`) | ✅ | ✅ | ✅ |
+| `corpusSetManager/getCorpusSetByName("AllCorpora")` | ✅ | ✅ | ✅ |
+| `orgManager/createCorpus` | ✅ | ✅ | ✅ |
+| `corpusSetManager/addCorpus` | ✅ | ✅ | ✅ |
+| `corpusManager/createRepresentation` with `typeList=["CONTENT_INDEX","VECTOR_SET"]` | ✅ | ✅ | ✅ |
+| Poll `taskManager/getTasks([taskHandle])` until `dateCompleted` | ✅ | ✅ | ✅ |
+| `orgManager/requestProjectDelete` as org user | ✅ | ✅ | ✅ |
+| `realmManager/listDeletePendingProjects` (sys, `systemScope=true`) | ✅ | ✅ | ✅ |
+| `adminOrgManager/approveProjectDeleteRequest` (sys) | ✅ | ✅ | ✅ |
+| `IMPORT_ACTIVITY_TABLE` row created server-side | ✅ | ✅ | ✅ |
+| All 4 representation types written server-side | ✅ | ✅ | ✅ |
 
-### The One Fix Needed
+### How handles are resolved
 
-Add `IS_IMPORTED` to `TEMPLATE_ATTRIBUTES` in both `locustfile_indexing.py` and
-`debug_create_data_area.py`:
+`locustfile_indexing.py` looks up environment-specific handles dynamically on each user's
+`on_start`, so the test stays drift-proof when `playwright_fresh_install.py` rebuilds the
+org:
 
-```python
-TEMPLATE_ATTRIBUTES = [
-    {"name": "ALIAS_LISTS",             "value": "316"},
-    {"name": "ANALYTICAL_SETTINGS",     "value": "208"},
-    {"name": "BILLING_REPORT_SETTINGS", "value": "324"},
-    {"name": "CUSTOM_FIELDS",           "value": "321"},
-    {"name": "DOMAIN_LISTS",            "value": "260"},
-    {"name": "DUPE_SURVIVORSHIP",       "value": "268"},
-    {"name": "EMAIL_SIGNATURE",         "value": "264"},
-    {"name": "EXPORT_FIELDS",           "value": "203"},
-    {"name": "EXPORT_SETTINGS",         "value": "253"},
-    {"name": "INDEX_SETTINGS",          "value": "180"},
-    {"name": "IS_IMPORTED",             "value": "false"},   # browser always sends this
-    {"name": "LOADFILE_SETTINGS",       "value": "318"},
-    {"name": "REPORT_SETTINGS",         "value": "310"},
-    {"name": "SEARCH_FIELDS",           "value": "288"},
-    {"name": "SEARCH_SETTINGS",         "value": "270"},
-    {"name": "TAG",                     "value": "258"},
-    {"name": "USER_EXP",               "value": "262"},
-    {"name": "DOCUMENT_METADATA",       "value": "266"},
-]
+| Handle | Lookup | Filter |
+|---|---|---|
+| NFS import connector | `adminOrgManager/listConnectors` | `type=NFS`, `mode=READ` |
+| Admin role | `orgManager/listRoles` | `name="Organization Administrator"` |
+| Template attribute IDs | `orgManager/listTemplates` | `defaultTemplate=true` |
+
+`tests/test_indexing_workflow.py` (pytest) still reads these from `.env`
+(`DR_NFS_CONNECTOR_HANDLE`, `DR_ADMIN_ROLE_HANDLE`, `DR_TEMPLATE_*`); resync them after
+each playwright rebuild.
+
+### Smoke test (2026-05-11)
+
+`dr-load indexing -u 1 -d 90s` against 192.168.58.128 — 50 requests, 0 failures, 3
+complete project lifecycles, 4 indexing jobs reached `COMPLETE`. See CHANGELOG v0.03.
+
+---
+
+## 5. Fresh-Install / Reinstall Toolchain
+
+Added in v0.06. A three-step chain that tears DR down to bare metal and
+brings it back up to a tested baseline — DRSysAdmin/`password`,
+`admin@training`/`password`, `localDocStorage` + `localIndexStorage`
+created, System Storage Depot assigned, `training` org provisioned.
+
+> ⚠️ **Destructive and unrecoverable.** Step 1 deletes `/home/auraria/AHS*`
+> and the contents of `/data/docstorage/` and `/data/indexstorage/`. Only
+> run when you intend to start over.
+
+### 5.1 — `cleandr.sh`
+
+```bash
+bash cleandr.sh
+```
+
+**What it does:**
+
+1. `systemctl stop drd` — graceful stop of the Java application server.
+2. Copies the live `/home/auraria/AHS/conf/license.lic` → `/root/license.lic`
+   (falls back to a CWD-local `license.lic`, then to an existing
+   `/root/license.lic` if both sources are missing).
+3. `rm -rfv` on `/home/auraria/AHS*`, `/var/.com.zerog.registry.xml`
+   (InstallAnywhere registry), `/tmp/cbe*`, `/tmp/cpuinfo.txt`,
+   `/tmp/artemis*`, `/tmp/install.dir.*`, `/data/docstorage/*`,
+   `/data/indexstorage/*`.
+
+**Why the license dance:** the InstallAnywhere uninstall doesn't preserve
+licensing; without the `/root` copy you'd have to re-request the license
+file every reinstall.
+
+### 5.2 — `DR_freshinstall.exp`
+
+```bash
+cd /tmp
+expect -f /home/auraria/scripts/ediscovery_tests/DR_freshinstall.exp
+```
+
+**What it does:**
+
+- `spawn ./5.5.3.2.bin -i console` — runs the InstallAnywhere installer
+  in console mode (the binary expects `/tmp` as CWD).
+- Accepts the EULA via six `<Enter>` then `y`.
+- Picks Full node type (option 1), eDiscovery product (option 1),
+  generate-new-SSL=Yes (option 1), hostname-CA=No (option 2), IP
+  192.168.58.128 (option 1).
+- Waits through the actual install (~3–5 minutes — most of it is the
+  bundled JRE extraction).
+- After the installer exits, opens a new bash and runs:
+  - `cp /root/license.lic /home/auraria/AHS/conf/license.lic`
+  - `systemctl restart drd` (so drd picks up the freshly-placed license)
+
+**Why expect is brittle:** the script uses `expect -exact` against
+deterministic installer text, which is robust. Earlier autoexpect
+captures included bash-prompt expectations with embedded escape
+sequences (xterm title + bracketed-paste) that don't replay across
+shells. The current hand-cleaned version avoids prompt matching
+entirely.
+
+### 5.3 — `playwright_fresh_init.py`
+
+```bash
+source .venv/bin/activate
+python playwright_fresh_init.py            # headless
+python playwright_fresh_init.py --no-headless --slow-mo 200  # watch it run
+```
+
+**What it does:**
+
+1. Login as DRSysAdmin (tries `DRSysAdmin` then `password` — handles both
+   first-install and re-run scenarios).
+2. Forced password change `DRSysAdmin` → `password` (skips silently if
+   already `password`).
+3. Create `localDocStorage` (Doc, NFS share index 1).
+4. Create `localIndexStorage` (Index, NFS share index 4).
+5. Assign the doc depot as the System Storage Depot.
+6. Create the `training` organization.
+7. Open `training` settings, navigate to Organization Users, create
+   `admin/training` (display name "Admin User", email
+   `admin@localhost.com`, role `Organization Administrator`, password
+   `Password123`).
+8. Logout, login as `admin@training/Password123`.
+9. Forced password change `Password123` → `password`.
+10. Logout.
+
+Every phase has a skip-if-exists check, so re-running is idempotent.
+
+**Module reuse:** `playwright_fresh_init.py` imports phases from
+`playwright_fresh_install.py`. The latter was refactored in v0.06 so
+`argparse.parse_args()` only runs when invoked as `__main__` — phases
+are importable.
+
+**Endpoint side-effects:** running this script captures every used
+endpoint to `/tmp/dr_api_capture.json` and (via mitmproxy on `:8090`)
+`/tmp/dr_proxy_capture.json`. The captures from a recent fresh-install
+run are the source material for `docs/endpoints_v0.06.md`.
+
+### 5.4 — Verification
+
+After step 3 the system should be ready for `dr-load`, `dr-tui`, and the
+pytest suite without further configuration:
+
+```bash
+dr-load preflight                      # 6 checks, all green
+dr-tui                                 # log in either role
+pytest -m smoke                        # quick health
+.venv/bin/python -c "
+import requests, uuid
+requests.packages.urllib3.disable_warnings()
+B = 'https://192.168.58.128:8443/ediscovery/rest'
+r = requests.post(f'{B}/realmManager/createSession',
+    json={'drWsClientContext':{'username':'admin','organizationName':'training'},
+          'contextPath':'/ediscovery','userDeviceID':str(uuid.uuid4())},
+    auth=('admin','password'), verify=False)
+print('admin@training login:', r.status_code, '✓' if r.json().get('sessionToken') else '✗')
+"
 ```
 
 ---
 
-*Last updated: 2026-05-10*
+## 6. Endpoint Capture Methodology
+
+Two complementary techniques produce the `docs/endpoints_v0.05.md` and
+`docs/endpoints_v0.06.md` references. Both feed the same JSON file format
+(see `proxy_logger.py`) so the same parsers work on either.
+
+### 6.1 — Automated capture (Playwright)
+
+`playwright_fresh_init.py` (and the older `playwright_fresh_install.py`)
+drive the UI through deterministic sequences while mitmproxy records.
+This is best for **create** flows because:
+
+- The UI's pre-validation calls (`viewManager/validateName`,
+  `connectorManager/validateNFSConnector`, `orgManager/getNfsMounts`,
+  etc.) all fire during the modal interaction — captured for free.
+- The actual create endpoint fires once when the user clicks OK —
+  unambiguous to identify.
+- Same gestures run repeatably, so you can re-run on a fresh env after
+  changes.
+
+Limits: **edit / delete** UI gestures vary across the DR codebase
+(some panels have a dedicated Edit button, others use right-click → menu,
+others use a chevron at the row's right edge). The original MS Edge
+recording (`misc/DR_FreshInstall.json`) only covers create, so we don't
+have proven selectors for edit/delete gestures. Attempting them with
+Playwright tends to open a context menu that blocks subsequent clicks.
+
+### 6.2 — Hybrid manual capture
+
+For edit/delete/reset-password, the proxy stays on `:8090` and a human
+drives the UI through the gestures by hand. The capture is just as
+useful — same JSON format, full request bodies, response codes — but
+takes ~10 minutes of attended browser time per round.
+
+The `userManager/resetPassword` admin variant was discovered this way:
+the first two attempts in the capture failed with HTTP 500 (the user
+tried different argument shapes) before settling on the working
+`orgName: "super_system_customer"` + `systemScope: true` form. The
+failed attempts are themselves useful — they tell us which arguments
+the server explicitly rejects.
+
+### 6.3 — Parsing captures
+
+A capture file is a list of dicts: `endpoint`, `method`, `request_body`,
+`status`, `response_body`. Quick group-by-endpoint:
+
+```python
+import json
+from collections import defaultdict
+calls = json.load(open("/tmp/dr_proxy_capture.json"))
+by_ep = defaultdict(list)
+for c in calls:
+    by_ep[c["endpoint"]].append(c)
+for ep in sorted(by_ep):
+    print(f"({len(by_ep[ep]):3d}) {ep}")
+```
+
+For documentation, pull the first non-empty `request_body` per endpoint
+and the response status. That's enough to write the table in
+`docs/endpoints_v0.06.md`.
+
+---
+
+*Last updated: 2026-05-11*

@@ -1,0 +1,55 @@
+#!/usr/bin/expect -f
+
+set force_conservative 0  ;# set to 1 to force conservative mode even if
+			  ;# script wasn't run conservatively originally
+if {$force_conservative} {
+	set send_slow {1 .1}
+	proc send {ignore arg} {
+		sleep .1
+		exp_send -s -- $arg
+	}
+}
+
+set timeout -1
+match_max 100000
+spawn ./5.5.3.2.bin -i console
+expect -exact "PRESS <ENTER> TO CONTINUE:"
+send -- "\r"
+expect -exact "PRESS <ENTER> TO CONTINUE:"
+send -- "\r"
+expect -exact "PRESS <ENTER> TO CONTINUE:"
+send -- "\r"
+expect -exact "PRESS <ENTER> TO CONTINUE:"
+send -- "\r"
+expect -exact "PRESS <ENTER> TO CONTINUE:"
+send -- "\r"
+expect -exact "PRESS <ENTER> TO CONTINUE:"
+send -- "\r"
+expect -exact "DO YOU ACCEPT THE TERMS OF THIS LICENSE AGREEMENT? (Y/N):"
+send -- "y\r"
+expect -exact "PRESS <ENTER> TO INSTALL:"
+send -- "\r"
+expect -exact "ENTER THE NUMBER FOR YOUR CHOICE, OR PRESS <ENTER> TO ACCEPT THE DEFAULT:"
+send -- "1\r"
+expect -exact "PRESS <ENTER> TO ACCEPT THE DEFAULT:"
+send -- "1\r"
+expect -exact "ENTER THE NUMBER FOR YOUR CHOICE, OR PRESS <ENTER> TO ACCEPT THE DEFAULT:"
+send -- "1\r"
+expect -exact "ENTER THE NUMBER FOR YOUR CHOICE, OR PRESS <ENTER> TO ACCEPT THE DEFAULT:"
+send -- "2\r"
+expect -exact "PRESS <ENTER> TO CONTINUE:"
+send -- "\r"
+expect -exact "ENTER THE NUMBER FOR YOUR CHOICE::"
+send -- "1\r"
+expect -exact "PRESS <ENTER> TO CONTINUE:"
+sleep 5
+send -- "\r"
+expect -exact "PRESS <ENTER> TO EXIT THE INSTALLER:"
+send -- "\r"
+expect -exact ":/tmp"
+spawn bash
+send -- "\\cp -v /root/license.lic /home/auraria/AHS/conf/license.lic\r"
+send -- "SYSTEMD_LOG_LEVEL=debug systemctl restart drd\r"
+send -- "\\home\\auraria\\AHS\\bin\\dr_ctl.sh status\r"
+send -- "exit\r"
+expect eof

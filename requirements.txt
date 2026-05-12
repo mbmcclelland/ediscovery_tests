@@ -13,9 +13,10 @@ pytest-xdist>=3.5.0
 # Load testing
 locust>=2.20.0
 
-# CLI framework
+# CLI / TUI frameworks
 typer>=0.9.0
 rich>=13.0.0
+textual>=0.40.0
 
 # Config / environment
 python-dotenv>=1.0.0
@@ -23,3 +24,15 @@ pydantic>=2.5.0
 
 # Database (Postgres, used by JobPoller in dr-load)
 psycopg2-binary>=2.8.0
+
+# Browser automation (used by playwright_fresh_install.py and
+# playwright_fresh_init.py for the post-install DR setup workflow).
+# After install, run `playwright install chromium` once to fetch the
+# browser binary.
+playwright>=1.40.0
+
+# Traffic-capture proxy (proxy_logger.py addon). Used to record
+# Digital Reef REST traffic into /tmp/dr_proxy_capture.json while
+# the Playwright scripts drive the UI — captures the request bodies
+# we use to build endpoint references (docs/endpoints_v0.0[56].md).
+mitmproxy>=10.0.0

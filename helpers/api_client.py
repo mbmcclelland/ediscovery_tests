@@ -157,6 +157,11 @@ class EDiscoveryClient:
 
         resp = self.session.post(url, json=body, timeout=t)
         resp.raise_for_status()
+        # 204 No Content (and other empty-body successes — DELETE-style
+        # endpoints often return these) — return an empty dict so callers
+        # don't crash on .json() of an empty body.
+        if resp.status_code == 204 or not resp.content:
+            return {}
         data = resp.json()
 
         # Rolling tokens: capture the fresh token from every response

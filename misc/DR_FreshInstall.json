@@ -1,0 +1,4593 @@
+{
+    "title": "DR-5532-FreshInstall",
+    "steps": [
+        {
+            "type": "setViewport",
+            "width": 1995,
+            "height": 1274,
+            "deviceScaleFactor": 1,
+            "isMobile": false,
+            "hasTouch": false,
+            "isLandscape": false
+        },
+        {
+            "type": "navigate",
+            "url": "https://192.168.58.128:8443/ediscovery/",
+            "assertedEvents": [
+                {
+                    "type": "navigation",
+                    "url": "https://192.168.58.128:8443/ediscovery/",
+                    "title": "eDiscovery"
+                }
+            ]
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "form > input.ng-dirty"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/input[2]"
+                ],
+                [
+                    "pierce/form > input.ng-dirty"
+                ]
+            ],
+            "offsetY": 11,
+            "offsetX": 94.875
+        },
+        {
+            "type": "change",
+            "value": "DRSysA",
+            "selectors": [
+                [
+                    "form > input.ng-dirty"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/input[2]"
+                ],
+                [
+                    "pierce/form > input.ng-dirty"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "key": "a",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "DRSysAdmin",
+            "selectors": [
+                [
+                    "form > input.ng-dirty"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/input[2]"
+                ],
+                [
+                    "pierce/form > input.ng-dirty"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "DRSysAdmin",
+            "selectors": [
+                [
+                    "div.password-container > input"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/div[1]/input"
+                ],
+                [
+                    "pierce/div.password-container > input"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Log in"
+                ],
+                [
+                    "div.login-body > button"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/button"
+                ],
+                [
+                    "pierce/div.login-body > button"
+                ],
+                [
+                    "text/Log in"
+                ]
+            ],
+            "offsetY": 27,
+            "offsetX": 283.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "button.secondary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-message-modal/res-base-modal/div/div[3]/button[1]"
+                ],
+                [
+                    "pierce/button.secondary-button"
+                ],
+                [
+                    "text/Close"
+                ]
+            ],
+            "offsetY": 16.40625,
+            "offsetX": 61.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "form > input.ng-dirty"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/input[2]"
+                ],
+                [
+                    "pierce/form > input.ng-dirty"
+                ]
+            ],
+            "offsetY": 25,
+            "offsetX": 143.875
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Control"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Shift",
+            "assertedEvents": [
+                {
+                    "type": "navigation",
+                    "url": "chrome-extension://jbkfoedolllekgbhcbcoahefnbanhhlh/overlay/menu.html",
+                    "title": "eDiscovery"
+                }
+            ]
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.login-body"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]"
+                ],
+                [
+                    "pierce/div.login-body"
+                ]
+            ],
+            "offsetY": 12,
+            "offsetX": 113.5,
+            "duration": 558.4000000357628
+        },
+        {
+            "type": "change",
+            "value": "DRS",
+            "selectors": [
+                [
+                    "input:nth-of-type(2)"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/input[2]"
+                ],
+                [
+                    "pierce/input:nth-of-type(2)"
+                ],
+                [
+                    "text/DRSysAdmin"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "key": "s",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "DRSysA",
+            "selectors": [
+                [
+                    "input:nth-of-type(2)"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/input[2]"
+                ],
+                [
+                    "pierce/input:nth-of-type(2)"
+                ],
+                [
+                    "text/DRSysAdmin"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "key": "a",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "DRSysAdmin",
+            "selectors": [
+                [
+                    "input:nth-of-type(2)"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/input[2]"
+                ],
+                [
+                    "pierce/input:nth-of-type(2)"
+                ],
+                [
+                    "text/DRSysAdmin"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "DRSysA",
+            "selectors": [
+                [
+                    "div.password-container > input"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/div[1]/input"
+                ],
+                [
+                    "pierce/div.password-container > input"
+                ],
+                [
+                    "text/AFx9QJWA"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "key": "a",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "DRSysAdmin",
+            "selectors": [
+                [
+                    "div.password-container > input"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/div[1]/input"
+                ],
+                [
+                    "pierce/div.password-container > input"
+                ],
+                [
+                    "text/AFx9QJWA"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Enter"
+        },
+        {
+            "type": "keyUp",
+            "key": "Enter",
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Continue"
+                ],
+                [
+                    "modal-container button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-message-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container button.primary-button"
+                ],
+                [
+                    "text/Continue"
+                ]
+            ],
+            "offsetY": 11.21875,
+            "offsetX": 48.4375
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div:nth-of-type(3) input"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-change-password-modal/res-base-modal/div/div[2]/form/div/div[3]/div/input"
+                ],
+                [
+                    "pierce/div:nth-of-type(3) input"
+                ]
+            ],
+            "offsetY": 12.125,
+            "offsetX": 168.25
+        },
+        {
+            "type": "change",
+            "value": "DRSysAdmin",
+            "selectors": [
+                [
+                    "div:nth-of-type(3) input"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-change-password-modal/res-base-modal/div/div[2]/form/div/div[3]/div/input"
+                ],
+                [
+                    "pierce/div:nth-of-type(3) input"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "password",
+            "selectors": [
+                [
+                    "div:nth-of-type(4) input"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-change-password-modal/res-base-modal/div/div[2]/form/div/div[4]/div/input"
+                ],
+                [
+                    "pierce/div:nth-of-type(4) input"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Save Changes"
+                ],
+                [
+                    "modal-container button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-change-password-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container button.primary-button"
+                ],
+                [
+                    "text/Save Changes"
+                ]
+            ],
+            "offsetY": 12.625,
+            "offsetX": 71.265625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div:nth-of-type(3) label"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-policy-acknowledgment-modal/res-base-modal/div/div[2]/div[3]/res-custom-checkbox/div/label"
+                ],
+                [
+                    "pierce/div:nth-of-type(3) label"
+                ],
+                [
+                    "text/I accept the End"
+                ]
+            ],
+            "offsetY": 18.40625,
+            "offsetX": 155
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#_vn4t68"
+                ],
+                [
+                    "xpath///*[@id=\"_vn4t68\"]"
+                ],
+                [
+                    "pierce/#_vn4t68"
+                ]
+            ],
+            "offsetY": 11.40625,
+            "offsetX": 155
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.mb label"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-policy-acknowledgment-modal/res-base-modal/div/div[2]/div[5]/res-custom-checkbox/div/label"
+                ],
+                [
+                    "pierce/div.mb label"
+                ]
+            ],
+            "offsetY": 16.40625,
+            "offsetX": 61
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#_17348wl"
+                ],
+                [
+                    "xpath///*[@id=\"_17348wl\"]"
+                ],
+                [
+                    "pierce/#_17348wl"
+                ]
+            ],
+            "offsetY": 9.40625,
+            "offsetX": 61
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Continue"
+                ],
+                [
+                    "modal-container button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-policy-acknowledgment-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container button.primary-button"
+                ],
+                [
+                    "text/Continue"
+                ]
+            ],
+            "offsetY": 17.40625,
+            "offsetX": 8.6875
+        },
+        {
+            "type": "click",
+            "target": "chrome-extension://jbkfoedolllekgbhcbcoahefnbanhhlh/notification/bar.html?parentOrigin=https%3A%2F%2F192.168.58.128%3A8443",
+            "selectors": [
+                [
+                    "aria/Close",
+                    "aria/[role=\"graphics-symbol\"]"
+                ],
+                [
+                    "button path"
+                ],
+                [
+                    "xpath///*[@data-testid=\"unlock-notification-bar\"]/div[1]/button/svg/path"
+                ],
+                [
+                    "pierce/button path"
+                ]
+            ],
+            "offsetY": 9.02672004699707,
+            "offsetX": 8.999053955078125
+        },
+        {
+            "type": "click",
+            "target": "chrome-extension://jbkfoedolllekgbhcbcoahefnbanhhlh/overlay/menu-list.html",
+            "selectors": [
+                [
+                    "autofill-inline-menu-list"
+                ],
+                [
+                    "xpath//html/body/autofill-inline-menu-list"
+                ],
+                [
+                    "pierce/autofill-inline-menu-list"
+                ]
+            ],
+            "offsetY": 69,
+            "offsetX": 106
+        },
+        {
+            "type": "click",
+            "target": "chrome-extension://jbkfoedolllekgbhcbcoahefnbanhhlh/overlay/menu-list.html",
+            "selectors": [
+                [
+                    "autofill-inline-menu-list"
+                ],
+                [
+                    "xpath//html/body/autofill-inline-menu-list"
+                ],
+                [
+                    "pierce/autofill-inline-menu-list"
+                ]
+            ],
+            "offsetY": 69,
+            "offsetX": 106
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(2) span"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[2]/div/span"
+                ],
+                [
+                    "pierce/li:nth-of-type(2) span"
+                ],
+                [
+                    "text/Settings"
+                ]
+            ],
+            "offsetY": 11,
+            "offsetX": 24.609375
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.admin-label"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[2]/ul/li/div[2]"
+                ],
+                [
+                    "pierce/div.admin-label"
+                ],
+                [
+                    "text/System Settings"
+                ]
+            ],
+            "offsetY": 9,
+            "offsetX": 37.90625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(11) > span > span"
+                ],
+                [
+                    "xpath///*[@id=\"leftSettingContent\"]/res-generic-tree/div/cdk-tree/cdk-tree-node[11]/span/span"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(11) > span > span"
+                ]
+            ],
+            "offsetY": 18,
+            "offsetX": 7
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ New Storage ..."
+                ],
+                [
+                    "div.header-bar > button:nth-of-type(1)"
+                ],
+                [
+                    "xpath///*[@id=\"topStorageContent\"]/res-generic-grid/div/div[1]/button[1]"
+                ],
+                [
+                    "pierce/div.header-bar > button:nth-of-type(1)"
+                ],
+                [
+                    "text/New Storage ..."
+                ]
+            ],
+            "offsetY": 16,
+            "offsetX": 91
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "offsetY": 15,
+            "offsetX": 77.5
+        },
+        {
+            "type": "change",
+            "value": "localD",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "key": "d",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "localDocS",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "key": "s",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "localDocStorage",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container:nth-of-type(2) div.content > div:nth-of-type(2) label"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-storage-modal/res-base-modal/div/div[2]/div[1]/div[2]/div[1]/label"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) div.content > div:nth-of-type(2) label"
+                ],
+                [
+                    "text/IP Address /"
+                ]
+            ],
+            "offsetY": 10,
+            "offsetX": 110.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#ipInput"
+                ],
+                [
+                    "xpath///*[@id=\"ipInput\"]"
+                ],
+                [
+                    "pierce/#ipInput"
+                ]
+            ],
+            "offsetY": 13,
+            "offsetX": 12.5
+        },
+        {
+            "type": "change",
+            "value": "192.168.58.128",
+            "selectors": [
+                [
+                    "#ipInput"
+                ],
+                [
+                    "xpath///*[@id=\"ipInput\"]"
+                ],
+                [
+                    "pierce/#ipInput"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/",
+                    "aria/[role=\"generic\"]"
+                ],
+                [
+                    "div.content > div:nth-of-type(3) i"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-storage-modal/res-base-modal/div/div[2]/div[1]/div[3]/div[2]/res-custom-combo-box/div/li/div/button/i"
+                ],
+                [
+                    "pierce/div.content > div:nth-of-type(3) i"
+                ]
+            ],
+            "offsetY": 2,
+            "offsetX": 0.84375
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(2) > span"
+                ],
+                [
+                    "xpath///*[@id=\"dropdownMenu_tubu9i\"]/li[2]/span"
+                ],
+                [
+                    "pierce/li:nth-of-type(2) > span"
+                ],
+                [
+                    "text//data/docstorage"
+                ]
+            ],
+            "offsetY": 5,
+            "offsetX": 99.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ Validate"
+                ],
+                [
+                    "button.validate-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-storage-modal/res-base-modal/div/div[3]/button[3]"
+                ],
+                [
+                    "pierce/button.validate-button"
+                ],
+                [
+                    "text/Validate"
+                ]
+            ],
+            "offsetY": 5,
+            "offsetX": 33.40625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/OK"
+                ],
+                [
+                    "modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-storage-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "text/OK"
+                ]
+            ],
+            "offsetY": 7,
+            "offsetX": 51.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ New Storage ..."
+                ],
+                [
+                    "div.header-bar > button:nth-of-type(1)"
+                ],
+                [
+                    "xpath///*[@id=\"topStorageContent\"]/res-generic-grid/div/div[1]/button[1]"
+                ],
+                [
+                    "pierce/div.header-bar > button:nth-of-type(1)"
+                ],
+                [
+                    "text/New Storage ..."
+                ]
+            ],
+            "offsetY": 20,
+            "offsetX": 55
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "offsetY": 12,
+            "offsetX": 13.5
+        },
+        {
+            "type": "change",
+            "value": "localIndexS",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "key": "s",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "localIndexStorage",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container:nth-of-type(2) div.modal-body"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-storage-modal/res-base-modal/div/div[2]"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) div.modal-body"
+                ]
+            ],
+            "offsetY": 254,
+            "offsetX": 377.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Index"
+                ],
+                [
+                    "button.btn-group-default"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-storage-modal/res-base-modal/div/div[2]/div[1]/div[1]/div[2]/div/button[2]"
+                ],
+                [
+                    "pierce/button.btn-group-default"
+                ]
+            ],
+            "offsetY": 13,
+            "offsetX": 28.875
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#ipInput"
+                ],
+                [
+                    "xpath///*[@id=\"ipInput\"]"
+                ],
+                [
+                    "pierce/#ipInput"
+                ]
+            ],
+            "offsetY": 15,
+            "offsetX": 98.5
+        },
+        {
+            "type": "change",
+            "value": "192.168.58.128",
+            "selectors": [
+                [
+                    "#ipInput"
+                ],
+                [
+                    "xpath///*[@id=\"ipInput\"]"
+                ],
+                [
+                    "pierce/#ipInput"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/"
+                ],
+                [
+                    "modal-container:nth-of-type(2) div.modal-body div:nth-of-type(3) button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-storage-modal/res-base-modal/div/div[2]/div[1]/div[3]/div[2]/res-custom-combo-box/div/li/div/button"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) div.modal-body div:nth-of-type(3) button"
+                ]
+            ],
+            "offsetY": 12,
+            "offsetX": 7.1875
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(5)"
+                ],
+                [
+                    "xpath///*[@id=\"dropdownMenu_17v0l96\"]/li[5]"
+                ],
+                [
+                    "pierce/li:nth-of-type(5)"
+                ]
+            ],
+            "offsetY": 8,
+            "offsetX": 209.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ Validate"
+                ],
+                [
+                    "button.validate-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-storage-modal/res-base-modal/div/div[3]/button[3]"
+                ],
+                [
+                    "pierce/button.validate-button"
+                ],
+                [
+                    "text/Validate"
+                ]
+            ],
+            "offsetY": 3,
+            "offsetX": 22.40625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#ngx-popover-5 i"
+                ],
+                [
+                    "xpath///*[@id=\"ngx-popover-5\"]/div[2]/i"
+                ],
+                [
+                    "pierce/#ngx-popover-5 i"
+                ]
+            ],
+            "offsetY": 9,
+            "offsetX": 22.21875
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/OK"
+                ],
+                [
+                    "modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-storage-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "text/OK"
+                ]
+            ],
+            "offsetY": 7,
+            "offsetX": 38.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(4) > span > span"
+                ],
+                [
+                    "xpath///*[@id=\"leftSettingContent\"]/res-generic-tree/div/cdk-tree/cdk-tree-node[4]/span/span"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(4) > span > span"
+                ],
+                [
+                    "text/System Storage"
+                ]
+            ],
+            "offsetY": 13,
+            "offsetX": 59
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ Select System Storage for Depot ..."
+                ],
+                [
+                    "div.select-system-storage-depot-button > button"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-system-storage-depot/div/div[4]/button"
+                ],
+                [
+                    "pierce/div.select-system-storage-depot-button > button"
+                ],
+                [
+                    "text/Select System"
+                ]
+            ],
+            "offsetY": 13,
+            "offsetX": 145
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.ag-row-odd > div.ag-column-first > div"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-select-system-storage-depot-modal/res-base-modal/div/div[2]/div[1]/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div[2]/div[1]/div"
+                ],
+                [
+                    "pierce/div.ag-row-odd > div.ag-column-first > div"
+                ]
+            ],
+            "offsetY": 13,
+            "offsetX": 72.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/OK"
+                ],
+                [
+                    "button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-select-system-storage-depot-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/button.primary-button"
+                ],
+                [
+                    "text/OK"
+                ]
+            ],
+            "offsetY": 2,
+            "offsetX": 50.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(6) > span > span"
+                ],
+                [
+                    "xpath///*[@id=\"leftSettingContent\"]/res-generic-tree/div/cdk-tree/cdk-tree-node[6]/span/span"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(6) > span > span"
+                ],
+                [
+                    "text/Virus Detection"
+                ]
+            ],
+            "offsetY": 16,
+            "offsetX": 76
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ Update Now",
+                    "aria/[role=\"generic\"]"
+                ],
+                [
+                    "div:nth-of-type(4) i"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-virus-detection/div/div[4]/button/i"
+                ],
+                [
+                    "pierce/div:nth-of-type(4) i"
+                ]
+            ],
+            "offsetY": 9,
+            "offsetX": 2.71875
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(13) > span"
+                ],
+                [
+                    "xpath///*[@id=\"leftSettingContent\"]/res-generic-tree/div/cdk-tree/cdk-tree-node[13]/span"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(13) > span"
+                ]
+            ],
+            "offsetY": 7,
+            "offsetX": 88
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ New Organization ..."
+                ],
+                [
+                    "div.header-bar > button:nth-of-type(1)"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-organizations/div/res-generic-grid/div/div[1]/button[1]"
+                ],
+                [
+                    "pierce/div.header-bar > button:nth-of-type(1)"
+                ],
+                [
+                    "text/New Organization"
+                ]
+            ],
+            "offsetY": 10,
+            "offsetX": 39
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "offsetY": 16.203125,
+            "offsetX": 57.5
+        },
+        {
+            "type": "change",
+            "value": "training",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Description:"
+                ],
+                [
+                    "#description"
+                ],
+                [
+                    "xpath///*[@id=\"description\"]"
+                ],
+                [
+                    "pierce/#description"
+                ]
+            ],
+            "offsetY": 29.203125,
+            "offsetX": 17.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ Add / Remove Members ..."
+                ],
+                [
+                    "modal-container:nth-of-type(2) div.modal-body button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-new-organization-modal/res-base-modal/div/div[2]/div[1]/div[1]/button"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) div.modal-body button"
+                ],
+                [
+                    "text/Add / Remove"
+                ]
+            ],
+            "offsetY": 11.203125,
+            "offsetX": 48.765625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container:nth-of-type(3) div.modal-button-bar > button.secondary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[3]/div[2]/div/res-membership-modal/res-base-modal/div/div[3]/button[1]"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(3) div.modal-button-bar > button.secondary-button"
+                ]
+            ],
+            "offsetY": 19.40625,
+            "offsetX": 76.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Create Organization"
+                ],
+                [
+                    "modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-new-organization-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "text/Create Organization"
+                ]
+            ],
+            "offsetY": 16.8125,
+            "offsetX": 81.96875
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container div.ag-body div.ag-column-last span"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-organizations/div/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[9]/div/span"
+                ],
+                [
+                    "pierce/modal-container div.ag-body div.ag-column-last span"
+                ]
+            ],
+            "offsetY": 19,
+            "offsetX": 13
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Close",
+                    "aria/[role=\"generic\"]"
+                ],
+                [
+                    "button.close-button > i"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-settings/res-base-modal/div/div[1]/button[2]/i"
+                ],
+                [
+                    "pierce/button.close-button > i"
+                ]
+            ],
+            "offsetY": 1,
+            "offsetX": 4.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(3) span"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[3]/div/span"
+                ],
+                [
+                    "pierce/li:nth-of-type(3) span"
+                ]
+            ],
+            "offsetY": 8,
+            "offsetX": 27.328125
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li.open li:nth-of-type(1) > div.admin-label"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[3]/ul/li[1]/div[2]"
+                ],
+                [
+                    "pierce/li.open li:nth-of-type(1) > div.admin-label"
+                ]
+            ],
+            "offsetY": 10,
+            "offsetX": 29.1875
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Log in"
+                ],
+                [
+                    "div.login-body > button"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/button"
+                ],
+                [
+                    "pierce/div.login-body > button"
+                ],
+                [
+                    "text/Log in"
+                ]
+            ],
+            "offsetY": 28,
+            "offsetX": 223.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.ag-body div.ag-column-last span"
+                ],
+                [
+                    "xpath//html/body/res-root/res-project-list/div/div[2]/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[10]/div/span"
+                ],
+                [
+                    "pierce/div.ag-body div.ag-column-last span"
+                ]
+            ],
+            "offsetY": 14,
+            "offsetX": 7
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(4) div.optionContainer > div"
+                ],
+                [
+                    "xpath///*[@id=\"cdk-overlay-1\"]/div/ul/li[4]/a/div[2]/div"
+                ],
+                [
+                    "pierce/li:nth-of-type(4) div.optionContainer > div"
+                ],
+                [
+                    "text/Settings ..."
+                ]
+            ],
+            "offsetY": 11,
+            "offsetX": 23
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(2) > span"
+                ],
+                [
+                    "xpath///*[@id=\"leftSettingContent\"]/res-generic-tree/div/cdk-tree/cdk-tree-node[2]/span"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(2) > span"
+                ]
+            ],
+            "offsetY": 21,
+            "offsetX": 74
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ New Connector..."
+                ],
+                [
+                    "modal-container button.secondary-button"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-connectors-list/res-generic-grid/div/div[1]/button[1]"
+                ],
+                [
+                    "pierce/modal-container button.secondary-button"
+                ],
+                [
+                    "text/New Connector..."
+                ]
+            ],
+            "offsetY": 7,
+            "offsetX": 58
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#nameId"
+                ],
+                [
+                    "xpath///*[@id=\"nameId\"]"
+                ],
+                [
+                    "pierce/#nameId"
+                ]
+            ],
+            "offsetY": 12,
+            "offsetX": 19
+        },
+        {
+            "type": "change",
+            "value": "import-local-nfs",
+            "selectors": [
+                [
+                    "#nameId"
+                ],
+                [
+                    "xpath///*[@id=\"nameId\"]"
+                ],
+                [
+                    "pierce/#nameId"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "192.168.58.128",
+            "selectors": [
+                [
+                    "aria/IP address or domain name ..."
+                ],
+                [
+                    "#nfs-server-input"
+                ],
+                [
+                    "xpath///*[@id=\"nfs-server-input\"]"
+                ],
+                [
+                    "pierce/#nfs-server-input"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.sharesRow > div.modal-row-column-max"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-connectors-modal/res-base-modal/div/div[2]/div[3]/div[2]/div[3]/div[2]"
+                ],
+                [
+                    "pierce/div.sharesRow > div.modal-row-column-max"
+                ]
+            ],
+            "offsetY": 99.8125,
+            "offsetX": 199.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#nameId"
+                ],
+                [
+                    "xpath///*[@id=\"nameId\"]"
+                ],
+                [
+                    "pierce/#nameId"
+                ],
+                [
+                    "text/import-local-nfs"
+                ]
+            ],
+            "offsetY": 12,
+            "offsetX": 6
+        },
+        {
+            "type": "change",
+            "value": "training-import-local-nfs",
+            "selectors": [
+                [
+                    "#nameId"
+                ],
+                [
+                    "xpath///*[@id=\"nameId\"]"
+                ],
+                [
+                    "pierce/#nameId"
+                ],
+                [
+                    "text/import-local-nfs"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.nameTypeClass > div:nth-of-type(1)"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-connectors-modal/res-base-modal/div/div[2]/div[1]/div[1]/div[1]"
+                ],
+                [
+                    "pierce/div.nameTypeClass > div:nth-of-type(1)"
+                ],
+                [
+                    "text/Name: *training-import-local-nfs"
+                ]
+            ],
+            "offsetY": 9,
+            "offsetX": 36,
+            "duration": 549
+        },
+        {
+            "type": "change",
+            "value": "import-training-local-nfs",
+            "selectors": [
+                [
+                    "#nameId"
+                ],
+                [
+                    "xpath///*[@id=\"nameId\"]"
+                ],
+                [
+                    "pierce/#nameId"
+                ],
+                [
+                    "text/import-local-nfs"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container:nth-of-type(2) cdk-tree-node:nth-of-type(4) > span"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-connectors-modal/res-base-modal/div/div[2]/div[3]/div[2]/div[3]/div[2]/res-generic-tree/div/cdk-tree/cdk-tree-node[4]/span"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) cdk-tree-node:nth-of-type(4) > span"
+                ]
+            ],
+            "offsetY": 3.8125,
+            "offsetX": 82.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ Validate"
+                ],
+                [
+                    "button.validate-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-connectors-modal/res-base-modal/div/div[3]/button[3]"
+                ],
+                [
+                    "pierce/button.validate-button"
+                ],
+                [
+                    "text/Validate"
+                ]
+            ],
+            "offsetY": 20.8125,
+            "offsetX": 51.8125
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#ngx-popover-9 i"
+                ],
+                [
+                    "xpath///*[@id=\"ngx-popover-9\"]/div[2]/i"
+                ],
+                [
+                    "pierce/#ngx-popover-9 i"
+                ]
+            ],
+            "offsetY": 15,
+            "offsetX": 9
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Create Connector"
+                ],
+                [
+                    "button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-connectors-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/button.primary-button"
+                ],
+                [
+                    "text/Create Connector"
+                ]
+            ],
+            "offsetY": 11.8125,
+            "offsetX": 80.90625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ New Connector..."
+                ],
+                [
+                    "modal-container button.secondary-button"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-connectors-list/res-generic-grid/div/div[1]/button[1]"
+                ],
+                [
+                    "pierce/modal-container button.secondary-button"
+                ],
+                [
+                    "text/New Connector..."
+                ]
+            ],
+            "offsetY": 6,
+            "offsetX": 81
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#nameId"
+                ],
+                [
+                    "xpath///*[@id=\"nameId\"]"
+                ],
+                [
+                    "pierce/#nameId"
+                ]
+            ],
+            "offsetY": 12,
+            "offsetX": 29
+        },
+        {
+            "type": "change",
+            "value": "export-training-local-nfs",
+            "selectors": [
+                [
+                    "#nameId"
+                ],
+                [
+                    "xpath///*[@id=\"nameId\"]"
+                ],
+                [
+                    "pierce/#nameId"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "res-custom-radio-button:nth-of-type(2) label"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-connectors-modal/res-base-modal/div/div[2]/div[3]/div[1]/div[1]/div[2]/res-custom-radio-button[2]/div/label"
+                ],
+                [
+                    "pierce/res-custom-radio-button:nth-of-type(2) label"
+                ],
+                [
+                    "text/Read/Write"
+                ]
+            ],
+            "offsetY": 15.8125,
+            "offsetX": 83
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#_1doxk2v"
+                ],
+                [
+                    "xpath///*[@id=\"_1doxk2v\"]"
+                ],
+                [
+                    "pierce/#_1doxk2v"
+                ]
+            ],
+            "offsetY": 8.8125,
+            "offsetX": 83
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/IP address or domain name ..."
+                ],
+                [
+                    "#nfs-server-input"
+                ],
+                [
+                    "xpath///*[@id=\"nfs-server-input\"]"
+                ],
+                [
+                    "pierce/#nfs-server-input"
+                ]
+            ],
+            "offsetY": 10.8125,
+            "offsetX": 112.5
+        },
+        {
+            "type": "change",
+            "value": "192.168.58.128",
+            "selectors": [
+                [
+                    "aria/IP address or domain name ..."
+                ],
+                [
+                    "#nfs-server-input"
+                ],
+                [
+                    "xpath///*[@id=\"nfs-server-input\"]"
+                ],
+                [
+                    "pierce/#nfs-server-input"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container:nth-of-type(2) cdk-tree-node:nth-of-type(3) > span > span"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-connectors-modal/res-base-modal/div/div[2]/div[3]/div[2]/div[3]/div[2]/res-generic-tree/div/cdk-tree/cdk-tree-node[3]/span/span"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) cdk-tree-node:nth-of-type(3) > span > span"
+                ],
+                [
+                    "text//data/export"
+                ]
+            ],
+            "offsetY": 10.8125,
+            "offsetX": 31.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ Validate"
+                ],
+                [
+                    "button.validate-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-connectors-modal/res-base-modal/div/div[3]/button[3]"
+                ],
+                [
+                    "pierce/button.validate-button"
+                ],
+                [
+                    "text/Validate"
+                ]
+            ],
+            "offsetY": 7.8125,
+            "offsetX": 79.8125
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#ngx-popover-12 i"
+                ],
+                [
+                    "xpath///*[@id=\"ngx-popover-12\"]/div[2]/i"
+                ],
+                [
+                    "pierce/#ngx-popover-12 i"
+                ]
+            ],
+            "offsetY": 8,
+            "offsetX": 23
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Create Connector"
+                ],
+                [
+                    "button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-connectors-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/button.primary-button"
+                ],
+                [
+                    "text/Create Connector"
+                ]
+            ],
+            "offsetY": 15.8125,
+            "offsetX": 65.90625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(5) > span > span"
+                ],
+                [
+                    "xpath///*[@id=\"leftSettingContent\"]/res-generic-tree/div/cdk-tree/cdk-tree-node[5]/span/span"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(5) > span > span"
+                ],
+                [
+                    "text/Export Data Areas"
+                ]
+            ],
+            "offsetY": 14,
+            "offsetX": 63
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ New Data Area ..."
+                ],
+                [
+                    "modal-container button.secondary-button"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-data-areas/res-generic-grid/div/div[1]/button[1]"
+                ],
+                [
+                    "pierce/modal-container button.secondary-button"
+                ],
+                [
+                    "text/New Data Area"
+                ]
+            ],
+            "offsetY": 8,
+            "offsetX": 98
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "offsetY": 16,
+            "offsetX": 284
+        },
+        {
+            "type": "change",
+            "value": "xda-training-export-local-nfs",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container:nth-of-type(2) div.ag-center-cols-viewport > div div:nth-of-type(2) > div"
+                ],
+                [
+                    "xpath///*[@id=\"connector\"]/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[2]/div"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) div.ag-center-cols-viewport > div div:nth-of-type(2) > div"
+                ]
+            ],
+            "offsetY": 11,
+            "offsetX": 58.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container:nth-of-type(2) cdk-tree-node.gtn-node-header span.gtn-content-text"
+                ],
+                [
+                    "xpath///*[@id=\"connectorPath\"]/div[6]/res-generic-tree/div/cdk-tree/cdk-tree-node[1]/span/span[1]"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) cdk-tree-node.gtn-node-header span.gtn-content-text"
+                ]
+            ],
+            "offsetY": 8,
+            "offsetX": 11.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Create Data Area"
+                ],
+                [
+                    "button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-data-area-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/button.primary-button"
+                ],
+                [
+                    "text/Create Data Area"
+                ]
+            ],
+            "offsetY": 18,
+            "offsetX": 96.90625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(4) > span > span"
+                ],
+                [
+                    "xpath///*[@id=\"leftSettingContent\"]/res-generic-tree/div/cdk-tree/cdk-tree-node[4]/span/span"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(4) > span > span"
+                ],
+                [
+                    "text/Project Data"
+                ]
+            ],
+            "offsetY": 12,
+            "offsetX": 106
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ New Data Area ..."
+                ],
+                [
+                    "modal-container button.secondary-button"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-data-areas/res-generic-grid/div/div[1]/button[1]"
+                ],
+                [
+                    "pierce/modal-container button.secondary-button"
+                ],
+                [
+                    "text/New Data Area"
+                ]
+            ],
+            "offsetY": 12,
+            "offsetX": 90
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "offsetY": 20,
+            "offsetX": 235
+        },
+        {
+            "type": "change",
+            "value": "pda-training-local-nfs",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container:nth-of-type(2) div.ag-center-cols-viewport > div div:nth-of-type(2) > div"
+                ],
+                [
+                    "xpath///*[@id=\"connector\"]/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[2]/div"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) div.ag-center-cols-viewport > div div:nth-of-type(2) > div"
+                ]
+            ],
+            "offsetY": 17,
+            "offsetX": 45.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container:nth-of-type(2) cdk-tree-node.gtn-node-header > span"
+                ],
+                [
+                    "xpath///*[@id=\"connectorPath\"]/div[6]/res-generic-tree/div/cdk-tree/cdk-tree-node[1]/span"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) cdk-tree-node.gtn-node-header > span"
+                ],
+                [
+                    "text/exportConnector"
+                ]
+            ],
+            "offsetY": 14,
+            "offsetX": 82.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Create Data Area"
+                ],
+                [
+                    "button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-data-area-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/button.primary-button"
+                ],
+                [
+                    "text/Create Data Area"
+                ]
+            ],
+            "offsetY": 4,
+            "offsetX": 32.90625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(9) > span > span"
+                ],
+                [
+                    "xpath///*[@id=\"leftSettingContent\"]/res-generic-tree/div/cdk-tree/cdk-tree-node[9]/span/span"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(9) > span > span"
+                ],
+                [
+                    "text/Organization Users"
+                ]
+            ],
+            "offsetY": 7,
+            "offsetX": 84
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ New Organization User ..."
+                ],
+                [
+                    "div.header-bar > button.secondary-button"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-users-permissions/res-generic-grid/div/div[1]/button[1]"
+                ],
+                [
+                    "pierce/div.header-bar > button.secondary-button"
+                ],
+                [
+                    "text/New Organization"
+                ]
+            ],
+            "offsetY": 9,
+            "offsetX": 75
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Username: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "offsetY": 13.28125,
+            "offsetX": 43.5
+        },
+        {
+            "type": "change",
+            "value": "admin",
+            "selectors": [
+                [
+                    "aria/Username: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "admin@",
+            "selectors": [
+                [
+                    "div.left-settings-panel > div:nth-of-type(2) input"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-new-user-modal/res-base-modal/div/div[2]/div[1]/div[1]/div[2]/div[2]/input"
+                ],
+                [
+                    "pierce/div.left-settings-panel > div:nth-of-type(2) input"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "key": "2",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "admin@localhost",
+            "selectors": [
+                [
+                    "div.left-settings-panel > div:nth-of-type(2) input"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-new-user-modal/res-base-modal/div/div[2]/div[1]/div[1]/div[2]/div[2]/input"
+                ],
+                [
+                    "pierce/div.left-settings-panel > div:nth-of-type(2) input"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "Password123",
+            "selectors": [
+                [
+                    "div.left-settings-panel > div:nth-of-type(4) input"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-new-user-modal/res-base-modal/div/div[2]/div[1]/div[1]/div[4]/form/input"
+                ],
+                [
+                    "pierce/div.left-settings-panel > div:nth-of-type(4) input"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.left-settings-panel > div:nth-of-type(6) input"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-new-user-modal/res-base-modal/div/div[2]/div[1]/div[1]/div[6]/div[2]/input"
+                ],
+                [
+                    "pierce/div.left-settings-panel > div:nth-of-type(6) input"
+                ]
+            ],
+            "offsetY": 12.09375,
+            "offsetX": 16.5
+        },
+        {
+            "type": "change",
+            "value": "A",
+            "selectors": [
+                [
+                    "div.left-settings-panel > div:nth-of-type(6) input"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-new-user-modal/res-base-modal/div/div[2]/div[1]/div[1]/div[6]/div[2]/input"
+                ],
+                [
+                    "pierce/div.left-settings-panel > div:nth-of-type(6) input"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "key": "a",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "Ad",
+            "selectors": [
+                [
+                    "div.left-settings-panel > div:nth-of-type(6) input"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-new-user-modal/res-base-modal/div/div[2]/div[1]/div[1]/div[6]/div[2]/input"
+                ],
+                [
+                    "pierce/div.left-settings-panel > div:nth-of-type(6) input"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "Min",
+            "selectors": [
+                [
+                    "modal-container:nth-of-type(2) div:nth-of-type(7) input"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-new-user-modal/res-base-modal/div/div[2]/div[1]/div[1]/div[7]/div[2]/input"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) div:nth-of-type(7) input"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/OK"
+                ],
+                [
+                    "modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-new-user-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "text/OK"
+                ]
+            ],
+            "offsetY": 9.71875,
+            "offsetX": 23.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.left-settings-panel > div:nth-of-type(2) input"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-new-user-modal/res-base-modal/div/div[2]/div[1]/div[1]/div[2]/div[2]/input"
+                ],
+                [
+                    "pierce/div.left-settings-panel > div:nth-of-type(2) input"
+                ],
+                [
+                    "text/admin@localhost"
+                ]
+            ],
+            "offsetY": 7.28125,
+            "offsetX": 173.5
+        },
+        {
+            "type": "change",
+            "value": "admin@localhost.com",
+            "selectors": [
+                [
+                    "div.left-settings-panel > div:nth-of-type(2) input"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-new-user-modal/res-base-modal/div/div[2]/div[1]/div[1]/div[2]/div[2]/input"
+                ],
+                [
+                    "pierce/div.left-settings-panel > div:nth-of-type(2) input"
+                ],
+                [
+                    "text/admin@localhost"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/OK"
+                ],
+                [
+                    "modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-new-user-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "text/OK"
+                ]
+            ],
+            "offsetY": 9.71875,
+            "offsetX": 28.5
+        },
+        {
+            "type": "click",
+            "target": "chrome-extension://jbkfoedolllekgbhcbcoahefnbanhhlh/notification/bar.html?parentOrigin=https%3A%2F%2F192.168.58.128%3A8443",
+            "selectors": [
+                [
+                    "button > svg"
+                ],
+                [
+                    "xpath///*[@data-testid=\"unlock-notification-bar\"]/div[1]/button/svg"
+                ],
+                [
+                    "pierce/button > svg"
+                ]
+            ],
+            "offsetY": 15,
+            "offsetX": 19
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Close"
+                ],
+                [
+                    "button.close-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-settings/res-base-modal/div/div[1]/button[2]"
+                ],
+                [
+                    "pierce/button.close-button"
+                ]
+            ],
+            "offsetY": 14,
+            "offsetX": 6
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ drsysadmin "
+                ],
+                [
+                    "li:nth-of-type(3) > div"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[3]/div"
+                ],
+                [
+                    "pierce/li:nth-of-type(3) > div"
+                ]
+            ],
+            "offsetY": 16,
+            "offsetX": 32.1875
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(1) > div.admin-label"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[3]/ul/li[1]/div[2]"
+                ],
+                [
+                    "pierce/li:nth-of-type(1) > div.admin-label"
+                ]
+            ],
+            "offsetY": 6,
+            "offsetX": 3.1875
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.content-box"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]"
+                ],
+                [
+                    "pierce/div.content-box"
+                ]
+            ],
+            "offsetY": 29,
+            "offsetX": 81.5,
+            "duration": 516.3999999761581
+        },
+        {
+            "type": "change",
+            "value": "admin@",
+            "selectors": [
+                [
+                    "input:nth-of-type(2)"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/input[2]"
+                ],
+                [
+                    "pierce/input:nth-of-type(2)"
+                ],
+                [
+                    "text/DRSysAdmin"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "key": "2",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "admin@training",
+            "selectors": [
+                [
+                    "input:nth-of-type(2)"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/input[2]"
+                ],
+                [
+                    "pierce/input:nth-of-type(2)"
+                ],
+                [
+                    "text/DRSysAdmin"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "Password123",
+            "selectors": [
+                [
+                    "div.password-container > input"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/div[1]/input"
+                ],
+                [
+                    "pierce/div.password-container > input"
+                ],
+                [
+                    "text/Z7DE5ris"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Log in"
+                ],
+                [
+                    "div.login-body > button"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/button"
+                ],
+                [
+                    "pierce/div.login-body > button"
+                ],
+                [
+                    "text/Log in"
+                ]
+            ],
+            "offsetY": 13,
+            "offsetX": 143.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Continue"
+                ],
+                [
+                    "modal-container button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-message-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container button.primary-button"
+                ],
+                [
+                    "text/Continue"
+                ]
+            ],
+            "offsetY": 15.21875,
+            "offsetX": 61.4375
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container div.ng-star-inserted input"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-change-password-modal/res-base-modal/div/div[2]/form/div/div[3]/div/input"
+                ],
+                [
+                    "pierce/modal-container div.ng-star-inserted input"
+                ]
+            ],
+            "offsetY": 10.125,
+            "offsetX": 159.25
+        },
+        {
+            "type": "change",
+            "value": "Password123",
+            "selectors": [
+                [
+                    "modal-container div.ng-star-inserted input"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-change-password-modal/res-base-modal/div/div[2]/form/div/div[3]/div/input"
+                ],
+                [
+                    "pierce/modal-container div.ng-star-inserted input"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "password",
+            "selectors": [
+                [
+                    "div:nth-of-type(4) input"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-change-password-modal/res-base-modal/div/div[2]/form/div/div[4]/div/input"
+                ],
+                [
+                    "pierce/div:nth-of-type(4) input"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Save Changes"
+                ],
+                [
+                    "modal-container button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-change-password-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container button.primary-button"
+                ],
+                [
+                    "text/Save Changes"
+                ]
+            ],
+            "offsetY": 17.625,
+            "offsetX": 65.265625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container div:nth-of-type(3) i"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-policy-acknowledgment-modal/res-base-modal/div/div[2]/div[3]/res-custom-checkbox/div/i"
+                ],
+                [
+                    "pierce/modal-container div:nth-of-type(3) i"
+                ]
+            ],
+            "offsetY": 8.40625,
+            "offsetX": 14
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.mb i"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-policy-acknowledgment-modal/res-base-modal/div/div[2]/div[5]/res-custom-checkbox/div/i"
+                ],
+                [
+                    "pierce/div.mb i"
+                ]
+            ],
+            "offsetY": 11.40625,
+            "offsetX": 6
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Continue"
+                ],
+                [
+                    "modal-container button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-policy-acknowledgment-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container button.primary-button"
+                ],
+                [
+                    "text/Continue"
+                ]
+            ],
+            "offsetY": 11.40625,
+            "offsetX": 20.6875
+        },
+        {
+            "type": "click",
+            "target": "chrome-extension://jbkfoedolllekgbhcbcoahefnbanhhlh/notification/bar.html?parentOrigin=https%3A%2F%2F192.168.58.128%3A8443",
+            "selectors": [
+                [
+                    "button > svg"
+                ],
+                [
+                    "xpath///*[@data-testid=\"unlock-notification-bar\"]/div[1]/button/svg"
+                ],
+                [
+                    "pierce/button > svg"
+                ]
+            ],
+            "offsetY": 0,
+            "offsetX": 17
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.ag-body div.ag-column-last span"
+                ],
+                [
+                    "xpath//html/body/res-root/res-project-list/div/div[2]/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[10]/div/span"
+                ],
+                [
+                    "pierce/div.ag-body div.ag-column-last span"
+                ]
+            ],
+            "offsetY": 8,
+            "offsetX": 15
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(1) div.optionContainer > div"
+                ],
+                [
+                    "xpath///*[@id=\"cdk-overlay-2\"]/div/ul/li[1]/a/div[2]/div"
+                ],
+                [
+                    "pierce/li:nth-of-type(1) div.optionContainer > div"
+                ],
+                [
+                    "text/New Project ..."
+                ]
+            ],
+            "offsetY": 13,
+            "offsetX": 35
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "offsetY": 20,
+            "offsetX": 427
+        },
+        {
+            "type": "change",
+            "value": "LoadT",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "key": "t",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "LoadTesting",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Shift"
+        },
+        {
+            "type": "keyUp",
+            "key": "Shift",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "LoadTesting-01",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ Add / Remove Members ..."
+                ],
+                [
+                    "div.modal-body button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-new-project-modal/res-base-modal/div/div[2]/div[1]/div[1]/button"
+                ],
+                [
+                    "pierce/div.modal-body button"
+                ],
+                [
+                    "text/Add / Remove"
+                ]
+            ],
+            "offsetY": 21,
+            "offsetX": 126.265625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.left-content cdk-tree-node.gtn-selectable span.gtn-content-text"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-membership-modal/res-base-modal/div/div[2]/res-left-right-selection-box/form/div[1]/div[2]/res-generic-tree/div/cdk-tree/cdk-tree-node[4]/span/span[1]"
+                ],
+                [
+                    "pierce/div.left-content cdk-tree-node.gtn-selectable span.gtn-content-text"
+                ],
+                [
+                    "text/drsysadmin"
+                ]
+            ],
+            "offsetY": 16.09375,
+            "offsetX": 77.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/"
+                ],
+                [
+                    "div.left-right-button > button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-membership-modal/res-base-modal/div/div[2]/res-left-right-selection-box/form/div[2]/button"
+                ],
+                [
+                    "pierce/div.left-right-button > button"
+                ]
+            ],
+            "offsetY": 508.59375,
+            "offsetX": 5.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/OK"
+                ],
+                [
+                    "modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-membership-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "text/OK"
+                ]
+            ],
+            "offsetY": 15.40625,
+            "offsetX": 42
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Create Project"
+                ],
+                [
+                    "button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-new-project-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/button.primary-button"
+                ],
+                [
+                    "text/Create Project"
+                ]
+            ],
+            "offsetY": 14,
+            "offsetX": 91.984375
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ Imports",
+                    "aria/[role=\"image\"]"
+                ],
+                [
+                    "cdk-tree-node:nth-of-type(1) img"
+                ],
+                [
+                    "xpath///*[@id=\"leftContent\"]/res-generic-tree[2]/div/cdk-tree/cdk-tree-node[1]/div[2]/img"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(1) img"
+                ]
+            ],
+            "offsetY": 8.9375,
+            "offsetX": 2.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "body > div li:nth-of-type(1) i"
+                ],
+                [
+                    "xpath///*[@id=\"cdk-overlay-3\"]/div/ul/li[1]/a/div[1]/span/i"
+                ],
+                [
+                    "pierce/body > div li:nth-of-type(1) i"
+                ]
+            ],
+            "offsetY": 8,
+            "offsetX": 18
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.ag-row-odd > div.ag-column-first span"
+                ],
+                [
+                    "xpath///*[@id=\"connectorGrid\"]/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div[2]/div[1]/div/span"
+                ],
+                [
+                    "pierce/div.ag-row-odd > div.ag-column-first span"
+                ],
+                [
+                    "text/import-training-local-nfs"
+                ]
+            ],
+            "offsetY": 22,
+            "offsetX": 133
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(9) > i"
+                ],
+                [
+                    "xpath///*[@id=\"folderSection\"]/res-generic-tree/div/cdk-tree/cdk-tree-node[9]/i"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(9) > i"
+                ]
+            ],
+            "offsetY": 11.5,
+            "offsetX": 5
+        },
+        {
+            "type": "change",
+            "value": "testload-20260510-1823-001",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Create Data Set"
+                ],
+                [
+                    "div.modal-button-bar > button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-data-set-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/div.modal-button-bar > button.primary-button"
+                ],
+                [
+                    "text/Create Data Set"
+                ]
+            ],
+            "offsetY": 13,
+            "offsetX": 83.03125
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "res-main-content > div > div > res-resizer.collapsed"
+                ],
+                [
+                    "xpath//html/body/res-root/res-main-content/div/div/res-resizer[2]"
+                ],
+                [
+                    "pierce/res-main-content > div > div > res-resizer.collapsed"
+                ]
+            ],
+            "offsetY": 138,
+            "offsetX": 598
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(1) > div.gtn-content-context-menu-button"
+                ],
+                [
+                    "xpath///*[@id=\"leftContent\"]/res-generic-tree[2]/div/cdk-tree/cdk-tree-node[1]/div[2]"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(1) > div.gtn-content-context-menu-button"
+                ]
+            ],
+            "offsetY": 20.5,
+            "offsetX": 12
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(1) div.optionContainer"
+                ],
+                [
+                    "xpath///*[@id=\"cdk-overlay-4\"]/div/ul/li[1]/a/div[2]"
+                ],
+                [
+                    "pierce/li:nth-of-type(1) div.optionContainer"
+                ]
+            ],
+            "offsetY": 8,
+            "offsetX": 2
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container div.ag-row-odd > div.ag-column-first > div"
+                ],
+                [
+                    "xpath///*[@id=\"connectorGrid\"]/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div[2]/div[1]/div"
+                ],
+                [
+                    "pierce/modal-container div.ag-row-odd > div.ag-column-first > div"
+                ]
+            ],
+            "offsetY": 17,
+            "offsetX": 229
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(9) > i"
+                ],
+                [
+                    "xpath///*[@id=\"folderSection\"]/res-generic-tree/div/cdk-tree/cdk-tree-node[9]/i"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(9) > i"
+                ]
+            ],
+            "offsetY": 9.5,
+            "offsetX": 9
+        },
+        {
+            "type": "change",
+            "value": "testload-2026",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "offsetY": 8,
+            "offsetX": 130
+        },
+        {
+            "type": "change",
+            "value": "testload-20260510-1823-001",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "offsetY": 18,
+            "offsetX": 147
+        },
+        {
+            "type": "change",
+            "value": "testload-20260510-1824-001",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#topSection div:nth-of-type(4) button"
+                ],
+                [
+                    "xpath///*[@id=\"topSection\"]/div[2]/res-new-data-set-load-file-menu/div/div[1]/div[4]/div[2]/div/button"
+                ],
+                [
+                    "pierce/#topSection div:nth-of-type(4) button"
+                ]
+            ],
+            "offsetY": 10,
+            "offsetX": 33
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.right-settings-panel > div:nth-of-type(2) label"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-index-settings/div/form/div[2]/div[2]/div[1]/res-custom-checkbox/div/label"
+                ],
+                [
+                    "pierce/div.right-settings-panel > div:nth-of-type(2) label"
+                ],
+                [
+                    "text/Enable Automatic OCR"
+                ]
+            ],
+            "offsetY": 6,
+            "offsetX": 83
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Save"
+                ],
+                [
+                    "modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-index-settings/div/div/button[1]"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) button.primary-button"
+                ]
+            ],
+            "offsetY": 12,
+            "offsetX": 51
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container:nth-of-type(2) button.close-button > i"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-settings/res-base-modal/div/div[1]/button[2]/i"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) button.close-button > i"
+                ]
+            ],
+            "offsetY": 3,
+            "offsetX": 8.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ],
+                [
+                    "text/testload-20260510-1824-001"
+                ]
+            ],
+            "offsetY": 22,
+            "offsetX": 278
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowLeft"
+        },
+        {
+            "type": "keyUp",
+            "key": "ArrowLeft",
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "ArrowRight"
+        },
+        {
+            "type": "keyUp",
+            "key": "ArrowRight",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "testload-OCR-20260510-1824-001",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ],
+                [
+                    "text/testload-20260510-1824-001"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Create Data Set"
+                ],
+                [
+                    "div.modal-button-bar > button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-data-set-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/div.modal-button-bar > button.primary-button"
+                ],
+                [
+                    "text/Create Data Set"
+                ]
+            ],
+            "offsetY": 11,
+            "offsetX": 50.03125
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(2) span.gtn-content-text"
+                ],
+                [
+                    "xpath///*[@id=\"leftContent\"]/res-generic-tree[2]/div/cdk-tree/cdk-tree-node[2]/span/span[1]"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(2) span.gtn-content-text"
+                ]
+            ],
+            "offsetY": 11,
+            "offsetX": 59,
+            "button": "secondary"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(25) div.optionContainer > div"
+                ],
+                [
+                    "xpath///*[@id=\"cdk-overlay-5\"]/div/ul/li[25]/a/div[2]/div"
+                ],
+                [
+                    "pierce/li:nth-of-type(25) div.optionContainer > div"
+                ],
+                [
+                    "text/Delete"
+                ]
+            ],
+            "offsetY": 14,
+            "offsetX": 18
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Delete"
+                ],
+                [
+                    "modal-container button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-delete-entity/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container button.primary-button"
+                ]
+            ],
+            "offsetY": 12.40625,
+            "offsetX": 32.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.home > span"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[2]/span"
+                ],
+                [
+                    "pierce/div.home > span"
+                ],
+                [
+                    "text/Home"
+                ]
+            ],
+            "offsetY": 7,
+            "offsetX": 18.28125
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.ag-row-odd > div.ag-column-last span"
+                ],
+                [
+                    "xpath//html/body/res-root/res-project-list/div/div[2]/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div[1]/div[10]/div/span"
+                ],
+                [
+                    "pierce/div.ag-row-odd > div.ag-column-last span"
+                ]
+            ],
+            "offsetY": 15,
+            "offsetX": 14
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(4) div.optionContainer > div"
+                ],
+                [
+                    "xpath///*[@id=\"cdk-overlay-6\"]/div/ul/li[4]/a/div[2]/div"
+                ],
+                [
+                    "pierce/li:nth-of-type(4) div.optionContainer > div"
+                ],
+                [
+                    "text/Delete"
+                ]
+            ],
+            "offsetY": 15,
+            "offsetX": 1
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Request Project Deletion"
+                ],
+                [
+                    "button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-delete-entity/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/button.primary-button"
+                ],
+                [
+                    "text/Request Project"
+                ]
+            ],
+            "offsetY": 9.3125,
+            "offsetX": 64.59375
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ admin "
+                ],
+                [
+                    "li:nth-of-type(1) > div"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[1]/div"
+                ],
+                [
+                    "pierce/li:nth-of-type(1) > div"
+                ]
+            ],
+            "offsetY": 32,
+            "offsetX": 48.890625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(1) > div.admin-label"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[1]/ul/li[1]/div[2]"
+                ],
+                [
+                    "pierce/li:nth-of-type(1) > div.admin-label"
+                ]
+            ],
+            "offsetY": 16,
+            "offsetX": 15.890625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.content-box"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]"
+                ],
+                [
+                    "pierce/div.content-box"
+                ]
+            ],
+            "offsetY": 34,
+            "offsetX": 62.5,
+            "duration": 477.7999999523163
+        },
+        {
+            "type": "change",
+            "value": "DRSysAdmin",
+            "selectors": [
+                [
+                    "input:nth-of-type(2)"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/input[2]"
+                ],
+                [
+                    "pierce/input:nth-of-type(2)"
+                ],
+                [
+                    "text/admin@training"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "password",
+            "selectors": [
+                [
+                    "div.password-container > input"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/div[1]/input"
+                ],
+                [
+                    "pierce/div.password-container > input"
+                ],
+                [
+                    "text/jYOFo1pj"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Log in"
+                ],
+                [
+                    "div.login-body > button"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/button"
+                ],
+                [
+                    "pierce/div.login-body > button"
+                ],
+                [
+                    "text/Log in"
+                ]
+            ],
+            "offsetY": 26,
+            "offsetX": 148.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(2) span"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[2]/div/span"
+                ],
+                [
+                    "pierce/li:nth-of-type(2) span"
+                ],
+                [
+                    "text/Settings"
+                ]
+            ],
+            "offsetY": 2,
+            "offsetX": 14.609375
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.admin-label"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[2]/ul/li/div[2]"
+                ],
+                [
+                    "pierce/div.admin-label"
+                ],
+                [
+                    "text/System Settings"
+                ]
+            ],
+            "offsetY": 6,
+            "offsetX": 28.90625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(15) > span > span"
+                ],
+                [
+                    "xpath///*[@id=\"leftSettingContent\"]/res-generic-tree/div/cdk-tree/cdk-tree-node[15]/span/span"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(15) > span > span"
+                ],
+                [
+                    "text/Delete Pending"
+                ]
+            ],
+            "offsetY": 2,
+            "offsetX": 43
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container div.ag-body div.ag-column-first > div"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-delete-pending-projects/div/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[1]/div"
+                ],
+                [
+                    "pierce/modal-container div.ag-body div.ag-column-first > div"
+                ]
+            ],
+            "offsetY": 10,
+            "offsetX": 163
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container div.ag-body div.ag-column-last span"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-delete-pending-projects/div/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[7]/div/span"
+                ],
+                [
+                    "pierce/modal-container div.ag-body div.ag-column-last span"
+                ]
+            ],
+            "offsetY": 15,
+            "offsetX": 5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(1) div.optionContainer > div"
+                ],
+                [
+                    "xpath///*[@id=\"cdk-overlay-7\"]/div/ul/li[1]/a/div[2]/div"
+                ],
+                [
+                    "pierce/li:nth-of-type(1) div.optionContainer > div"
+                ],
+                [
+                    "text/Approve Project"
+                ]
+            ],
+            "offsetY": 8,
+            "offsetX": 128
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Approve Deletion"
+                ],
+                [
+                    "button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-message-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/button.primary-button"
+                ],
+                [
+                    "text/Approve Deletion"
+                ]
+            ],
+            "offsetY": 14.3125,
+            "offsetX": 64.5625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Close",
+                    "aria/[role=\"generic\"]"
+                ],
+                [
+                    "button.close-button > i"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-settings/res-base-modal/div/div[1]/button[2]/i"
+                ],
+                [
+                    "pierce/button.close-button > i"
+                ]
+            ],
+            "offsetY": 7,
+            "offsetX": 8.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.ag-body div.ag-column-last span"
+                ],
+                [
+                    "xpath//html/body/res-root/res-project-list/div/div[2]/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[10]/div/span"
+                ],
+                [
+                    "pierce/div.ag-body div.ag-column-last span"
+                ]
+            ],
+            "offsetY": 11,
+            "offsetX": 6
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.ag-body div.ag-column-last span"
+                ],
+                [
+                    "xpath//html/body/res-root/res-project-list/div/div[2]/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[10]/div/span"
+                ],
+                [
+                    "pierce/div.ag-body div.ag-column-last span"
+                ]
+            ],
+            "offsetY": 15,
+            "offsetX": 24
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.ag-center-cols-viewport"
+                ],
+                [
+                    "xpath//html/body/res-root/res-project-list/div/div[2]/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]"
+                ],
+                [
+                    "pierce/div.ag-center-cols-viewport"
+                ]
+            ],
+            "offsetY": 233,
+            "offsetX": 1140
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ Settings "
+                ],
+                [
+                    "li:nth-of-type(2) > div"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[2]/div"
+                ],
+                [
+                    "pierce/li:nth-of-type(2) > div"
+                ]
+            ],
+            "offsetY": 24,
+            "offsetX": 34.90625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.admin-label"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[2]/ul/li/div[2]"
+                ],
+                [
+                    "pierce/div.admin-label"
+                ],
+                [
+                    "text/System Settings"
+                ]
+            ],
+            "offsetY": 8,
+            "offsetX": 11.90625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(13) > span > span"
+                ],
+                [
+                    "xpath///*[@id=\"leftSettingContent\"]/res-generic-tree/div/cdk-tree/cdk-tree-node[13]/span/span"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(13) > span > span"
+                ],
+                [
+                    "text/Organizations"
+                ]
+            ],
+            "offsetY": 15,
+            "offsetX": 45
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container div.ag-body div.ag-column-last span"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-organizations/div/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[9]/div/span"
+                ],
+                [
+                    "pierce/modal-container div.ag-body div.ag-column-last span"
+                ]
+            ],
+            "offsetY": 15,
+            "offsetX": 17
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(7) div.optionContainer > div"
+                ],
+                [
+                    "xpath///*[@id=\"cdk-overlay-10\"]/div/ul/li[7]/a/div[2]/div"
+                ],
+                [
+                    "pierce/li:nth-of-type(7) div.optionContainer > div"
+                ],
+                [
+                    "text/Delete Organization"
+                ]
+            ],
+            "offsetY": 14,
+            "offsetX": 22
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Delete Organization"
+                ],
+                [
+                    "modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-delete-entity/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "text/Delete Organization"
+                ]
+            ],
+            "offsetY": 12.40625,
+            "offsetX": 39.71875
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Close",
+                    "aria/[role=\"generic\"]"
+                ],
+                [
+                    "button.close-button > i"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-settings/res-base-modal/div/div[1]/button[2]/i"
+                ],
+                [
+                    "pierce/button.close-button > i"
+                ]
+            ],
+            "offsetY": 9,
+            "offsetX": 3.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ Reload",
+                    "aria/[role=\"generic\"]"
+                ],
+                [
+                    "div:nth-of-type(2) > button > i"
+                ],
+                [
+                    "xpath///*[@id=\"titleBar\"]/div[2]/button/i"
+                ],
+                [
+                    "pierce/div:nth-of-type(2) > button > i"
+                ]
+            ],
+            "offsetY": 2.09375,
+            "offsetX": 7.9375
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ drsysadmin "
+                ],
+                [
+                    "li:nth-of-type(3) > div"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[3]/div"
+                ],
+                [
+                    "pierce/li:nth-of-type(3) > div"
+                ]
+            ],
+            "offsetY": 30,
+            "offsetX": 41.1875
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li.open li.ng-star-inserted > div.admin-label"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[3]/ul/li[2]/div[2]"
+                ],
+                [
+                    "pierce/li.open li.ng-star-inserted > div.admin-label"
+                ],
+                [
+                    "text/Log out on All"
+                ]
+            ],
+            "offsetY": 15,
+            "offsetX": 11.1875,
+            "assertedEvents": [
+                {
+                    "type": "navigation"
+                }
+            ]
+        }
+    ]
+}

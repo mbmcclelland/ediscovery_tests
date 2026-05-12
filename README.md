@@ -1,12 +1,16 @@
 # eDiscovery API Test Suite
 
-**Version 0.02**
+**Version 0.06**
 
-Automated API tests and load tests for the Digital Reef eDiscovery REST API,
-plus the `dr-load` CLI for running headless load tests with preflight checks,
-background monitoring, and merged CSV reports.
+Automated API tests, load tests, a Textual TUI for live monitoring, and a
+reinstall toolchain for the Digital Reef eDiscovery REST API. Includes:
 
-Built with **pytest + requests** for functional tests and **Locust** for performance/load testing.
+- `dr-load` — headless load-test CLI with preflight, background monitoring, merged CSV reports
+- `dr-tui` — lazygit-style Textual TUI with tabbed hierarchical Tree + drill-down detail pane
+- `playwright_fresh_install.py` / `playwright_fresh_init.py` — Playwright-driven post-install setup
+- `cleandr.sh` + `DR_freshinstall.exp` — destructive uninstall + automated reinstall
+
+Built with **pytest + requests** for functional tests, **Locust** for load testing, **Textual** for the TUI, **Playwright** + **mitmproxy** for UI automation and endpoint capture.
 
 ---
 
@@ -83,6 +87,67 @@ pytest --html=report.html --self-contained-html
 
 ---
 
+## TUI Usage (`dr-tui`)
+
+A lazygit-style Textual TUI for live monitoring. Launch it from any terminal:
+
+```bash
+dr-tui            # or: python -m dr_tui
+```
+
+**Login screen** — pick `DRSysAdmin` or `admin@training`, type the password
+(defaults to `password` for the lab), press Enter.
+
+**Dashboard (v0.06)** — `TabbedContent` with two tabs. Each tab is a
+`Horizontal(Tree, ContentSwitcher)`: hierarchical Tree on the left, detail
+pane on the right that switches view per selected leaf. System Settings
+leaves carry **action bars** with CRUD buttons that drive modal dialogs.
+
+```
+ ┌─[ System Settings ]── Organizations ─────────────────────────────┐
+ │ ▼ Storage                ┃  Connectors                            │
+ │   • Document Storage     ┃ ┌────────────────────────────────────┐ │
+ │   • Index Storage        ┃ │ Name   Type   Host   Path   Status │ │
+ │   System Storage Depot   ┃ │ nfs1   NFS    …                    │ │
+ │   Virus Detection        ┃ └────────────────────────────────────┘ │
+ │   System Users           ┃                                        │
+ │   System Groups          ┃                                        │
+ └────────────────────────────────────────────────────────────────────┘
+ DRSysAdmin · org=training · view=org-connectors · connectors=2
+ [q] quit  [r] refresh  [l] logout
+```
+
+- **System Settings tab** (DRSysAdmin only — hidden for `admin@training`):
+  Storage > Document/Index Storage Depots (full CRUD), System Storage
+  Depot (read), Virus Detection (read + "Update Now"), System Users
+  (full CRUD + reset-password), System Groups (full CRUD).
+- **Organizations tab** (both roles): one branch per org with 8 leaves —
+  Users, Admins, Groups, Projects, Running Jobs, Completed Jobs,
+  Connectors, Storage. Read-only for v0.06.
+
+**v0.06 CRUD modals**: depot create / edit / delete; user create / edit /
+delete / reset-password; group create / edit / delete; virus-defs
+"Update Now". All operations run on worker threads, the status bar
+flashes green on success, and the visible leaf auto-refreshes once the
+write returns. Modal validation guards empty fields, password mismatch,
+etc.
+
+Auto-refresh ticks every 5 s but only re-fetches the currently-visible
+leaf (no API hammering). DRSysAdmin drill-down into a non-default org
+transparently calls `realmManager/initializeOrganization` first.
+
+### Endpoints (sample — full list in `docs/endpoints_v0.05.md`)
+
+| Leaf | DRSysAdmin | admin@training |
+|---|---|---|
+| Doc / Idx depots | `realmManager/listRemoteNFSStorageAreas` (filter `storageUseType`) | (hidden tab) |
+| Virus Detection | `realmManager/getVirusDefinitions` | (hidden tab) |
+| Connectors | `initializeOrganization` → `adminOrgManager/listConnectors` | direct |
+| Projects | `realmManager/listSystemUserProjectsByUserName` | `orgManager/listUserProjectsForAllOrgs` |
+| Tasks | `projectManager/listTasks` (split by `dateCompleted`) | same |
+
+---
+
 ## CLI Usage (`dr-load`)
 
 `dr-load` wraps the Locust load tests with preflight checks, orphan cleanup,
@@ -111,31 +176,50 @@ when not specified on the command line.
 
 1. Runs preflight checks (app reachable, auth, Postgres, NFS, log dir, connector UUID)
 2. Sweeps for orphaned `load-test-*` projects and deletes them
-3. Starts background `LogWatcher` (tails `*.log` files in `DR_LOG_DIR`) and `JobPoller` (polls `datamining_corpus_representation` every `DR_POLL_INTERVAL` seconds)
-4. Runs Locust headless, streaming output to the terminal
+3. Starts background `LogWatcher` (tails `*.log` files in `DR_LOG_DIR`) and SQL `JobPoller` (polls `datamining_corpus_representation` every `DR_POLL_INTERVAL` seconds for a global "how many indexings finished" signal)
+4. Runs Locust headless, streaming output to the terminal. Each Locust user, per workflow, also drives its own per-task REST poll (`taskManager/getTasks` every `DR_INDEX_POLL_INTERVAL` seconds) so it can wait for its specific indexing to complete before deleting the project.
 5. On exit, prints a summary (Locust stats + error counts + indexing job completion counts)
 6. Writes a merged CSV report combining Locust stats with monitor data
 
+### Indexing handle resolution (v0.03+)
+
+`locustfile_indexing.py` looks up environment-specific handles on each user's `on_start` instead of reading them from `.env`:
+
+- **NFS connector** — via `adminOrgManager/listConnectors`, filtered by `type=NFS, mode=READ`
+- **Admin role** — via `orgManager/listRoles`, matched by `name="Organization Administrator"`
+- **Template attributes** — via `orgManager/listTemplates`, every `defaultTemplate=true` entry
+
+This makes the load test drift-proof across `playwright_fresh_install.py` reruns, which rebuild the org and regenerate all handles.
+
+> `DR_NFS_CONNECTOR_HANDLE` / `DR_ADMIN_ROLE_HANDLE` / `DR_TEMPLATE_*` are still read by **`tests/test_indexing_workflow.py`** (pytest), so leave them populated in `.env`.
+
 ### CLI-specific env vars
 
-| Variable            | Default                       | Description                                  |
-|---------------------|-------------------------------|----------------------------------------------|
-| `DR_LOG_DIR`        | `/home/auraria/AHS/output`    | App log directory to watch                   |
-| `DR_POLL_INTERVAL`  | `10`                          | Seconds between job-status DB polls          |
-| `DR_REPORT_OUTPUT`  | `dr_report.csv`               | Output path for the merged report CSV        |
-| `DR_PG_DB`          | `auraria_mgmt`                | Postgres database name                       |
-| `DR_PG_USER`        | `auraria`                     | Postgres user (peer auth via sudo)           |
+| Variable                  | Default                       | Description                                                                  |
+|---------------------------|-------------------------------|------------------------------------------------------------------------------|
+| `DR_LOG_DIR`              | `/home/auraria/AHS/output`    | App log directory to watch                                                   |
+| `DR_POLL_INTERVAL`        | `10`                          | Seconds between SQL job-status polls (`helpers/monitor.py` global poller)    |
+| `DR_INDEX_POLL_INTERVAL`  | `5`                           | Seconds between per-workflow `taskManager/getTasks` REST polls               |
+| `DR_INDEX_POLL_TIMEOUT`   | `600`                         | Max seconds to wait for a single indexing task to reach `dateCompleted`      |
+| `DR_REPORT_OUTPUT`        | `dr_report.csv`               | Output path for the merged report CSV                                        |
+| `DR_PG_DB`                | `auraria_mgmt`                | Postgres database name                                                       |
+| `DR_PG_USER`              | `auraria`                     | Postgres user (peer auth via sudo)                                           |
 
 ---
 
 ## Configuration (.env)
 
+### Core
+
 | Variable                  | Description                                  | Default                                              |
 |---------------------------|----------------------------------------------|------------------------------------------------------|
 | `DR_BASE_URL`             | Full base URL for REST API                   | `https://192.168.58.128:8443/ediscovery/rest`        |
-| `DR_USERNAME`             | Login username                               | `DRSysAdmin`                                         |
-| `DR_PASSWORD`             | Login password                               | *(required)*                                         |
-| `DR_ORGANIZATION`         | Organization name                            | `super_system_customer`                              |
+| `DR_USERNAME`             | DRSysAdmin login                             | `DRSysAdmin`                                         |
+| `DR_PASSWORD`             | DRSysAdmin password                          | *(required)*                                         |
+| `DR_ORGANIZATION`         | System org name                              | `super_system_customer`                              |
+| `DR_ORG_USERNAME`         | Org user login                               | `admin`                                              |
+| `DR_ORG_PASSWORD`         | Org user password                            | *(required for indexing load test)*                  |
+| `DR_ORG_ORGANIZATION`     | Org name                                     | `training`                                           |
 | `DR_LDAP_DOMAIN`          | LDAP domain (if applicable)                  | *(empty)*                                            |
 | `DR_REQUEST_TIMEOUT`      | Default request timeout (seconds)            | `30`                                                 |
 | `DR_LONG_REQUEST_TIMEOUT` | Timeout for slow endpoints (seconds)         | `120`                                                |
@@ -144,8 +228,106 @@ when not specified on the command line.
 | `DR_LOAD_TEST_SPAWN_RATE` | Locust: users spawned per second             | `2`                                                  |
 | `DR_LOAD_TEST_DURATION`   | Locust: test duration (seconds)              | `60`                                                 |
 
+### Indexing workflow
+
+| Variable                  | Description                                                          | Default     |
+|---------------------------|----------------------------------------------------------------------|-------------|
+| `DR_NFS_IMPORT_PATH`      | Path on the NFS connector containing load-test data                  | `/testload` |
+| `DR_NFS_DATASET_NAME`     | Label used to name datasets/corpora per workflow                     | `testload`  |
+| `DR_INDEX_POLL_INTERVAL`  | Seconds between per-workflow `taskManager/getTasks` polls            | `5`         |
+| `DR_INDEX_POLL_TIMEOUT`   | Max seconds to wait for `dateCompleted` on an indexing task          | `600`       |
+| `DR_NFS_CONNECTOR_HANDLE` | NFS connector handle — pytest only (locustfile resolves dynamically) | *(varies)*  |
+| `DR_ADMIN_ROLE_HANDLE`    | Organization Administrator role handle — pytest only                 | *(varies)*  |
+| `DR_TEMPLATE_*` (×17)     | Default-template handles by templateType — pytest only               | *(varies)*  |
+
 All variables use a `DR_` prefix to avoid collisions with Windows system environment variables
 (Windows sets `USERNAME` automatically).
+
+### After running `playwright_fresh_install.py`
+
+`playwright_fresh_install.py` ends by deleting the `training` org. Before running the
+indexing load test against the same host you must:
+
+1. Re-provision the `training` org with the org user (`admin` / `password` by default).
+2. Re-sync `DR_NFS_CONNECTOR_HANDLE`, `DR_ADMIN_ROLE_HANDLE`, and `DR_TEMPLATE_*` in
+   `.env` to the freshly-generated values (only needed for pytest — `locustfile_indexing.py`
+   resolves them at runtime).
+
+Symptom if you skip step 1: `dr-load preflight` reports `connector_uuid: Expecting value:
+line 1 column 1 (char 0)` — the org user login returns HTTP 500 with an HTML error body
+that preflight tries to parse as JSON.
+
+---
+
+## Fresh-Install / Reinstall Toolchain (v0.06)
+
+A three-step chain for tearing DR down and bringing it back to a tested
+baseline (DRSysAdmin/`password`, `admin@training`/`password`, depots
+created, system depot assigned, `training` org provisioned).
+
+> ⚠️ **Destructive and unrecoverable.** Step 1 wipes `/home/auraria/AHS*`,
+> `/data/docstorage/*`, `/data/indexstorage/*`, and the InstallAnywhere
+> registry. Run it only when you intend to start over.
+
+### Step 1 — `cleandr.sh`
+
+Stops `drd`, preserves `license.lic` to `/root/`, then removes the install
+tree and storage scratch dirs.
+
+```bash
+bash cleandr.sh
+```
+
+Reads either the live `/home/auraria/AHS/conf/license.lic` (preferred) or
+a copy in CWD; falls back to any pre-existing `/root/license.lic` if both
+sources are missing.
+
+### Step 2 — `DR_freshinstall.exp`
+
+Expect script that drives the InstallAnywhere console installer
+(`/tmp/5.5.3.2.bin -i console`), accepts the license, picks Full node /
+eDiscovery / IP 192.168.58.128, and restores the license + restarts `drd`
+at the end.
+
+```bash
+cd /tmp
+expect -f /home/auraria/scripts/ediscovery_tests/DR_freshinstall.exp
+```
+
+Typical wall-clock time: ~5–7 minutes (most of it is the bundled JRE
+extraction). The installer auto-starts `drd`; the script also runs
+`systemctl restart drd` after replacing the license file so DRD picks up
+the licensed features.
+
+### Step 3 — `playwright_fresh_init.py`
+
+Idempotent Playwright driver: first login (DRSysAdmin/`DRSysAdmin`) →
+forced password change to `password` → create `localDocStorage` + 
+`localIndexStorage` → assign System Storage Depot → create `training` org
+→ create `admin/training` user → forced password change on first
+admin@training login → logout.
+
+```bash
+source .venv/bin/activate
+python playwright_fresh_init.py            # headless
+python playwright_fresh_init.py --no-headless --slow-mo 200   # watch it run
+```
+
+All phases skip-if-exists, so re-running is safe. Captures API traffic to
+`/tmp/dr_api_capture.json` and (via mitmproxy on `:8090`)
+`/tmp/dr_proxy_capture.json`.
+
+After step 3 completes: `dr-load preflight` should return all-green; the
+pytest suite and `dr-tui` work without further configuration.
+
+### What if step 2's expect script hangs?
+
+Autoexpect scripts are fragile about bash prompts. The current
+`DR_freshinstall.exp` was hand-cleaned to match installer text (which is
+deterministic) and avoid bash-prompt expectations entirely. If you
+regenerate it via autoexpect on a different host, watch for prompt
+mismatches in the bash bracketed-paste sequences and switch
+`expect -exact` to `expect -re` for any `tmp]# ` matches.
 
 ---
 
@@ -157,30 +339,56 @@ ediscovery_tests/
 ├── .env                      # Your local config (git-ignored)
 ├── __version__.py            # Version string
 ├── CHANGELOG.md              # Release notes
+├── README.md                 # This file
+├── PLAN.md                   # Active task plan
+├── DR_Workflow_Guide.md      # API + database walkthrough
 ├── config.py                 # Config loader (reads .env)
 ├── conftest.py               # Shared pytest fixtures (auth, clients, helpers)
 ├── pytest.ini                # Pytest settings and markers
 ├── requirements.txt          # Python dependencies
-├── setup.cfg                 # Package config + dr-load entry point
+├── setup.cfg                 # Package config + dr-load + dr-tui entry points
+├── setup.py                  # setuptools shim for editable install
+│
 ├── cli.py                    # dr-load CLI entry point (typer)
 ├── locustfile.py             # Locust load test: status/reports/browsing
 ├── locustfile_indexing.py    # Locust load test: full indexing workflow
+│
+├── cleandr.sh                # Destructive uninstall (preserves license)
+├── DR_freshinstall.exp       # Expect: drives InstallAnywhere console installer
+├── playwright_fresh_install.py # Full Playwright fresh-install + lifecycle workflow
+├── playwright_fresh_init.py    # Focused post-install setup (just enough for tests)
+├── proxy_logger.py           # mitmproxy addon — records DR REST traffic to /tmp
+│
+├── dr_tui/                   # Textual TUI (v0.05+ tabbed hierarchical views)
+│   ├── __init__.py / __main__.py
+│   ├── app.py                # DRTUIApp / LoginScreen / DashboardScreen
+│   ├── data.py               # Sync API fetchers per leaf
+│   └── app.tcss              # Textual stylesheet
+│
 ├── helpers/
 │   ├── __init__.py
-│   ├── api_client.py         # EDiscoveryClient wrapper
+│   ├── api_client.py         # EDiscoveryClient wrapper (v0.06: handles 204)
 │   ├── preflight.py          # Preflight checks + orphan sweep
 │   └── monitor.py            # LogWatcher + JobPoller background threads
-└── tests/
-    ├── test_auth.py               # Session creation / login
-    ├── test_ocr_report.py         # OCR Usage Report
-    ├── test_status.py             # Realm, system, node status
-    ├── test_projects.py           # Project listing and management
-    ├── test_organizations.py      # Organization and resource listing
-    ├── test_connectors.py         # Connector listing and retrieval
-    ├── test_billing.py            # Billing and report settings
-    ├── test_workflows.py          # End-to-end chained workflows
-    ├── test_org_user.py           # Org-scoped user tests
-    └── test_indexing_workflow.py  # Full indexing lifecycle (create → import → index → delete)
+│
+├── docs/
+│   ├── endpoints_v0.05.md    # Read-path endpoint reference (dr-tui views)
+│   └── endpoints_v0.06.md    # Write-path endpoint reference (CRUD work)
+│
+├── tests/                    # pytest functional suite (10 modules, 87 tests)
+│   ├── test_auth.py
+│   ├── test_ocr_report.py
+│   ├── test_status.py
+│   ├── test_projects.py
+│   ├── test_organizations.py
+│   ├── test_connectors.py
+│   ├── test_billing.py
+│   ├── test_workflows.py
+│   ├── test_org_user.py
+│   └── test_indexing_workflow.py
+│
+└── misc/                     # Historical recordings, old debug scripts,
+                              # stale Locust CSVs, foreign-language files
 ```
 
 ---

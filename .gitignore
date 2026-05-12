@@ -8,3 +8,14 @@ ediscovery_tests.egg-info/
 *.egg-info/
 .claude/
 env.txt
+
+# Logs (DR install / Postgres / mitmproxy capture files etc. — can run to GB)
+*.log
+
+# IDE workspace files
+*.code-workspace
+.vscode/
+.idea/
+
+# pytest cache
+.pytest_cache/

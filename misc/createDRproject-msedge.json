@@ -1,0 +1,905 @@
+{
+    "title": "FullWorkflow-ProjectCreate-ProjectDelete",
+    "steps": [
+        {
+            "type": "setViewport",
+            "width": 1995,
+            "height": 1274,
+            "deviceScaleFactor": 1,
+            "isMobile": false,
+            "hasTouch": false,
+            "isLandscape": false
+        },
+        {
+            "type": "navigate",
+            "url": "https://192.168.58.128:8443/ediscovery/",
+            "assertedEvents": [
+                {
+                    "type": "navigation",
+                    "url": "https://192.168.58.128:8443/ediscovery/",
+                    "title": "eDiscovery"
+                }
+            ]
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "input.ng-dirty"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/input[2]"
+                ],
+                [
+                    "pierce/input.ng-dirty"
+                ]
+            ],
+            "offsetY": 10,
+            "offsetX": 46.875
+        },
+        {
+            "type": "change",
+            "value": "DRSysA",
+            "selectors": [
+                [
+                    "input.ng-dirty"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/input[2]"
+                ],
+                [
+                    "pierce/input.ng-dirty"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "key": "a",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "DRSysAdmin",
+            "selectors": [
+                [
+                    "input.ng-dirty"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/input[2]"
+                ],
+                [
+                    "pierce/input.ng-dirty"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "password",
+            "selectors": [
+                [
+                    "div.password-container > input"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/div[1]/form/div[1]/input"
+                ],
+                [
+                    "pierce/div.password-container > input"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Log in"
+                ],
+                [
+                    "div.login-body > button"
+                ],
+                [
+                    "xpath//html/body/res-root/res-login/div/div[5]/button"
+                ],
+                [
+                    "pierce/div.login-body > button"
+                ],
+                [
+                    "text/Log in"
+                ]
+            ],
+            "offsetY": 44,
+            "offsetX": 237.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.ag-body div.ag-column-last span"
+                ],
+                [
+                    "xpath//html/body/res-root/res-project-list/div/div[2]/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[10]/div/span"
+                ],
+                [
+                    "pierce/div.ag-body div.ag-column-last span"
+                ]
+            ],
+            "offsetY": 6,
+            "offsetX": 5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(1) div.optionContainer > div"
+                ],
+                [
+                    "xpath///*[@id=\"cdk-overlay-8\"]/div/ul/li[1]/a/div[2]/div"
+                ],
+                [
+                    "pierce/li:nth-of-type(1) div.optionContainer > div"
+                ],
+                [
+                    "text/New Project ..."
+                ]
+            ],
+            "offsetY": 12,
+            "offsetX": 56
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ Add / Remove Members ..."
+                ],
+                [
+                    "div.group-title > button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-new-project-modal/res-base-modal/div/div[2]/div[1]/div[3]/button"
+                ],
+                [
+                    "pierce/div.group-title > button"
+                ],
+                [
+                    "text/Add / Remove"
+                ]
+            ],
+            "offsetY": 17,
+            "offsetX": 78.265625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.left-content cdk-tree-node.gtn-selectable span.gtn-content-text"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-membership-modal/res-base-modal/div/div[2]/res-left-right-selection-box/form/div[1]/div[2]/res-generic-tree/div/cdk-tree/cdk-tree-node[5]/span/span[1]"
+                ],
+                [
+                    "pierce/div.left-content cdk-tree-node.gtn-selectable span.gtn-content-text"
+                ]
+            ],
+            "offsetY": 10.09375,
+            "offsetX": 102.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/"
+                ],
+                [
+                    "div.left-right-button > button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-membership-modal/res-base-modal/div/div[2]/res-left-right-selection-box/form/div[2]/button"
+                ],
+                [
+                    "pierce/div.left-right-button > button"
+                ]
+            ],
+            "offsetY": 400.59375,
+            "offsetX": 12.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/OK"
+                ],
+                [
+                    "modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-membership-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/modal-container:nth-of-type(2) button.primary-button"
+                ],
+                [
+                    "text/OK"
+                ]
+            ],
+            "offsetY": 20.40625,
+            "offsetX": 65
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "offsetY": 14,
+            "offsetX": 559
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "offsetY": 5,
+            "offsetX": 183
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "offsetY": 9,
+            "offsetX": 188
+        },
+        {
+            "type": "change",
+            "value": "ExampleTestProject-01",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "CapsLock"
+        },
+        {
+            "type": "keyUp",
+            "key": "CapsLock",
+            "target": "main"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Create Project"
+                ],
+                [
+                    "button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-new-project-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/button.primary-button"
+                ],
+                [
+                    "text/Create Project"
+                ]
+            ],
+            "offsetY": 18,
+            "offsetX": 41.984375
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/ Imports",
+                    "aria/[role=\"image\"]"
+                ],
+                [
+                    "cdk-tree-node:nth-of-type(1) img"
+                ],
+                [
+                    "xpath///*[@id=\"leftContent\"]/res-generic-tree[2]/div/cdk-tree/cdk-tree-node[1]/div[2]/img"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(1) img"
+                ]
+            ],
+            "offsetY": 9.9375,
+            "offsetX": 1.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "body > div li:nth-of-type(1) i"
+                ],
+                [
+                    "xpath///*[@id=\"cdk-overlay-9\"]/div/ul/li[1]/a/div[1]/span/i"
+                ],
+                [
+                    "pierce/body > div li:nth-of-type(1) i"
+                ]
+            ],
+            "offsetY": 11,
+            "offsetX": 14
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.ag-row-last > div.ag-column-first > div"
+                ],
+                [
+                    "xpath///*[@id=\"connectorGrid\"]/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div[4]/div[1]/div"
+                ],
+                [
+                    "pierce/div.ag-row-last > div.ag-column-first > div"
+                ]
+            ],
+            "offsetY": 7,
+            "offsetX": 156
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(9) > i"
+                ],
+                [
+                    "xpath///*[@id=\"folderSection\"]/res-generic-tree/div/cdk-tree/cdk-tree-node[9]/i"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(9) > i"
+                ]
+            ],
+            "offsetY": 3.5,
+            "offsetX": 4
+        },
+        {
+            "type": "change",
+            "value": "testload-20260510-001",
+            "selectors": [
+                [
+                    "aria/Name: *"
+                ],
+                [
+                    "#name"
+                ],
+                [
+                    "xpath///*[@id=\"name\"]"
+                ],
+                [
+                    "pierce/#name"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Tab"
+        },
+        {
+            "type": "keyUp",
+            "key": "Tab",
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Create Data Set"
+                ],
+                [
+                    "div.modal-button-bar > button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-data-set-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/div.modal-button-bar > button.primary-button"
+                ],
+                [
+                    "text/Create Data Set"
+                ]
+            ],
+            "offsetY": 7,
+            "offsetX": 51.03125
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "res-main-content > div > div > res-resizer.collapsed"
+                ],
+                [
+                    "xpath//html/body/res-root/res-main-content/div/div/res-resizer[2]"
+                ],
+                [
+                    "pierce/res-main-content > div > div > res-resizer.collapsed"
+                ]
+            ],
+            "offsetY": 755,
+            "offsetX": 600
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "p"
+                ],
+                [
+                    "xpath///*[@id=\"topContent\"]/res-search/div/div[2]/res-generic-quill/quill-editor/div/div[1]/p"
+                ],
+                [
+                    "pierce/p"
+                ]
+            ],
+            "offsetY": 4,
+            "offsetX": 204
+        },
+        {
+            "type": "change",
+            "value": "QU",
+            "selectors": [
+                [
+                    "div.ql-editor"
+                ],
+                [
+                    "xpath///*[@id=\"topContent\"]/res-search/div/div[2]/res-generic-quill/quill-editor/div/div[1]"
+                ],
+                [
+                    "pierce/div.ql-editor"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "CapsLock"
+        },
+        {
+            "type": "keyUp",
+            "key": "CapsLock",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "Q",
+            "selectors": [
+                [
+                    "div.ql-editor"
+                ],
+                [
+                    "xpath///*[@id=\"topContent\"]/res-search/div/div[2]/res-generic-quill/quill-editor/div/div[1]"
+                ],
+                [
+                    "pierce/div.ql-editor"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Backspace"
+        },
+        {
+            "type": "keyUp",
+            "key": "Backspace",
+            "target": "main"
+        },
+        {
+            "type": "change",
+            "value": "quiet period",
+            "selectors": [
+                [
+                    "div.ql-editor"
+                ],
+                [
+                    "xpath///*[@id=\"topContent\"]/res-search/div/div[2]/res-generic-quill/quill-editor/div/div[1]"
+                ],
+                [
+                    "pierce/div.ql-editor"
+                ]
+            ],
+            "target": "main"
+        },
+        {
+            "type": "keyDown",
+            "target": "main",
+            "key": "Enter"
+        },
+        {
+            "type": "keyUp",
+            "key": "Enter",
+            "target": "main"
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.home > i"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[2]/i"
+                ],
+                [
+                    "pierce/div.home > i"
+                ]
+            ],
+            "offsetY": 8.4375,
+            "offsetX": 23
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.ag-column-first > div > span"
+                ],
+                [
+                    "xpath//html/body/res-root/res-project-list/div/div[2]/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[1]/div/span"
+                ],
+                [
+                    "pierce/div.ag-column-first > div > span"
+                ]
+            ],
+            "offsetY": 20,
+            "offsetX": 167
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.ag-row-hover > div.ag-column-last span"
+                ],
+                [
+                    "xpath//html/body/res-root/res-project-list/div/div[2]/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div[14]/div[10]/div/span"
+                ],
+                [
+                    "pierce/div.ag-row-hover > div.ag-column-last span"
+                ]
+            ],
+            "offsetY": 17,
+            "offsetX": 17
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(4) div.optionContainer"
+                ],
+                [
+                    "xpath///*[@id=\"cdk-overlay-10\"]/div/ul/li[4]/a/div[2]"
+                ],
+                [
+                    "pierce/li:nth-of-type(4) div.optionContainer"
+                ]
+            ],
+            "offsetY": 13,
+            "offsetX": 2
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Request Project Deletion"
+                ],
+                [
+                    "button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-delete-entity/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/button.primary-button"
+                ],
+                [
+                    "text/Request Project"
+                ]
+            ],
+            "offsetY": 11.3125,
+            "offsetX": 65.59375
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(2) span"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[2]/div/span"
+                ],
+                [
+                    "pierce/li:nth-of-type(2) span"
+                ],
+                [
+                    "text/Settings"
+                ]
+            ],
+            "offsetY": 14,
+            "offsetX": 0.609375
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "div.admin-label"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[2]/ul/li/div[2]"
+                ],
+                [
+                    "pierce/div.admin-label"
+                ],
+                [
+                    "text/System Settings"
+                ]
+            ],
+            "offsetY": 5,
+            "offsetX": 6.90625
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "cdk-tree-node:nth-of-type(15) > span > span"
+                ],
+                [
+                    "xpath///*[@id=\"leftSettingContent\"]/res-generic-tree/div/cdk-tree/cdk-tree-node[15]/span/span"
+                ],
+                [
+                    "pierce/cdk-tree-node:nth-of-type(15) > span > span"
+                ],
+                [
+                    "text/Delete Pending"
+                ]
+            ],
+            "offsetY": 5,
+            "offsetX": 36
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container div.ag-center-cols-viewport > div div:nth-of-type(2) > div"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-delete-pending-projects/div/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[2]/div"
+                ],
+                [
+                    "pierce/modal-container div.ag-center-cols-viewport > div div:nth-of-type(2) > div"
+                ]
+            ],
+            "offsetY": 9,
+            "offsetX": 5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "modal-container div.ag-body div.ag-column-last span"
+                ],
+                [
+                    "xpath///*[@id=\"navigationSettingContent\"]/res-delete-pending-projects/div/res-generic-grid/div/ag-grid-angular/div/div[1]/div[2]/div[3]/div[1]/div[2]/div/div/div[7]/div/span"
+                ],
+                [
+                    "pierce/modal-container div.ag-body div.ag-column-last span"
+                ]
+            ],
+            "offsetY": 23,
+            "offsetX": 15
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(1) div.optionContainer > div"
+                ],
+                [
+                    "xpath///*[@id=\"cdk-overlay-11\"]/div/ul/li[1]/a/div[2]/div"
+                ],
+                [
+                    "pierce/li:nth-of-type(1) div.optionContainer > div"
+                ],
+                [
+                    "text/Approve Project"
+                ]
+            ],
+            "offsetY": 12,
+            "offsetX": 84
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Approve Deletion"
+                ],
+                [
+                    "button.primary-button"
+                ],
+                [
+                    "xpath//html/body/modal-container[2]/div[2]/div/res-message-modal/res-base-modal/div/div[3]/button[2]"
+                ],
+                [
+                    "pierce/button.primary-button"
+                ],
+                [
+                    "text/Approve Deletion"
+                ]
+            ],
+            "offsetY": 17.3125,
+            "offsetX": 19.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Close",
+                    "aria/[role=\"generic\"]"
+                ],
+                [
+                    "button.close-button > i"
+                ],
+                [
+                    "xpath//html/body/modal-container/div[2]/div/res-settings/res-base-modal/div/div[1]/button[2]/i"
+                ],
+                [
+                    "pierce/button.close-button > i"
+                ]
+            ],
+            "offsetY": 4,
+            "offsetX": 9.5
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li:nth-of-type(3) span"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[3]/div/span"
+                ],
+                [
+                    "pierce/li:nth-of-type(3) span"
+                ]
+            ],
+            "offsetY": 8,
+            "offsetX": 29.328125
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "li.open li:nth-of-type(1) > div.admin-label"
+                ],
+                [
+                    "xpath///*[@id=\"topBar\"]/div[3]/li[3]/ul/li[1]/div[2]"
+                ],
+                [
+                    "pierce/li.open li:nth-of-type(1) > div.admin-label"
+                ]
+            ],
+            "offsetY": 12,
+            "offsetX": 26.1875
+        }
+    ]
+}

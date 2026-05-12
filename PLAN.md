@@ -8,21 +8,21 @@ Includes preflight checks, background log monitoring, job polling, and structure
 
 ## Task List
 
-| # | Task | Blocked by |
-|---|------|-----------|
-| 7  | Create Python virtualenv and install all dependencies | — |
-| 8  | Confirm and fix target host in .env | — |
-| 1  | Resolve job monitoring endpoint | — |
-| 8  | *(see above — unblocks most everything)* | |
-| 10 | Fix locustfile_indexing.py — endpoints, auth flow, template attrs | 7, 8 |
-| 9  | Determine representation_state enum values | 7, 8, 10 |
-| 2  | Phase 1: Add CLI config to config.py | 7, 8 |
-| 3  | Phase 2: Build preflight checks (helpers/preflight.py) | 7, 8 |
-| 12 | Add orphan project cleanup to preflight and post-run | 3 |
-| 4  | Phase 3: Build log watcher + job poller (helpers/monitor.py) | 1, 9 |
-| 11 | Create setup.cfg with dr-load entry point | — |
-| 5  | Phase 4: Build CLI entry point (cli.py) | 2, 3, 4, 11 |
-| 6  | Update .env.example and README | 5 |
+| # | Task | Status |
+|---|------|--------|
+| 7  | Create Python virtualenv and install all dependencies                 | ✅ done (v0.02) |
+| 8  | Confirm and fix target host in .env                                    | ✅ done — `192.168.58.128:8443` |
+| 1  | Resolve job monitoring endpoint                                        | ✅ done (v0.03) — `taskManager/getTasks([taskHandle])`, `dateCompleted` flag; `taskHandle` returned from `corpusManager/createRepresentation` |
+| 10 | Fix locustfile_indexing.py — endpoints, auth flow, template attrs      | ✅ done (v0.03) — see CHANGELOG; rewrite based on May 11 capture |
+| 9  | Determine representation_state enum values                             | ✅ done — 0=NONE, 1=COMPLETE (encoded in `helpers/monitor.py:8-11`). Obsoleted for per-workflow polling by v0.03's REST approach. |
+| 2  | Phase 1: Add CLI config to config.py                                   | ✅ done (v0.02) |
+| 3  | Phase 2: Build preflight checks (helpers/preflight.py)                 | ✅ done (v0.02) |
+| 12 | Add orphan project cleanup to preflight and post-run                   | ✅ done (v0.02) — `run_orphan_sweep` invoked from `dr-load indexing` |
+| 4  | Phase 3: Build log watcher + job poller (helpers/monitor.py)           | ✅ done (v0.02) — `LogWatcher` + SQL `JobPoller` |
+| 11 | Create setup.cfg with dr-load entry point                              | ✅ done (v0.02) |
+| 5  | Phase 4: Build CLI entry point (cli.py)                                | ✅ done (v0.02) |
+| 6  | Update .env.example and README                                         | ✅ done (v0.03) — added `DR_INDEX_POLL_INTERVAL`/`DR_INDEX_POLL_TIMEOUT`; documented auto-resolution in README; preserved pytest-only handles |
+| 13 | Smoke-test `dr-load indexing -u 1 -d 90s` end-to-end against live box  | ✅ done (2026-05-11) — 3 workflows, 50 reqs, 0 failures; report at `/tmp/dr_smoke.csv` |
 
 ---
 
