@@ -54,6 +54,11 @@ SYS_VIEW_MAP = {
     "sys-virus":      "sys-virus-view",
     "sys-users":      "sys-users-view",
     "sys-groups":     "sys-groups-view",
+    # v0.08 Realm Settings sub-tree
+    "sys-mail":       "sys-mail-view",
+    "sys-splash":     "sys-splash-view",
+    "sys-pwpolicy":   "sys-pwpolicy-view",
+    "sys-inactivity": "sys-inactivity-view",
 }
 ORG_VIEW_MAP = {
     "org-users":       "org-users-view",
@@ -775,6 +780,23 @@ class DashboardScreen(Screen):
                                 yield Button("Delete", id="sys-group-delete", variant="error")
                             yield DataTable(id="sys-groups-table",
                                             zebra_stripes=True, cursor_type="row")
+                        # ---- Realm Settings sub-tree (v0.08) ----
+                        with Vertical(id="sys-mail-view"):
+                            yield Static("Mail Server", classes="panel-title")
+                            yield Static("Loading…", id="sys-mail-body",
+                                         classes="detail-body")
+                        with Vertical(id="sys-splash-view"):
+                            yield Static("Splash Message", classes="panel-title")
+                            yield Static("Loading…", id="sys-splash-body",
+                                         classes="detail-body")
+                        with Vertical(id="sys-pwpolicy-view"):
+                            yield Static("Password Policy", classes="panel-title")
+                            yield Static("Loading…", id="sys-pwpolicy-body",
+                                         classes="detail-body")
+                        with Vertical(id="sys-inactivity-view"):
+                            yield Static("Inactivity Timeout", classes="panel-title")
+                            yield Static("Loading…", id="sys-inactivity-body",
+                                         classes="detail-body")
 
             # ----------------------- Organizations (both roles) ------------
             with TabPane("Organizations", id="tab-orgs"):
@@ -922,6 +944,13 @@ class DashboardScreen(Screen):
         t.root.add_leaf("Virus Detection", data={"kind": "sys-virus"})
         t.root.add_leaf("System Users", data={"kind": "sys-users"})
         t.root.add_leaf("System Groups", data={"kind": "sys-groups"})
+        # v0.08 Realm Settings sub-tree.
+        realm = t.root.add("Realm Settings",
+                            data={"kind": "sys-realm-cat"}, expand=False)
+        realm.add_leaf("Mail Server",        data={"kind": "sys-mail"})
+        realm.add_leaf("Splash Message",     data={"kind": "sys-splash"})
+        realm.add_leaf("Password Policy",    data={"kind": "sys-pwpolicy"})
+        realm.add_leaf("Inactivity Timeout", data={"kind": "sys-inactivity"})
 
     def _load_orgs_tree(self) -> None:
         orgs: list[drdata.OrgInfo] = []
@@ -1026,6 +1055,20 @@ class DashboardScreen(Screen):
             elif kind in ("sys-users", "sys-groups"):
                 users, groups = drdata.list_system_users_and_groups(sys_c)
                 self._cb(worker, self._apply_sys_users_groups, users, groups)
+
+            # ----- realm settings (v0.08) -----
+            elif kind == "sys-mail":
+                cfg = drdata.get_mail_server_config(sys_c)
+                self._cb(worker, self._apply_mail, cfg)
+            elif kind == "sys-splash":
+                sp = drdata.get_splash_message(sys_c)
+                self._cb(worker, self._apply_splash, sp)
+            elif kind == "sys-pwpolicy":
+                pp = drdata.get_password_policy(sys_c)
+                self._cb(worker, self._apply_pwpolicy, pp)
+            elif kind == "sys-inactivity":
+                it = drdata.get_inactivity_timeout(sys_c)
+                self._cb(worker, self._apply_inactivity, it)
 
             # ----- org drill-down -----
             elif kind in ("org-users", "org-admins", "org-groups"):
@@ -1137,6 +1180,56 @@ class DashboardScreen(Screen):
             f"[b]Version:[/] {v.version or '—'}",
         ]))
         self._virus_last = v
+        self._update_status_bar()
+
+    # ---- Realm Settings appliers (v0.08) ----
+    def _apply_mail(self, cfg: "drdata.MailServerConfig") -> None:
+        body = self.query_one("#sys-mail-body", Static)
+        if not cfg.configured:
+            body.update("[dim]No mail server configured.[/]")
+        else:
+            body.update("\n".join([
+                f"[b]SMTP host:[/] {cfg.smtp_host or '—'}",
+                f"[b]SMTP port:[/] {cfg.smtp_port}",
+                f"[b]SMTP auth:[/] {_yn(cfg.smtp_auth)}",
+            ]))
+        self._update_status_bar()
+
+    def _apply_splash(self, sp: "drdata.SplashMessage") -> None:
+        body = self.query_one("#sys-splash-body", Static)
+        body.update("\n".join([
+            f"[b]Enabled:[/] {_yn(sp.enabled)}",
+            f"[b]Message:[/]",
+            f"  {sp.message or '[dim]—[/]'}",
+        ]))
+        self._update_status_bar()
+
+    def _apply_pwpolicy(self, pp: "drdata.PasswordPolicy") -> None:
+        body = self.query_one("#sys-pwpolicy-body", Static)
+        body.update("\n".join([
+            f"[b]Enforce strong passwords:[/] {_yn(pp.enforce_strong)}",
+            f"[b]Minimum length:[/] {pp.min_length}",
+            f"[b]Minimum uppercase:[/] {pp.min_uppercase}",
+            f"[b]Minimum lowercase:[/] {pp.min_lowercase}",
+            f"[b]Minimum numbers:[/] {pp.min_numbers}",
+            f"[b]Minimum symbols:[/] {pp.min_symbols}",
+            f"[b]Password expiration:[/] {pp.expiration_days} days",
+        ]))
+        self._update_status_bar()
+
+    def _apply_inactivity(self, it: "drdata.InactivityTimeout") -> None:
+        body = self.query_one("#sys-inactivity-body", Static)
+        # Render seconds + a friendlier h:m:s for context.
+        secs = it.seconds
+        h, rem = divmod(secs, 3600)
+        m, s = divmod(rem, 60)
+        pretty = f"{h}h:{m}m:{s}s" if secs else "—"
+        body.update("\n".join([
+            f"[b]Session inactivity timeout:[/] {secs} seconds  [dim]({pretty})[/]",
+            "",
+            "[dim]Idle sessions are automatically logged out after this[/]",
+            "[dim]duration. Set to 0 to disable.[/]",
+        ]))
         self._update_status_bar()
 
     def _apply_sys_users_groups(

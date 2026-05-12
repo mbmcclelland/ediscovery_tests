@@ -82,6 +82,14 @@ EXPECTED_DASHBOARD_WIDGETS = [
     "#dash-flt-info", "#dash-flt-warn", "#dash-flt-error",
 ]
 
+# Realm Settings sub-tree (v0.08 read-only views).
+EXPECTED_REALM_VIEWS = [
+    "#sys-mail-view", "#sys-mail-body",
+    "#sys-splash-view", "#sys-splash-body",
+    "#sys-pwpolicy-view", "#sys-pwpolicy-body",
+    "#sys-inactivity-view", "#sys-inactivity-body",
+]
+
 
 async def _walk_dashboard() -> None:
     app = _HarnessApp()
@@ -115,6 +123,11 @@ async def _walk_dashboard() -> None:
         for wid in EXPECTED_DASHBOARD_WIDGETS:
             w = screen.query_one(wid)
             assert w is not None, f"dashboard widget {wid} missing"
+
+        # Realm Settings sub-tree views present.
+        for wid in EXPECTED_REALM_VIEWS:
+            w = screen.query_one(wid)
+            assert w is not None, f"realm-settings widget {wid} missing"
 
         # Press a row-bound action with no selected row — must not crash.
         screen.query_one("#sys-user-edit", Button).action_press()

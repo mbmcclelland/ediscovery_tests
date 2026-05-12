@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.08.1 — 2026-05-12
+
+### Added: dr-tui — Realm Settings sub-tree (read-only)
+
+System Settings tree gains a new collapsible **Realm Settings**
+branch with four leaves:
+
+| Leaf | Source endpoint | Renders |
+|---|---|---|
+| Mail Server | `realmManager/getMailServerConfig` | SMTP host / port / auth flag, or "no mail server configured" |
+| Splash Message | `realmManager/getSplashMessage` | Enabled flag + message body |
+| Password Policy | `realmManager/getPasswordPolicy` | All 7 policy knobs (length, casing, digits, symbols, expiry) |
+| Inactivity Timeout | `realmManager/getInactivityTimeout` | Seconds + friendly `h:m:s` |
+
+Read-only this pass — the edit modals (POST `createMailServerConfig` /
+`setSplashMessage` / `setPasswordPolicy` / `setInactivityTimeout`) are
+captured in `endpoints_v0.08.md` and will land in v0.08.2 after
+you've eyeballed the read layouts.
+
+Backed by 4 new dataclasses + 4 fetchers in `dr_tui/data.py`:
+`MailServerConfig`, `SplashMessage`, `PasswordPolicy`,
+`InactivityTimeout` + corresponding `get_*` functions, each verified
+live against the running DR.
+
+Tests: `test_dashboard_layout` extended with 8 new widget-presence
+assertions for the realm-settings views. 6 / 6 pilot tests still
+passing.
+
 ## v0.08 — 2026-05-12
 
 ### Added: docs/endpoints_v0.08.md — System Settings (advanced) capture

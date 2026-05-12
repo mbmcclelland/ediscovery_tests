@@ -50,6 +50,40 @@ class JobRow:
 
 
 @dataclass
+class MailServerConfig:
+    """Realm mail server / SMTP config (`realmManager/getMailServerConfig`)."""
+    configured: bool
+    smtp_host: str
+    smtp_port: int
+    smtp_auth: bool
+
+
+@dataclass
+class SplashMessage:
+    """Login-banner splash message (`realmManager/getSplashMessage`)."""
+    enabled: bool
+    message: str
+
+
+@dataclass
+class PasswordPolicy:
+    """Realm password policy (`realmManager/getPasswordPolicy`)."""
+    enforce_strong: bool
+    min_length: int
+    min_uppercase: int
+    min_lowercase: int
+    min_numbers: int
+    min_symbols: int
+    expiration_days: int
+
+
+@dataclass
+class InactivityTimeout:
+    """Realm session inactivity timeout."""
+    seconds: int
+
+
+@dataclass
 class LicenseField:
     """One row from `realmManager/getLicenseInfo` (`{label, value}`)."""
     label: str
@@ -506,6 +540,64 @@ def get_node_status(client: EDiscoveryClient, *, handle: str) -> NodeStatusDetai
     return NodeStatusDetail(
         node=node, components=components, storage=storage, connectors=connectors,
     )
+
+
+# ----------------------------------------------------------------------------- realm settings (v0.08 reads)
+def get_mail_server_config(client: EDiscoveryClient) -> MailServerConfig:
+    """Read SMTP / mail server config. Empty body → `configured=False`."""
+    resp = client.post(
+        "realmManager/getMailServerConfig",
+        extra_body={"contextHandle": "super_system_customer", "systemScope": True},
+    )
+    cfg = resp.get("mailServerConfig") or {}
+    return MailServerConfig(
+        configured=bool(cfg),
+        smtp_host=str(cfg.get("smtpHostId") or ""),
+        smtp_port=int(cfg.get("smtpHostPort") or 0),
+        smtp_auth=bool(cfg.get("mailSmtpAuth")),
+    )
+
+
+def get_splash_message(client: EDiscoveryClient) -> SplashMessage:
+    """Read login splash message."""
+    resp = client.post(
+        "realmManager/getSplashMessage",
+        extra_body={"contextHandle": "super_system_customer"},
+    )
+    return SplashMessage(
+        enabled=bool(resp.get("enabled")),
+        message=str(resp.get("splashMessage") or ""),
+    )
+
+
+def get_password_policy(client: EDiscoveryClient) -> PasswordPolicy:
+    """Read realm password policy."""
+    resp = client.post(
+        "realmManager/getPasswordPolicy",
+        extra_body={"contextHandle": "super_system_customer", "systemScope": True},
+    )
+    return PasswordPolicy(
+        enforce_strong=bool(resp.get("enforceStrongPasswords")),
+        min_length=int(resp.get("minimumPasswordLength") or 0),
+        min_uppercase=int(resp.get("minimumUppercaseLetters") or 0),
+        min_lowercase=int(resp.get("minimumLowercaseLetters") or 0),
+        min_numbers=int(resp.get("minimumNumbers") or 0),
+        min_symbols=int(resp.get("minimumSymbols") or 0),
+        expiration_days=int(resp.get("passwordExpirationInDays") or 0),
+    )
+
+
+def get_inactivity_timeout(client: EDiscoveryClient) -> InactivityTimeout:
+    """Read realm session inactivity timeout (seconds)."""
+    resp = client.post(
+        "realmManager/getInactivityTimeout",
+        extra_body={"contextHandle": "super_system_customer", "systemScope": True},
+    )
+    # Captured response uses `inactivityTimeoutInSeconds`; falling back to
+    # `inactivityTimeout` for older builds.
+    secs = (resp.get("inactivityTimeoutInSeconds")
+            or resp.get("inactivityTimeout") or 0)
+    return InactivityTimeout(seconds=int(secs))
 
 
 # ----------------------------------------------------------------------------- storage depots (F1, F2)
