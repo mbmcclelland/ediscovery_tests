@@ -222,6 +222,55 @@ async def _walk_help_pane() -> None:
         assert orgs_pane.display is False
 
 
+async def _walk_jobs_monitor() -> None:
+    """F3 opens JobsMonitorModal; filters + search + close work."""
+    app = _HarnessApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        for _ in range(20):
+            if isinstance(app.screen, DashboardScreen):
+                break
+            await pilot.pause()
+        else:
+            raise AssertionError("DashboardScreen never mounted")
+
+        # F3 → JobsMonitorModal pops.
+        await pilot.press("f3")
+        await pilot.pause()
+        from dr_tui.app import JobsMonitorModal
+        assert isinstance(app.screen, JobsMonitorModal), \
+            f"F3 should open JobsMonitorModal, got {type(app.screen).__name__}"
+
+        # Wait for the initial fetch worker to finish so the empty-state
+        # is fully populated and the test isn't racing the worker.
+        for _ in range(20):
+            await pilot.pause()
+
+        # Filter buttons exist + clickable.
+        from textual.widgets import Button as _B
+        for bid in ("jobs-flt-all", "jobs-flt-running",
+                    "jobs-flt-complete", "jobs-flt-deleted"):
+            b = app.screen.query_one(f"#{bid}", _B)
+            assert b is not None, f"button {bid} missing"
+            b.action_press()
+            await pilot.pause()
+
+        # Search input exists.
+        from textual.widgets import Input as _I
+        s = app.screen.query_one("#jobs-search", _I)
+        s.value = "anything"
+        await pilot.pause()
+
+        # Esc closes.
+        await pilot.press("escape")
+        await pilot.pause()
+        for _ in range(10):
+            if isinstance(app.screen, DashboardScreen):
+                break
+            await pilot.pause()
+        assert isinstance(app.screen, DashboardScreen)
+
+
 async def _walk_enter_saves_depot() -> None:
     """Enter inside a DepotFormModal Input triggers save."""
     from dr_tui.app import DepotFormModal
@@ -273,6 +322,11 @@ def test_enter_saves_form_modal() -> None:
 def test_help_pane_toggle() -> None:
     """pytest entry — F2 toggles the docs side-pane on/off."""
     asyncio.run(_walk_help_pane())
+
+
+def test_jobs_monitor_modal() -> None:
+    """pytest entry — F3 pops JobsMonitorModal; filters + search + Esc work."""
+    asyncio.run(_walk_jobs_monitor())
 
 
 if __name__ == "__main__":

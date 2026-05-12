@@ -1,6 +1,6 @@
 # eDiscovery API Test Suite
 
-**Version 0.09**
+**Version 0.10**
 
 Automated API tests, load tests, a Textual TUI for live monitoring, and a
 reinstall toolchain for the Digital Reef eDiscovery REST API. Includes:
@@ -183,6 +183,7 @@ in-app reference card.
 |---|---|
 | **F1** | Help / keyboard reference |
 | **F2** | Toggle DR documentation side-pane (extracted from Digital Reef PDFs) |
+| **F3** | Realm-wide Jobs Monitor modal (current + completed + deleted) |
 | **F4** | Edit the selected row |
 | **F5** | Refresh current view |
 | **F6** | Reset Password (on Users) / Update Now (on Virus) |

@@ -1,5 +1,57 @@
 # Changelog
 
+## v0.10 — 2026-05-12
+
+### Added: dr-tui — F3 Jobs Monitor modal
+
+A new realm-wide jobs monitor — press **F3** from anywhere to pop a
+90% × 90% modal showing every job across every project + org, plus
+historically-deleted projects, with live detail-pane drill-down.
+
+Layout:
+
+| Section | Content |
+|---|---|
+| Title bar | "Jobs Monitor" |
+| Summary | `running=N · complete=N · deleted=N · showing=N · cores=N` (live counts) |
+| Filter row | 4 toggle buttons: All / Running / Complete / Deleted + search input |
+| Master table | Org · Project · Job · State · Started · Completed · Duration · User |
+| Detail pane | Full per-job breakdown — every `currentStatus` section + every attribute, rendered as a label/value tree |
+| Hint footer | `[r] refresh · [a/u/c/d] filter · [/] search · [Esc] close` |
+
+Auto-refreshes every 5 s while open. Detail pane updates on row-cursor
+move. Search is incremental (matches against org + project + job +
+user, case-insensitive).
+
+**Data sources:**
+
+| Endpoint | Provides |
+|---|---|
+| `realmManager/listJobs` | Realm-wide active jobs count + total CPU cores |
+| `realmManager/listProjects` (DRSysAdmin) | All realm projects — fans out to per-project `projectManager/listTasks` for full task history |
+| `orgManager/listUserProjectsForAllOrgs` (org admin) | Org-scoped project list — same fan-out |
+| `realmManager/listDeletedProjects` | Historical project deletions (separate "Deleted" filter) |
+
+Each `JobRow` now carries a `raw: dict` snapshot of the full
+`listTasks` response, so the detail pane can render the complete
+status payload without a second round-trip. `format_job_detail()`
+walks every section + attribute and formats it as a Rich-markup block.
+
+The DRSysAdmin project-list path switched from
+`listSystemUserProjectsByUserName` to `realmManager/listProjects` for
+the Jobs Monitor — the user-scoped endpoint missed projects on a
+fresh install (it filters to projects the user is *bound to*, which
+can be empty for a freshly-installed realm).
+
+`DeletedProject` is a new dataclass capturing the
+`listDeletedProjects` shape (`project_id`, `project_name`,
+`description`, `org_name`, `user_name`, `date_created`,
+`date_deleted`).
+
+**Tests:** `test_jobs_monitor_modal` verifies F3 opens the modal,
+filter buttons click cleanly, the search input accepts text, and Esc
+closes back to the DashboardScreen. 8 / 8 pilot tests passing.
+
 ## v0.09 — 2026-05-12
 
 ### Added: dr-tui — F2 documentation side-pane (DR PDFs as built-in help)

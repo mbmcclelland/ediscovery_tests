@@ -583,6 +583,272 @@ class GroupFormModal(ModalScreen[Optional[dict]]):
         })
 
 
+class JobsMonitorModal(ModalScreen[None]):
+    """F3 — full-screen realm-wide jobs monitor.
+
+    Three panels stacked vertically:
+      - Header strip: counts + filter row (state radio + search input)
+      - Master DataTable: every running + completed job, all orgs
+      - Detail Static: full currentStatus + attributes for the selected row
+
+    Refresh on `r`, auto-refresh every 5 s while open. Esc closes.
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Close"),
+        Binding("r",      "refresh", "Refresh"),
+        Binding("a",      "filter_all",       "All",       show=False),
+        Binding("u",      "filter_running",   "Running",   show=False),
+        Binding("c",      "filter_complete",  "Complete",  show=False),
+        Binding("d",      "filter_deleted",   "Deleted",   show=False),
+        Binding("slash",  "focus_search",     "Search",    show=False),
+    ]
+
+    # Filter state — "all" / "running" / "complete" / "deleted".
+    _state_filter: str
+    # Last fetched data.
+    _running: list           # list[JobRow]
+    _completed: list         # list[JobRow]
+    _deleted: list           # list[DeletedProject]
+    _total_cores: int
+    # Snapshot of currently-displayed rows for cursor → detail.
+    _displayed: list         # list[JobRow | DeletedProject]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._state_filter = "all"
+        self._running = []
+        self._completed = []
+        self._deleted = []
+        self._total_cores = 0
+        self._displayed = []
+        self._search = ""
+
+    def compose(self) -> ComposeResult:
+        with Container(id="jobs-card"):
+            yield Static("Jobs Monitor", id="jobs-title")
+            yield Static(id="jobs-summary")
+            with Horizontal(id="jobs-filter-row"):
+                yield Button("All",       id="jobs-flt-all",      variant="primary")
+                yield Button("Running",   id="jobs-flt-running",  variant="success")
+                yield Button("Complete",  id="jobs-flt-complete", variant="default")
+                yield Button("Deleted",   id="jobs-flt-deleted",  variant="warning")
+                yield Input(placeholder="search (org / project / job)…",
+                            id="jobs-search")
+            with Horizontal(id="jobs-body"):
+                yield DataTable(id="jobs-table", zebra_stripes=True, cursor_type="row")
+                yield Static("[dim]Select a row to see full job detail.[/]",
+                             id="jobs-detail", classes="detail-body")
+            yield Static(
+                "[dim][r] refresh · [a/u/c/d] filter · [/] search · [Esc] close[/]",
+                id="jobs-hint",
+            )
+
+    def on_mount(self) -> None:
+        t = self.query_one("#jobs-table", DataTable)
+        t.add_columns("Org", "Project", "Job", "State", "Started", "Completed", "Duration", "User")
+        # Initial fetch + 5 s auto-refresh while open.
+        self.action_refresh()
+        self.set_interval(5.0, self.action_refresh)
+
+    # ---- actions ----
+    def action_dismiss(self, _result=None) -> None:
+        self.dismiss(None)
+
+    def action_refresh(self) -> None:
+        self.run_worker(self._fetch_blocking, thread=True,
+                        exclusive=True, group="jobs-mon-fetch")
+
+    def action_filter_all(self) -> None:      self._set_filter("all")
+    def action_filter_running(self) -> None:  self._set_filter("running")
+    def action_filter_complete(self) -> None: self._set_filter("complete")
+    def action_filter_deleted(self) -> None:  self._set_filter("deleted")
+
+    def action_focus_search(self) -> None:
+        try:
+            self.query_one("#jobs-search", Input).focus()
+        except Exception:
+            pass
+
+    def _set_filter(self, mode: str) -> None:
+        self._state_filter = mode
+        bmap = {"all": "jobs-flt-all", "running": "jobs-flt-running",
+                "complete": "jobs-flt-complete", "deleted": "jobs-flt-deleted"}
+        variants = {"all": "primary", "running": "success",
+                    "complete": "primary", "deleted": "warning"}
+        for m, bid in bmap.items():
+            try:
+                b = self.query_one(f"#{bid}", Button)
+                b.variant = variants[m] if m == mode else "default"
+            except Exception:
+                pass
+        self._render_rows()
+
+    # ---- event handlers ----
+    def on_button_pressed(self, evt: Button.Pressed) -> None:
+        bid = evt.button.id or ""
+        if bid == "jobs-flt-all":      self._set_filter("all")
+        elif bid == "jobs-flt-running": self._set_filter("running")
+        elif bid == "jobs-flt-complete": self._set_filter("complete")
+        elif bid == "jobs-flt-deleted": self._set_filter("deleted")
+
+    def on_input_changed(self, evt: Input.Changed) -> None:
+        if evt.input.id == "jobs-search":
+            self._search = evt.value.lower()
+            self._render_rows()
+
+    def on_data_table_row_highlighted(self, evt) -> None:
+        # Update detail pane on cursor move.
+        try:
+            idx = evt.cursor_row
+        except Exception:
+            return
+        self._update_detail(idx)
+
+    # ---- worker (fetches data) ----
+    def _fetch_blocking(self) -> None:
+        client = self._client()
+        if client is None:
+            return
+        # Realm jobs (running) + per-project listTasks (history).
+        try:
+            _, total_cores = drdata.list_realm_jobs(client)
+        except Exception:
+            total_cores = 0
+        try:
+            projects = self._projects(client)
+            running, completed = drdata.collect_jobs(client, projects)
+        except Exception:
+            running, completed = [], []
+        try:
+            deleted = drdata.list_deleted_projects(client)
+        except Exception:
+            deleted = []
+        self.app.call_from_thread(
+            self._apply, running, completed, deleted, total_cores,
+        )
+
+    def _client(self):
+        app = self.app
+        return app.sys_client or app.org_client
+
+    def _projects(self, client) -> list:
+        """Project list used to fan out per-project listTasks.
+
+        For DRSysAdmin we use `realmManager/listProjects` directly (it
+        returns the full realm view), then shape it like
+        `list_projects_sys` so `collect_jobs` can consume it. For org
+        users we fall back to the existing `list_projects_org` which
+        already gives the org-scoped view.
+        """
+        from dr_tui.app import ROLE_SYS as _RS
+        if self.app.role == _RS and self.app.sys_client is not None:
+            try:
+                resp = client.post(
+                    "realmManager/listProjects",
+                    extra_body={
+                        "contextHandle": "super_system_customer",
+                        "systemScope": True,
+                        "startIndex": 0, "count": 500, "filters": [],
+                    },
+                )
+            except Exception:
+                resp = {}
+            return [(p.get("orgName") or "?", p)
+                    for p in (resp.get("projects") or [])]
+        return drdata.list_projects_org(client)
+
+    def _apply(
+        self, running, completed, deleted, total_cores,
+    ) -> None:
+        self._running = running
+        self._completed = completed
+        self._deleted = deleted
+        self._total_cores = total_cores
+        self._render_rows()
+
+    def _render_rows(self) -> None:
+        t = self.query_one("#jobs-table", DataTable)
+        t.clear()
+
+        # Build the candidate set per filter mode.
+        rows_view: list = []
+        if self._state_filter == "deleted":
+            for d in self._deleted:
+                rows_view.append(("deleted", d))
+        else:
+            if self._state_filter in ("all", "running"):
+                rows_view.extend(("running", r) for r in self._running)
+            if self._state_filter in ("all", "complete"):
+                rows_view.extend(("complete", r) for r in self._completed)
+
+        # Search filter.
+        q = (self._search or "").strip()
+        def _match(kind: str, row) -> bool:
+            if not q:
+                return True
+            if kind == "deleted":
+                hay = f"{row.org_name} {row.project_name} {row.description}".lower()
+            else:
+                hay = f"{row.org} {row.project} {row.job} {row.user}".lower()
+            return q in hay
+
+        rows_view = [(k, r) for (k, r) in rows_view if _match(k, r)]
+
+        # Render rows.
+        self._displayed = []
+        for kind, row in rows_view:
+            self._displayed.append(row)
+            if kind == "deleted":
+                t.add_row(
+                    row.org_name, row.project_name,
+                    "[dim](project deleted)[/]",
+                    "DELETED",
+                    row.date_created or "—",
+                    row.date_deleted or "—",
+                    "—",
+                    row.user_name,
+                )
+            else:
+                state_disp = (f"[green]{row.state}[/]" if row.state == "RUNNING"
+                              else f"[dim]{row.state}[/]")
+                t.add_row(
+                    row.org or "—", row.project, row.job, state_disp,
+                    row.started or "—", row.completed or "—",
+                    row.duration or "—", row.user or "—",
+                )
+
+        # Summary.
+        self.query_one("#jobs-summary", Static).update(
+            f"running=[green]{len(self._running)}[/]  "
+            f"complete=[dim]{len(self._completed)}[/]  "
+            f"deleted=[yellow]{len(self._deleted)}[/]  "
+            f"showing=[b]{len(rows_view)}[/]  "
+            f"cores=[cyan]{self._total_cores}[/]"
+        )
+        # Refresh detail to track first row.
+        self._update_detail(0)
+
+    def _update_detail(self, idx: int) -> None:
+        body = self.query_one("#jobs-detail", Static)
+        if idx is None or idx < 0 or idx >= len(self._displayed):
+            body.update("[dim]Select a row to see full job detail.[/]")
+            return
+        item = self._displayed[idx]
+        if isinstance(item, drdata.DeletedProject):
+            body.update("\n".join([
+                f"[b]Deleted Project[/]",
+                f"[b]Project:[/] {item.project_name}  (id {item.project_id})",
+                f"[b]Org:[/] {item.org_name}",
+                f"[b]Description:[/] {item.description or '—'}",
+                f"[b]Created:[/] {item.date_created or '—'}",
+                f"[b]Deleted:[/] {item.date_deleted or '—'}  "
+                f"[b]By:[/] {item.user_name or '—'}",
+            ]))
+        else:
+            body.update(drdata.format_job_detail(item))
+
+
 class HelpModal(ModalScreen[None]):
     """F1 — keyboard reference. Dismiss with any key."""
 
@@ -594,6 +860,8 @@ class HelpModal(ModalScreen[None]):
         "[b]dr-tui — Keyboard reference[/]\n\n"
         "[b cyan]Global[/]\n"
         "  F1            this help screen\n"
+        "  F2            toggle DR documentation side-pane\n"
+        "  F3            realm-wide Jobs Monitor modal\n"
         "  F5            refresh current view\n"
         "  F10  /  q     quit\n"
         "  Tab           cycle focus (tree ↔ table)\n"
@@ -638,6 +906,7 @@ class DashboardScreen(Screen):
     BINDINGS = [
         Binding("f1",  "show_help",   "Help"),
         Binding("f2",  "toggle_doc",  "Docs"),
+        Binding("f3",  "jobs_monitor","Jobs"),
         Binding("f4",  "ctx_edit",    "Edit"),
         Binding("f5",  "refresh_now", "Refresh"),
         Binding("f6",  "ctx_reset",   "Reset PW"),
@@ -2082,6 +2351,10 @@ class DashboardScreen(Screen):
     def action_show_help(self) -> None:
         """F1 — pop the help modal showing keybindings."""
         self.app.push_screen(HelpModal())
+
+    def action_jobs_monitor(self) -> None:
+        """F3 — pop the realm-wide Jobs Monitor modal."""
+        self.app.push_screen(JobsMonitorModal())
 
     # ---------------------------------------------------------- F2: docs side-pane
     def action_toggle_doc(self) -> None:

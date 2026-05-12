@@ -47,6 +47,23 @@ class JobRow:
     started: str        # human-readable
     completed: str      # human-readable or ""
     duration: str       # "0h:1m:42s" style from server, or ""
+    org: str = ""           # extracted from the project's listing context
+    user: str = ""          # who requested it
+    # Snapshot of the full task payload — used by the Jobs Monitor modal
+    # to render the per-job detail pane (currentStatus sections, attributes).
+    raw: dict = None
+
+
+@dataclass
+class DeletedProject:
+    """Historical project from `realmManager/listDeletedProjects`."""
+    project_id: int
+    project_name: str
+    description: str
+    org_name: str
+    user_name: str
+    date_created: str
+    date_deleted: str
 
 
 @dataclass
@@ -359,7 +376,13 @@ def _status_field(task: dict, section: str, field: str) -> str:
     return ""
 
 
-def list_tasks_for_project(client: EDiscoveryClient, project_handle: str, project_name: str) -> list[JobRow]:
+def list_tasks_for_project(
+    client: EDiscoveryClient,
+    project_handle: str,
+    project_name: str,
+    *,
+    org_name: str = "",
+) -> list[JobRow]:
     """Pull the task list for one project; split into running/complete by dateCompleted."""
     try:
         resp = client.post(
@@ -380,12 +403,19 @@ def list_tasks_for_project(client: EDiscoveryClient, project_handle: str, projec
         # currentStatus → "Execution Summary" → "Job Description" / "Execution time"
         job_desc = _status_field(t, "Execution Summary", "Job Description") or "Task"
         exec_time = _status_field(t, "Execution Summary", "Execution time")
-        started = _status_field(t, "General Information", "Date Created") or ""
+        started = (_status_field(t, "General Information", "Date Created")
+                   or _status_field(t, "General Information", "Started")
+                   or "")
+        user = (_status_field(t, "General Information", "User")
+                or _status_field(t, "General Information", "User Name")
+                or "")
         completed = ""
         if date_completed:
             from datetime import datetime, timezone
             try:
-                completed = datetime.fromtimestamp(int(date_completed)/1000, tz=timezone.utc).strftime("%H:%M:%S")
+                completed = datetime.fromtimestamp(
+                    int(date_completed) / 1000, tz=timezone.utc,
+                ).strftime("%H:%M:%S")
             except Exception:
                 completed = str(date_completed)
         state = "COMPLETE" if date_completed else "RUNNING"
@@ -397,6 +427,9 @@ def list_tasks_for_project(client: EDiscoveryClient, project_handle: str, projec
             started=started,
             completed=completed,
             duration=exec_time,
+            org=org_name,
+            user=user,
+            raw=t,
         ))
     return out
 
@@ -405,17 +438,116 @@ def collect_jobs(
     client: EDiscoveryClient,
     projects: Iterable[tuple[str, dict]],
 ) -> tuple[list[JobRow], list[JobRow]]:
-    """Fan out listTasks across projects, return (running, completed)."""
+    """Fan out listTasks across projects, return (running, completed).
+
+    Org name is propagated into each `JobRow.org` so the Jobs Monitor
+    modal can display + filter by org without extra round-trips.
+    """
     running: list[JobRow] = []
     completed: list[JobRow] = []
-    for _org, p in projects:
+    for org, p in projects:
         ph = str(p.get("handle") or "")
         pname = p.get("name") or "?"
         if not ph:
             continue
-        for row in list_tasks_for_project(client, ph, pname):
+        for row in list_tasks_for_project(client, ph, pname, org_name=org):
             (running if row.state == "RUNNING" else completed).append(row)
     return running, completed
+
+
+# ----------------------------------------------------------------------------- jobs monitor (v0.10)
+def list_realm_jobs(client: EDiscoveryClient) -> tuple[list[dict], int]:
+    """Realm-wide active jobs from `realmManager/listJobs`.
+
+    Returns (raw-jobs-list, totalCores). On empty realm both jobs[] and
+    totalCores are present (cores reports the configured AE pool size
+    even when nothing is running).
+    """
+    try:
+        resp = client.post(
+            "realmManager/listJobs",
+            extra_body={
+                "contextHandle": "super_system_customer",
+                "systemScope": True,
+                "startIndex": 0,
+                "count": 500,
+                "filters": [],
+            },
+        )
+    except APIError:
+        return [], 0
+    return (resp.get("jobs") or []), int(resp.get("totalCores") or 0)
+
+
+def list_deleted_projects(client: EDiscoveryClient) -> list[DeletedProject]:
+    """Historical project deletions from `realmManager/listDeletedProjects`."""
+    try:
+        resp = client.post(
+            "realmManager/listDeletedProjects",
+            extra_body={
+                "contextHandle": "super_system_customer",
+                "systemScope": True,
+                "startIndex": 0,
+                "count": 500,
+                "filters": [],
+            },
+        )
+    except APIError:
+        return []
+    out: list[DeletedProject] = []
+    for d in resp.get("deletedProjects") or []:
+        out.append(DeletedProject(
+            project_id=int(d.get("projectId") or 0),
+            project_name=str(d.get("projectName") or ""),
+            description=str(d.get("description") or ""),
+            org_name=str(d.get("orgName") or ""),
+            user_name=str(d.get("userName") or ""),
+            date_created=str(d.get("dateCreated") or ""),
+            date_deleted=str(d.get("dateDeleted") or ""),
+        ))
+    return out
+
+
+def format_job_detail(row: "JobRow") -> str:
+    """Render a JobRow's `raw` task dict as a Rich-markup detail string.
+
+    Walks every `currentStatus` section and every attribute, so the
+    Jobs Monitor detail pane gets the same data the DR Web UI shows.
+    """
+    if row is None:
+        return "[dim]No selection.[/]"
+    raw = row.raw or {}
+    chunks: list[str] = [
+        f"[b]Job:[/] {row.job}",
+        f"[b]Project:[/] {row.project}    [b]Org:[/] {row.org or '—'}",
+        f"[b]State:[/] {row.state}    [b]Handle:[/] {row.task_handle}",
+        f"[b]Started:[/] {row.started or '—'}",
+        f"[b]Completed:[/] {row.completed or '—'}",
+        f"[b]Duration:[/] {row.duration or '—'}",
+    ]
+    if row.user:
+        chunks.append(f"[b]User:[/] {row.user}")
+    chunks.append("")
+    # Every status section in full.
+    for sec in raw.get("currentStatus") or []:
+        name = str(sec.get("name") or "").strip()
+        if name:
+            chunks.append(f"[b cyan]{name}[/]")
+        for kv in sec.get("data") or []:
+            k = str(kv.get("name") or "").strip()
+            v = str(kv.get("value") or "").strip()
+            if k or v:
+                chunks.append(f"  {k}: {v}")
+        chunks.append("")
+    # Attributes block (key=value list — usually short).
+    attrs = raw.get("attributes") or []
+    if attrs:
+        chunks.append("[b cyan]Attributes[/]")
+        for a in attrs:
+            k = str(a.get("name") or "").strip()
+            v = str(a.get("value") or "").strip()
+            chunks.append(f"  {k}: {v}")
+    return "\n".join(chunks).rstrip()
 
 
 # ----------------------------------------------------------------------------- helpers

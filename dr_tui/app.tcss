@@ -332,6 +332,71 @@ HelpModal {
     padding: 0 1;
 }
 
+/* ---------------------------------------------------------- F3 jobs monitor */
+JobsMonitorModal {
+    align: center middle;
+}
+
+#jobs-card {
+    width: 90%;
+    height: 90%;
+    padding: 1 2;
+    border: round $accent;
+    background: $panel;
+}
+
+#jobs-title {
+    content-align: center middle;
+    color: $accent;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#jobs-summary {
+    height: 1;
+    padding: 0 1;
+    color: grey;
+}
+
+#jobs-filter-row {
+    height: 3;
+    align: left middle;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+#jobs-filter-row Button {
+    margin: 0 1 0 0;
+    min-width: 11;
+}
+
+#jobs-search {
+    width: 1fr;
+    margin: 0 0 0 1;
+}
+
+#jobs-body {
+    height: 1fr;
+}
+
+#jobs-table {
+    width: 2fr;
+    height: 1fr;
+}
+
+#jobs-detail {
+    width: 1fr;
+    height: 1fr;
+    border: round grey;
+    padding: 1 2;
+    margin-left: 1;
+}
+
+#jobs-hint {
+    height: 1;
+    content-align: center middle;
+}
+
 /* ---------------------------------------------------------- F2 docs side-pane */
 .help-pane {
     width: 35%;
