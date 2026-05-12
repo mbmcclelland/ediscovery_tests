@@ -508,6 +508,102 @@ def list_deleted_projects(client: EDiscoveryClient) -> list[DeletedProject]:
     return out
 
 
+def _bool_or_status(resp) -> bool:
+    """Normalize task-action responses.
+
+    `taskManager/pauseTask` / `resumeTask` return a bare JSON boolean —
+    api_client.post()'s `_check_status` chokes on that, so we catch and
+    fall back to `post_raw`. True = action accepted, False = task was
+    in a state where the action didn't apply.
+    """
+    if isinstance(resp, dict):
+        return resp.get("status") == "SUCCESS" or bool(resp)
+    return bool(resp)
+
+
+def pause_task(client: EDiscoveryClient, *, task_handle: str) -> bool:
+    """Pause a running task. Maps to `taskManager/pauseTask`.
+
+    Returns True if the action was accepted, False if the task wasn't
+    in a state that can be paused (already paused, already complete, …).
+    """
+    import json
+    resp = client.post_raw(
+        "taskManager/pauseTask",
+        {
+            "requestHandle": None,
+            "contextHandle": "super_system_customer",
+            "taskHandle": task_handle,
+            "systemScope": True,
+        },
+    )
+    try:
+        return _bool_or_status(json.loads(resp.text))
+    except Exception:
+        return resp.status_code < 300
+
+
+def resume_task(client: EDiscoveryClient, *, task_handle: str) -> bool:
+    """Resume a paused task. Maps to `taskManager/resumeTask`."""
+    import json
+    resp = client.post_raw(
+        "taskManager/resumeTask",
+        {
+            "requestHandle": None,
+            "contextHandle": "super_system_customer",
+            "taskHandle": task_handle,
+            "systemScope": True,
+        },
+    )
+    try:
+        return _bool_or_status(json.loads(resp.text))
+    except Exception:
+        return resp.status_code < 300
+
+
+def cancel_task(client: EDiscoveryClient, *, task_handle: str) -> None:
+    """Cancel a running task. Maps to `taskManager/cancelTask`.
+
+    Returns nothing — the endpoint returns 200 with an empty body,
+    handled by api_client.post()'s D1 empty-response path. The task's
+    operationState flips to `CANCELLED` on the next
+    `listRealmTasks` / `listTasks` poll.
+
+    Important: `systemScope: true` is required. Without it the call
+    returns HTTP 500 (NullPointerException server-side).
+    """
+    client.post(
+        "taskManager/cancelTask",
+        extra_body={
+            "taskHandle": task_handle,
+            "systemScope": True,
+        },
+    )
+
+
+def set_job_priority(
+    client: EDiscoveryClient, *, task_handle: str, priority: str,
+) -> None:
+    """Set a task's queue priority. Maps to `taskManager/updateJobPriority`.
+
+    `priority` must be one of "HIGH", "NORMAL", "LOW". The body is
+    minimal — no contextHandle or systemScope; just
+    `requestHandle: null` + `priority` + `taskHandle`.
+
+    Returns 204 No Content — api_client.post()'s D1 fix yields {}.
+    """
+    p = (priority or "").upper()
+    if p not in ("HIGH", "NORMAL", "LOW"):
+        raise ValueError(f"priority must be HIGH/NORMAL/LOW, got {priority!r}")
+    client.post(
+        "taskManager/updateJobPriority",
+        extra_body={
+            "priority": p,
+            "taskHandle": task_handle,
+        },
+    )
+
+
 def format_job_detail(row: "JobRow") -> str:
     """Render a JobRow's `raw` task dict as a Rich-markup detail string.
 

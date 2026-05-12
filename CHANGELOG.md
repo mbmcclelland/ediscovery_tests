@@ -1,5 +1,68 @@
 # Changelog
 
+## v0.10.1 — 2026-05-12
+
+### Added: dr-tui — Jobs Monitor: Pause / Resume / Cancel / Set Priority
+
+The four action buttons on the F3 Jobs Monitor modal are now fully
+wired to live endpoints — the v0.10 ship had Pause / Resume working
+plus "pending capture" stubs for Cancel / Priority. v0.10.1 closes
+both gaps after a manual mitmproxy capture during a real index-build
+cycle.
+
+**Endpoints pinned:**
+
+| Action | Endpoint | Body | Returns |
+|---|---|---|---|
+| Cancel | `taskManager/cancelTask` | `taskHandle`, `systemScope: true` | 200 + empty body |
+| Set Priority | `taskManager/updateJobPriority` | `priority: "HIGH"`/`"NORMAL"`/`"LOW"`, `taskHandle` | 204 No Content |
+
+The `systemScope: true` flag is **mandatory** for `cancelTask` — every
+earlier probe without it returned HTTP 500 with a NullPointerException.
+That's the one subtle quirk; both endpoints are otherwise minimal.
+
+**Set Priority body is unusually small** — just `requestHandle`,
+`priority`, and `taskHandle`. No `contextHandle`, no `systemScope`.
+The priority value is the uppercase enum string (server is
+case-sensitive).
+
+**UI additions:**
+
+- `PriorityModal` — warning-bordered modal with three coloured option
+  buttons (High = error/red, Normal = primary/blue, Low = default) +
+  Cancel. Single-letter hotkeys `h` / `n` / `l` pick directly; Esc
+  cancels. Renders the current priority as a header subtitle when
+  available (parsed from the task's `currentStatus[]` block).
+- Cancel button now opens a `ConfirmModal` ("Cancel Job?") before
+  firing — destructive action, requires explicit confirmation.
+- The Jobs Monitor detail pane flashes green on a successful action
+  and yellow on failure ("could not pause — task was already
+  completed", etc.). Master table auto-refreshes after every action
+  so state changes propagate immediately.
+
+**Data layer:**
+
+- `dr_tui.data.cancel_task(client, *, task_handle)` — wraps the
+  endpoint with the mandatory `systemScope: true`.
+- `dr_tui.data.set_job_priority(client, *, task_handle, priority)` —
+  validates `priority ∈ {HIGH, NORMAL, LOW}` and rejects others before
+  the round-trip.
+
+**Bonus endpoints captured in the same session** (documented in
+`docs/endpoints_v0.06.md`, ready for future wiring):
+
+- `realmManager/listRealmTasks` — realm-wide tasks with
+  `operationState` + filters. Cleaner than the current per-project
+  `listTasks` fan-out; will replace it in a future v0.11.
+- `realmManager/listOperationTypes` — full enum of workbasket task
+  types, source for a future "filter by type" dropdown.
+- `taskManager/getSRITaskLog` — per-task live log payload, source for
+  a future "View Live Log" enhancement.
+
+**Tests:** new `test_priority_modal_paths` verifies all three priority
+buttons + cancel return the right value (`HIGH`/`NORMAL`/`LOW`/None).
+9 / 9 pilot tests passing.
+
 ## v0.10 — 2026-05-12
 
 ### Added: dr-tui — F3 Jobs Monitor modal

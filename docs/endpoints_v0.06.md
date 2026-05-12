@@ -21,6 +21,8 @@ Captures preserved at:
 - `/tmp/dr_proxy_capture_v07_connectors.json` (v0.07.1 capture —
   connector create / update / delete / deactivate + explore +
   validateNFS / validateExchange)
+- `/tmp/dr_proxy_capture_v0101_jobactions.json` (v0.10.1 capture —
+  pause / resume / cancel / setPriority + listRealmTasks + getSRITaskLog)
 
 Conventions follow v0.05. Auth header is the rolling raw `sessionToken`.
 All bodies include `requestHandle: null` from a fresh client **except**
@@ -605,6 +607,65 @@ The doc says `updateNFSConnector` exists by symmetry but wasn't
 exercised in this capture pass — likely
 `connectorManager/updateNFSConnector` with a body mirroring create +
 `handle`. Future v0.07.2 capture if needed.
+
+---
+
+## ✅ Confirmed — Job Control (v0.10.1)
+
+The Jobs Monitor modal's action bar. All four endpoints captured live
+during a real index-build cycle.
+
+| Op | Endpoint | Returns | Notes |
+|---|---|---|---|
+| Pause | `taskManager/pauseTask` | 200 + bare JSON `true`/`false` | `true` = action accepted; `false` = task wasn't in a pauseable state |
+| Resume | `taskManager/resumeTask` | 200 + bare JSON `true`/`false` | same shape as pause |
+| Cancel | `taskManager/cancelTask` | 200 + empty body | requires `systemScope: true` (without it the server returns 500) |
+| Set priority | `taskManager/updateJobPriority` | 204 No Content | priority enum is `"HIGH"` / `"NORMAL"` / `"LOW"` (uppercase) |
+
+**Pause / Resume body** (singular task, returns boolean — api_client's
+`_check_status` doesn't handle bare booleans, so the data-layer wrappers
+use `post_raw` + manual `json.loads`):
+
+```json
+{
+  "requestHandle": null,
+  "contextHandle": "super_system_customer",
+  "taskHandle": "0000cc9ec9479437232340f4885f87cc846119dc",
+  "systemScope": true
+}
+```
+
+**Cancel body** — `systemScope: true` is mandatory:
+
+```json
+{
+  "requestHandle": null,
+  "taskHandle": "0000cc9ec9479437232340f4885f87cc846119dc",
+  "systemScope": true
+}
+```
+
+**Set priority body** — note the minimal shape (no contextHandle, no
+systemScope):
+
+```json
+{
+  "requestHandle": null,
+  "priority": "HIGH",
+  "taskHandle": "0000cc9ec9479437232340f4885f87cc846119dc"
+}
+```
+
+Captured all three enum values during the v0.10.1 round (`NORMAL` →
+`HIGH` → `LOW`); each call returned 204 with empty body.
+
+### Bonus endpoints (same capture)
+
+| Endpoint | Returns | Useful for |
+|---|---|---|
+| `realmManager/listRealmTasks` | 200 + `tasks[]` | Realm-wide task list with `operationState`, `dateStarted`, `dateCompleted`, filterable by `attribute/operator/value`. Cleaner data source for the Jobs Monitor than per-project `listTasks` fan-out. |
+| `realmManager/listOperationTypes` | 200 + `workbasketTypes[]` | Enum of all task types — `DOCUMENT_ADD_FROM_FILE_LIST`, `PREPARE_FOR_ANALYTICS`, `COLLECTION_WEIGHT`, etc. Source for a future "filter by type" dropdown. |
+| `taskManager/getSRITaskLog` | 200 + log lines | Per-task live log payload — used by the "View Live Log" UI option. Future Jobs Monitor enhancement. |
 
 ---
 

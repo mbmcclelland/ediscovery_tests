@@ -28,7 +28,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import Button, Input, Static
 
 from dr_tui.app import (
-    ConfirmModal, DepotFormModal, GroupFormModal,
+    ConfirmModal, DepotFormModal, GroupFormModal, PriorityModal,
     ResetPasswordModal, UserFormModal,
 )
 from dr_tui.data import GroupRow, StorageDepot, UserRow
@@ -270,6 +270,40 @@ async def _walk_group_scenarios() -> None:
         assert holder == [None]
 
 
+async def _walk_priority_scenarios() -> None:
+    """PriorityModal: each button returns the matching enum; cancel returns None."""
+    app = _Harness()
+    async with app.run_test() as pilot:
+        holder = await _push_and_get(
+            app, pilot,
+            PriorityModal(job_label="some-task", current="NORMAL"),
+        )
+        app.screen.query_one("#pri-high", Button).action_press()
+        await pilot.pause()
+        assert holder == ["HIGH"], f"got: {holder!r}"
+
+        holder = await _push_and_get(
+            app, pilot, PriorityModal(job_label="x", current="HIGH"),
+        )
+        app.screen.query_one("#pri-normal", Button).action_press()
+        await pilot.pause()
+        assert holder == ["NORMAL"]
+
+        holder = await _push_and_get(
+            app, pilot, PriorityModal(job_label="x", current="HIGH"),
+        )
+        app.screen.query_one("#pri-low", Button).action_press()
+        await pilot.pause()
+        assert holder == ["LOW"]
+
+        holder = await _push_and_get(
+            app, pilot, PriorityModal(job_label="x", current=""),
+        )
+        app.screen.query_one("#pri-cancel", Button).action_press()
+        await pilot.pause()
+        assert holder == [None]
+
+
 def test_depot_modal_paths() -> None:
     """pytest entry point — wraps the async pilot walk."""
     asyncio.run(_walk_all_scenarios())
@@ -285,6 +319,11 @@ def test_group_modal_paths() -> None:
     asyncio.run(_walk_group_scenarios())
 
 
+def test_priority_modal_paths() -> None:
+    """pytest entry point — PriorityModal returns correct enum per button."""
+    asyncio.run(_walk_priority_scenarios())
+
+
 if __name__ == "__main__":
     test_depot_modal_paths()
     print("[D4 pilot smoke: PASS]")
@@ -292,3 +331,5 @@ if __name__ == "__main__":
     print("[D5 pilot smoke: PASS]")
     test_group_modal_paths()
     print("[D6 pilot smoke: PASS]")
+    test_priority_modal_paths()
+    print("[priority pilot smoke: PASS]")

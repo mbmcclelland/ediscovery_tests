@@ -635,6 +635,11 @@ class JobsMonitorModal(ModalScreen[None]):
                 yield Button("Deleted",   id="jobs-flt-deleted",  variant="warning")
                 yield Input(placeholder="search (org / project / job)…",
                             id="jobs-search")
+            with Horizontal(id="jobs-action-row"):
+                yield Button("Pause",    id="jobs-act-pause")
+                yield Button("Resume",   id="jobs-act-resume",  variant="success")
+                yield Button("Cancel",   id="jobs-act-cancel",  variant="error")
+                yield Button("Priority", id="jobs-act-priority", variant="warning")
             with Horizontal(id="jobs-body"):
                 yield DataTable(id="jobs-table", zebra_stripes=True, cursor_type="row")
                 yield Static("[dim]Select a row to see full job detail.[/]",
@@ -691,6 +696,140 @@ class JobsMonitorModal(ModalScreen[None]):
         elif bid == "jobs-flt-running": self._set_filter("running")
         elif bid == "jobs-flt-complete": self._set_filter("complete")
         elif bid == "jobs-flt-deleted": self._set_filter("deleted")
+        elif bid == "jobs-act-pause":   self._action_on_selected("pause")
+        elif bid == "jobs-act-resume":  self._action_on_selected("resume")
+        elif bid == "jobs-act-cancel":  self._action_on_selected("cancel")
+        elif bid == "jobs-act-priority": self._action_on_selected("priority")
+
+    def _selected_job(self):
+        try:
+            idx = self.query_one("#jobs-table", DataTable).cursor_row
+        except Exception:
+            return None
+        if idx is None or idx < 0 or idx >= len(self._displayed):
+            return None
+        item = self._displayed[idx]
+        # Only JobRow entries are actionable — deleted projects are read-only.
+        if isinstance(item, drdata.DeletedProject):
+            return None
+        return item
+
+    def _action_on_selected(self, action: str) -> None:
+        """Dispatch a pause/resume/cancel/priority action on the selected row."""
+        job = self._selected_job()
+        if job is None:
+            # No action target — silently fail. Detail pane gives a hint.
+            return
+        if action == "pause":
+            self.run_worker(
+                lambda: self._job_action_blocking(job, "pause"),
+                thread=True, exclusive=False, group="job-action",
+            )
+        elif action == "resume":
+            self.run_worker(
+                lambda: self._job_action_blocking(job, "resume"),
+                thread=True, exclusive=False, group="job-action",
+            )
+        elif action == "cancel":
+            # Cancel is destructive — confirm first.
+            self.app.push_screen(
+                ConfirmModal(
+                    title="Cancel job?",
+                    message=(
+                        f"Cancel running job [b]{job.job}[/] in "
+                        f"project [b]{job.project}[/]?\n\n"
+                        "The task transitions to state CANCELLED. "
+                        "This cannot be undone."
+                    ),
+                    confirm_label="Cancel Job",
+                ),
+                lambda ok: self._after_cancel_confirm(ok, job),
+            )
+        elif action == "priority":
+            # Pop the priority picker; on dismiss with a value, fire the
+            # updateJobPriority call.
+            current = ""
+            raw = job.raw or {}
+            for sec in raw.get("currentStatus") or []:
+                for kv in sec.get("data") or []:
+                    if (kv.get("name") or "").strip().lower() == "priority":
+                        current = str(kv.get("value") or "")
+                        break
+            self.app.push_screen(
+                PriorityModal(job_label=job.job, current=current),
+                lambda new_pri: self._after_priority_pick(new_pri, job),
+            )
+
+    def _after_cancel_confirm(self, ok: bool, job) -> None:
+        if not ok:
+            return
+        self.run_worker(
+            lambda: self._job_action_blocking(job, "cancel"),
+            thread=True, exclusive=False, group="job-action",
+        )
+
+    def _after_priority_pick(self, priority, job) -> None:
+        if not priority:
+            return
+        self.run_worker(
+            lambda: self._job_priority_blocking(job, priority),
+            thread=True, exclusive=False, group="job-action",
+        )
+
+    def _job_priority_blocking(self, job, priority: str) -> None:
+        client = self._client()
+        if client is None:
+            return
+        full_handle = (job.raw or {}).get("handle", job.task_handle)
+        try:
+            drdata.set_job_priority(
+                client, task_handle=full_handle, priority=priority,
+            )
+            msg = f"priority {priority}: {job.job}"
+            colored = f"[green]{msg}[/]"
+        except APIError as e:
+            colored = (f"[yellow]priority {priority}: "
+                       f"{e.error_code or e.status} {e.extended_status[:60]}[/]")
+        except Exception as e:
+            colored = f"[yellow]priority error: {e!r}[/]"
+        self.app.call_from_thread(
+            self.query_one("#jobs-detail", Static).update, colored,
+        )
+        self.app.call_from_thread(self.action_refresh)
+
+    def _job_action_blocking(self, job, action: str) -> None:
+        """Worker: pause / resume / cancel the selected job, then refresh."""
+        client = self._client()
+        if client is None:
+            return
+        # Need the full task handle, not the 16-char truncated form shown
+        # in the table. The raw task carries the canonical `handle`.
+        full_handle = (job.raw or {}).get("handle", job.task_handle)
+        try:
+            if action == "pause":
+                ok = drdata.pause_task(client, task_handle=full_handle)
+                msg = (f"paused: {job.job}" if ok
+                       else f"could not pause {job.job} (state={job.state})")
+            elif action == "resume":
+                ok = drdata.resume_task(client, task_handle=full_handle)
+                msg = (f"resumed: {job.job}" if ok
+                       else f"could not resume {job.job} (state={job.state})")
+            elif action == "cancel":
+                drdata.cancel_task(client, task_handle=full_handle)
+                msg = f"cancelled: {job.job}"
+            else:
+                msg = f"unknown action: {action}"
+        except APIError as e:
+            msg = (f"{action}: {e.error_code or e.status} "
+                   f"{e.extended_status[:60]}")
+        except Exception as e:
+            msg = f"{action} error: {e!r}"
+        bad = ("could not" in msg) or ("error" in msg) or (":" in msg and action in msg.split(":")[0])
+        colored = f"[green]{msg}[/]" if not bad else f"[yellow]{msg}[/]"
+        self.app.call_from_thread(
+            self.query_one("#jobs-detail", Static).update, colored,
+        )
+        self.app.call_from_thread(self.action_refresh)
 
     def on_input_changed(self, evt: Input.Changed) -> None:
         if evt.input.id == "jobs-search":
@@ -847,6 +986,53 @@ class JobsMonitorModal(ModalScreen[None]):
             ]))
         else:
             body.update(drdata.format_job_detail(item))
+
+
+class PriorityModal(ModalScreen[Optional[str]]):
+    """Pick HIGH / NORMAL / LOW for a job. Returns the chosen value or None."""
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+        Binding("h", "pick('HIGH')",   "High",   show=False),
+        Binding("n", "pick('NORMAL')", "Normal", show=False),
+        Binding("l", "pick('LOW')",    "Low",    show=False),
+    ]
+
+    def __init__(self, *, job_label: str, current: str = "") -> None:
+        super().__init__()
+        self._job_label = job_label
+        self._current = (current or "").upper()
+
+    def compose(self) -> ComposeResult:
+        with Container(id="priority-card"):
+            yield Static(f"Set Priority — {self._job_label}", id="priority-title")
+            current_line = (f"[dim]Current: {self._current}[/]"
+                            if self._current else
+                            "[dim]Pick the new priority below.[/]")
+            yield Static(current_line, id="priority-current")
+            with Horizontal(id="priority-buttons"):
+                yield Button("High",   id="pri-high",   variant="error")
+                yield Button("Normal", id="pri-normal", variant="primary")
+                yield Button("Low",    id="pri-low",    variant="default")
+                yield Button("Cancel", id="pri-cancel")
+            yield Static(
+                "[dim][h] High · [n] Normal · [l] Low · [Esc] cancel[/]",
+                classes="modal-hint",
+            )
+
+    def on_button_pressed(self, evt: Button.Pressed) -> None:
+        bid = evt.button.id
+        mapping = {"pri-high": "HIGH", "pri-normal": "NORMAL", "pri-low": "LOW"}
+        if bid in mapping:
+            self.dismiss(mapping[bid])
+        elif bid == "pri-cancel":
+            self.dismiss(None)
+
+    def action_pick(self, priority: str) -> None:
+        self.dismiss(priority)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
 
 class HelpModal(ModalScreen[None]):

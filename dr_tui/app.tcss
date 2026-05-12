@@ -332,6 +332,42 @@ HelpModal {
     padding: 0 1;
 }
 
+/* ---------------------------------------------------------- priority picker */
+PriorityModal {
+    align: center middle;
+}
+
+#priority-card {
+    width: 60;
+    height: auto;
+    padding: 1 2;
+    border: round $warning;
+    background: $panel;
+}
+
+#priority-title {
+    content-align: center middle;
+    color: $warning;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#priority-current {
+    content-align: center middle;
+    margin-bottom: 1;
+}
+
+#priority-buttons {
+    height: 3;
+    align: center middle;
+    margin-top: 1;
+}
+
+#priority-buttons Button {
+    margin: 0 1;
+    min-width: 10;
+}
+
 /* ---------------------------------------------------------- F3 jobs monitor */
 JobsMonitorModal {
     align: center middle;
@@ -373,6 +409,18 @@ JobsMonitorModal {
 #jobs-search {
     width: 1fr;
     margin: 0 0 0 1;
+}
+
+#jobs-action-row {
+    height: 3;
+    align: left middle;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+#jobs-action-row Button {
+    margin: 0 1 0 0;
+    min-width: 10;
 }
 
 #jobs-body {
