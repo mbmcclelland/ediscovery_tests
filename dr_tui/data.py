@@ -50,6 +50,60 @@ class JobRow:
 
 
 @dataclass
+class LicenseField:
+    """One row from `realmManager/getLicenseInfo` (`{label, value}`)."""
+    label: str
+    value: str
+
+
+@dataclass
+class NodeInfo:
+    """One realm node from `realmManager/listNodes`."""
+    handle: str
+    name: str
+    ip_address: str
+    node_type: str               # "FULL" / "MGMT" / …
+    monitor_status: str          # "AVAILABLE" / "UNAVAILABLE"
+    ae_status: str
+    connector_status: str
+    storage_status: str
+    cores: int
+    threads_executing: int
+    storage_export: str = ""
+    storage_name: str = ""
+    analytic_mode: str = ""
+
+
+@dataclass
+class NodeComponent:
+    """One row of `componentStatusList` from `getNodeStatus`."""
+    name: str
+    status: str
+    threads: int
+    memory_bytes: int
+    last_poll: str
+
+
+@dataclass
+class NodeStorageMount:
+    name: str
+    status: str
+    mount_point: str
+    kb_used: int
+    kb_available: int
+    kb_allocated: int
+
+
+@dataclass
+class NodeStatusDetail:
+    """Combined result of `realmManager/getNodeStatus`."""
+    node: NodeInfo
+    components: list           # list[NodeComponent]
+    storage: list              # list[NodeStorageMount]
+    connectors: int            # count — names rarely interesting
+
+
+@dataclass
 class StorageDepot:
     name: str
     use_type: str               # "DOCUMENT_STORE" | "INDEX_STORE"
@@ -316,6 +370,102 @@ def _join_role_names(user: dict) -> tuple[str, bool]:
 
 
 # ============================================================ system settings
+# ----------------------------------------------------------------------------- landing dashboard (L1, L2, L3)
+def get_license_info(client: EDiscoveryClient) -> list[LicenseField]:
+    """Realm license details (`realmManager/getLicenseInfo`)."""
+    resp = client.post(
+        "realmManager/getLicenseInfo",
+        extra_body={"contextHandle": "super_system_customer", "systemScope": True},
+    )
+    out: list[LicenseField] = []
+    for row in resp.get("info", []) or []:
+        out.append(LicenseField(
+            label=row.get("label") or "",
+            value=str(row.get("value") or ""),
+        ))
+    return out
+
+
+def _node_from_dict(n: dict) -> NodeInfo:
+    return NodeInfo(
+        handle=str(n.get("handle") or ""),
+        name=n.get("name") or "?",
+        ip_address=n.get("ipAddress") or "",
+        node_type=n.get("nodeType") or "",
+        monitor_status=n.get("monitorStatus") or "",
+        ae_status=n.get("aeComponentMonitorStatus") or "",
+        connector_status=n.get("connectorMonitorStatus") or "",
+        storage_status=n.get("storageMonitorStatus") or "",
+        cores=int(n.get("numberCores") or 0),
+        threads_executing=int(n.get("numberThreadsExecuting") or 0),
+        storage_export=n.get("storageExport") or "",
+        storage_name=n.get("storageName") or "",
+        analytic_mode=n.get("analyticNodeMode") or "",
+    )
+
+
+def list_nodes(client: EDiscoveryClient) -> list[NodeInfo]:
+    """List realm nodes (`realmManager/listNodes`)."""
+    resp = client.post(
+        "realmManager/listNodes",
+        extra_body={
+            "contextHandle": "super_system_customer",
+            "sortByFilter": "NAME",
+            "descending": False,
+            "systemScope": True,
+        },
+    )
+    return [_node_from_dict(n) for n in (resp.get("nodes") or [])]
+
+
+def get_node_status(client: EDiscoveryClient, *, handle: str) -> NodeStatusDetail:
+    """Detailed per-node status used by Monitoring → Node Status.
+
+    Returns the node summary plus the three sub-lists (components,
+    connectors, storage mounts). Component memory is reported in bytes;
+    storage in KB.
+    """
+    resp = client.post(
+        "realmManager/getNodeStatus",
+        extra_body={
+            "contextHandle": "super_system_customer",
+            "handle": handle,
+            "systemScope": True,
+        },
+    )
+    node_d = resp.get("node") or {}
+    node = _node_from_dict(node_d) if node_d else NodeInfo(
+        handle="", name="?", ip_address="", node_type="", monitor_status="",
+        ae_status="", connector_status="", storage_status="",
+        cores=0, threads_executing=0,
+    )
+    components = [
+        NodeComponent(
+            name=c.get("name") or "?",
+            status=c.get("monitorStatus") or "",
+            threads=int(c.get("numberThreadsExecuting") or 0),
+            memory_bytes=int(c.get("memory") or 0),
+            last_poll=c.get("lastPollTime") or "",
+        )
+        for c in (resp.get("componentStatusList") or [])
+    ]
+    storage = [
+        NodeStorageMount(
+            name=s.get("name") or "?",
+            status=s.get("monitorStatus") or "",
+            mount_point=s.get("mountPoint") or "",
+            kb_used=int(s.get("kbUsed") or 0),
+            kb_available=int(s.get("kbAvailable") or 0),
+            kb_allocated=int(s.get("kbAllocated") or 0),
+        )
+        for s in (resp.get("storageStatusList") or [])
+    ]
+    connectors = len(resp.get("connectorStatusList") or [])
+    return NodeStatusDetail(
+        node=node, components=components, storage=storage, connectors=connectors,
+    )
+
+
 # ----------------------------------------------------------------------------- storage depots (F1, F2)
 def list_storage_depots(client: EDiscoveryClient, use_type: str) -> list[StorageDepot]:
     """List NFS storage areas filtered by storageUseType.

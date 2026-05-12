@@ -73,6 +73,15 @@ EXPECTED_ACTION_BUTTONS = {
     "sys-groups-view":     ["#sys-group-new", "#sys-group-edit", "#sys-group-delete"],
 }
 
+# Dashboard widgets (separate check — these aren't action buttons).
+EXPECTED_DASHBOARD_WIDGETS = [
+    "#dash-license-body", "#dash-node-body",
+    "#dash-cpu-text", "#dash-mem-text", "#dash-net-text",
+    "#dash-cpu-spark", "#dash-mem-spark",
+    "#dash-log", "#dash-procs-table",
+    "#dash-flt-info", "#dash-flt-warn", "#dash-flt-error",
+]
+
 
 async def _walk_dashboard() -> None:
     app = _HarnessApp()
@@ -101,6 +110,11 @@ async def _walk_dashboard() -> None:
         # Status bar exists.
         status = screen.query_one("#status-bar", Static)
         assert status is not None
+
+        # Dashboard widgets present.
+        for wid in EXPECTED_DASHBOARD_WIDGETS:
+            w = screen.query_one(wid)
+            assert w is not None, f"dashboard widget {wid} missing"
 
         # Press a row-bound action with no selected row — must not crash.
         screen.query_one("#sys-user-edit", Button).action_press()

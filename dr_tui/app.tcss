@@ -331,3 +331,87 @@ HelpModal {
 #help-body {
     padding: 0 1;
 }
+
+/* ---------------------------------------------------------- landing dashboard */
+#dash-root {
+    height: 1fr;
+}
+
+#dash-top, #dash-bottom {
+    height: auto;
+}
+
+.dash-card {
+    border: round cyan;
+    padding: 0 1;
+    margin: 0 1 1 0;
+}
+
+#dash-license-card, #dash-node-card {
+    width: 1fr;
+    height: auto;
+    min-height: 12;
+}
+
+#dash-metrics-card {
+    height: auto;
+    min-height: 6;
+}
+
+#dash-metrics-row {
+    height: auto;
+}
+
+.dash-metric-col {
+    width: 1fr;
+    padding: 0 1;
+    height: auto;
+}
+
+#dash-logs-card {
+    width: 2fr;
+    min-height: 14;
+}
+
+#dash-procs-card {
+    width: 1fr;
+    min-height: 14;
+}
+
+#dash-log-header {
+    height: 3;
+    padding: 0 1;
+    align: left middle;
+}
+
+#dash-log-header Button {
+    margin: 0 0 0 1;
+    min-width: 8;
+}
+
+.dash-title {
+    dock: top;
+    height: 1;
+    background: $boost;
+    color: $accent;
+    text-style: bold;
+    padding: 0 1;
+}
+
+.dash-body {
+    padding: 1 1;
+    height: auto;
+}
+
+#dash-cpu-spark, #dash-mem-spark {
+    height: 2;
+    margin-top: 1;
+}
+
+#dash-log {
+    height: 1fr;
+}
+
+#dash-procs-table {
+    height: 1fr;
+}

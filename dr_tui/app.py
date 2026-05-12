@@ -28,7 +28,8 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
 from textual.widgets import (
     Button, ContentSwitcher, DataTable, Footer, Header, Input, Label,
-    RadioButton, RadioSet, Select, Static, TabbedContent, TabPane, Tree,
+    RadioButton, RadioSet, RichLog, Select, Sparkline, Static,
+    TabbedContent, TabPane, Tree,
 )
 from textual.worker import get_current_worker
 
@@ -36,6 +37,7 @@ from config import Config, OrgUserConfig
 from helpers.api_client import APIError, EDiscoveryClient
 
 from dr_tui import data as drdata
+from dr_tui import metrics as drmetrics
 
 urllib3.disable_warnings()
 
@@ -80,6 +82,28 @@ def _fmt_kb(kb: int) -> str:
 
 def _yn(b: bool) -> str:
     return "yes" if b else "no"
+
+
+def _fmt_rate(bytes_per_sec: float) -> str:
+    """Render a byte/sec rate compactly: 1.2 MB/s, 800 KB/s, …"""
+    if bytes_per_sec >= 1024 ** 3:
+        return f"{bytes_per_sec / (1024 ** 3):5.2f} GB/s"
+    if bytes_per_sec >= 1024 ** 2:
+        return f"{bytes_per_sec / (1024 ** 2):5.2f} MB/s"
+    if bytes_per_sec >= 1024:
+        return f"{bytes_per_sec / 1024:5.1f} KB/s"
+    return f"{bytes_per_sec:5.0f} B/s"
+
+
+def _color_status(s: str) -> str:
+    """Wrap a monitorStatus string with a Rich colour."""
+    if not s:
+        return "[dim]?[/]"
+    if s == "AVAILABLE":
+        return f"[green]{s}[/]"
+    if s == "UNAVAILABLE":
+        return f"[red]{s}[/]"
+    return f"[yellow]{s}[/]"
 
 
 # ============================================================ Login screen
@@ -637,11 +661,63 @@ class DashboardScreen(Screen):
     # enabled/frequency on the trigger call.
     _virus_last: Optional["drdata.VirusDefs"]
 
+    # ---- Landing dashboard state ----
+    _metrics_prev: Optional["drmetrics.MetricsSample"]
+    _metrics_history: "drmetrics.MetricsHistory"
+    _log_tailer: Optional["drmetrics.LogTailer"]
+    _log_filter: set        # subset of {"INFO","WARN","ERROR"}; "" always shown
+
     # ---------------------------------------------------------- compose
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield Static("", id="status-bar")
-        with TabbedContent(id="main-tabs", initial="tab-orgs"):
+        with TabbedContent(id="main-tabs", initial="tab-dashboard"):
+            # ----------------------- Dashboard (DRSysAdmin only) -----------
+            with TabPane("Dashboard", id="tab-dashboard"):
+                with Vertical(id="dash-root"):
+                    # Top row: License + Realm Node summary, side by side.
+                    with Horizontal(id="dash-top"):
+                        with Vertical(id="dash-license-card", classes="dash-card"):
+                            yield Static("License", classes="dash-title")
+                            yield Static("Loading…", id="dash-license-body",
+                                         classes="dash-body")
+                        with Vertical(id="dash-node-card", classes="dash-card"):
+                            yield Static("Realm Node — Status Details",
+                                         classes="dash-title")
+                            yield Static("Loading…", id="dash-node-body",
+                                         classes="dash-body")
+                    # Metrics strip.
+                    with Vertical(id="dash-metrics-card", classes="dash-card"):
+                        yield Static("System Metrics", classes="dash-title")
+                        with Horizontal(id="dash-metrics-row"):
+                            with Vertical(classes="dash-metric-col"):
+                                yield Static("CPU —", id="dash-cpu-text")
+                                yield Sparkline([0], id="dash-cpu-spark",
+                                                summary_function=max)
+                            with Vertical(classes="dash-metric-col"):
+                                yield Static("Memory —", id="dash-mem-text")
+                                yield Sparkline([0], id="dash-mem-spark",
+                                                summary_function=max)
+                            with Vertical(classes="dash-metric-col"):
+                                yield Static("Net / IOPS —", id="dash-net-text")
+                    # Logs + processes — side by side if room.
+                    with Horizontal(id="dash-bottom"):
+                        with Vertical(id="dash-logs-card", classes="dash-card"):
+                            with Horizontal(id="dash-log-header"):
+                                yield Static("Logs (tail -f AHS/output/*.log)",
+                                             classes="dash-title")
+                                yield Button("INFO",  id="dash-flt-info",  variant="primary")
+                                yield Button("WARN",  id="dash-flt-warn",  variant="warning")
+                                yield Button("ERROR", id="dash-flt-error", variant="error")
+                            yield RichLog(id="dash-log",
+                                          highlight=False, markup=True,
+                                          wrap=False, max_lines=2000)
+                        with Vertical(id="dash-procs-card", classes="dash-card"):
+                            yield Static("Top processes (ps aux)",
+                                         classes="dash-title")
+                            yield DataTable(id="dash-procs-table",
+                                            zebra_stripes=True, cursor_type="row")
+
             # ----------------------- System Settings (DRSysAdmin only) -----
             with TabPane("System Settings", id="tab-sys"):
                 with Horizontal(id="sys-h"):
@@ -748,6 +824,14 @@ class DashboardScreen(Screen):
         self._sys_groups_rows = []
         self._system_roles = []
         self._virus_last = None
+        self._metrics_prev = None
+        self._metrics_history = drmetrics.MetricsHistory(max_points=60)
+        self._log_filter = {"INFO", "WARN", "ERROR"}
+        # AHS log location is a known constant for the lab/install — overridable.
+        self._log_tailer = drmetrics.LogTailer(
+            ["/home/auraria/AHS/output/*.log"], start_from_end=True,
+        )
+        drmetrics.prime_cpu_percent()
         # Initialize DataTable columns once.
         self.query_one("#sys-doc-depots-table", DataTable).add_columns(
             "Name", "FQDN", "Export", "In-Service", "Used", "Available", "Allocation",
@@ -791,10 +875,11 @@ class DashboardScreen(Screen):
         # Role-gate: hide System Settings tab for admin@training.
         if self.app.role == ROLE_ORG:
             tabs = self.query_one("#main-tabs", TabbedContent)
-            try:
-                tabs.hide_tab("tab-sys")
-            except Exception:
-                pass
+            for hidden in ("tab-sys", "tab-dashboard"):
+                try:
+                    tabs.hide_tab(hidden)
+                except Exception:
+                    pass
             tabs.active = "tab-orgs"
 
         # Async populate Organizations tree.
@@ -802,6 +887,22 @@ class DashboardScreen(Screen):
 
         # Auto-refresh ticks the currently-visible view's loader.
         self.set_interval(5.0, self.action_refresh_now)
+
+        # ---- Dashboard timers (DRSysAdmin only — needs the realm client) ----
+        if self.app.role == ROLE_SYS:
+            # Initialize the processes DataTable columns.
+            pt = self.query_one("#dash-procs-table", DataTable)
+            pt.add_columns("PID", "USER", "CPU%", "MEM%", "CMD")
+            # Fast (metrics) and slow (license + node + processes) cycles.
+            self.set_interval(2.0, self._dash_tick_metrics)
+            self.set_interval(1.0, self._dash_tick_logs)
+            self.set_interval(3.0, self._dash_tick_procs)
+            self.set_interval(30.0, self._dash_tick_realm)
+            # Initial paint.
+            self.call_after_refresh(self._dash_tick_realm)
+            self.call_after_refresh(self._dash_tick_procs)
+            self.call_after_refresh(self._dash_tick_metrics)
+            self.call_after_refresh(self._dash_tick_logs)
 
     # ---------------------------------------------------------- tree builders
     def _populate_sys_tree(self) -> None:
@@ -1183,6 +1284,15 @@ class DashboardScreen(Screen):
         # ----- virus update -----
         if bid == "sys-virus-update":
             self._virus_trigger_update()
+            return
+
+        # ----- dashboard log filters -----
+        if bid == "dash-flt-info":
+            self._toggle_log_filter("INFO")
+        elif bid == "dash-flt-warn":
+            self._toggle_log_filter("WARN")
+        elif bid == "dash-flt-error":
+            self._toggle_log_filter("ERROR")
 
     def _depot_selected(self, table_id: str) -> Optional[drdata.StorageDepot]:
         rows = self._depots_by_table.get(table_id, [])
@@ -1771,6 +1881,195 @@ class DashboardScreen(Screen):
     def action_show_help(self) -> None:
         """F1 — pop the help modal showing keybindings."""
         self.app.push_screen(HelpModal())
+
+    # ============================================================ Dashboard tab
+    # Four independent tick cycles. Metrics + logs + procs are local-host
+    # reads (psutil + tail) so they're cheap; realm (license + node)
+    # touches the DR REST API and runs at a slower cadence.
+
+    def _dash_tick_metrics(self) -> None:
+        """Sample CPU/mem/net/disk and update the metrics strip."""
+        try:
+            sample = drmetrics.sample_metrics(self._metrics_prev)
+        except Exception:
+            return
+        self._metrics_prev = sample
+        self._metrics_history.add(sample)
+        h = self._metrics_history
+        cpu_text = (
+            f"CPU [b]{sample.cpu_pct:5.1f}%[/]  "
+            f"peak [yellow]{h.cpu_peak():5.1f}%[/]  "
+            f"avg [dim]{h.cpu_avg():5.1f}%[/]"
+        )
+        mem_text = (
+            f"Memory [b]{sample.mem_pct:5.1f}%[/]  "
+            f"({sample.mem_used_gb:.1f} / {sample.mem_total_gb:.1f} GB)  "
+            f"peak [yellow]{h.mem_peak():5.1f}%[/]  "
+            f"avg [dim]{h.mem_avg():5.1f}%[/]"
+        )
+        net_text = (
+            f"Net  rx [green]{_fmt_rate(sample.net_rx_per_sec)}[/]  "
+            f"tx [magenta]{_fmt_rate(sample.net_tx_per_sec)}[/]\n"
+            f"IOPS r {sample.disk_read_iops:6.0f}  "
+            f"w {sample.disk_write_iops:6.0f}  "
+            f"total {sample.disk_read_iops + sample.disk_write_iops:6.0f}"
+        )
+        self.query_one("#dash-cpu-text", Static).update(cpu_text)
+        self.query_one("#dash-mem-text", Static).update(mem_text)
+        self.query_one("#dash-net-text", Static).update(net_text)
+        # Sparklines need at least one positive sample to render meaningfully.
+        cpu_series = h.cpu_series() or [0]
+        mem_series = h.mem_series() or [0]
+        self.query_one("#dash-cpu-spark", Sparkline).data = cpu_series
+        self.query_one("#dash-mem-spark", Sparkline).data = mem_series
+
+    def _dash_tick_logs(self) -> None:
+        """Pull new lines from the AHS tailer and append to the RichLog."""
+        if self._log_tailer is None:
+            return
+        try:
+            new_lines = self._log_tailer.poll()
+        except Exception:
+            return
+        if not new_lines:
+            return
+        log = self.query_one("#dash-log", RichLog)
+        for ll in new_lines:
+            # Always render unleveled lines (often stack traces) — the
+            # filter only excludes explicit non-matching levels.
+            if ll.level and ll.level not in self._log_filter:
+                continue
+            color = {
+                "ERROR": "red",
+                "WARN":  "yellow",
+                "INFO":  "green",
+            }.get(ll.level, "dim")
+            tag = f"[{color}]{ll.level or '   '}[/]"
+            log.write(f"[cyan]{ll.file:>12s}[/] {tag} {ll.text}")
+
+    def _dash_tick_procs(self) -> None:
+        """Refresh the top-5 processes table."""
+        try:
+            rows = drmetrics.top_processes(n=5)
+        except Exception:
+            return
+        t = self.query_one("#dash-procs-table", DataTable)
+        t.clear()
+        for r in rows:
+            t.add_row(
+                str(r.pid), r.user,
+                f"{r.cpu_pct:5.1f}", f"{r.mem_pct:5.1f}",
+                r.cmd,
+            )
+
+    def _dash_tick_realm(self) -> None:
+        """Pull license + realm node data from the REST API."""
+        if self.app.sys_client is None:
+            return
+        self.run_worker(self._dash_realm_blocking,
+                        thread=True, exclusive=False, group="dash-realm")
+
+    def _dash_realm_blocking(self) -> None:
+        sys_c = self.app.sys_client
+        if sys_c is None:
+            return
+        try:
+            license_info = drdata.get_license_info(sys_c)
+        except Exception:
+            license_info = None
+        nodes_detail: list = []
+        try:
+            for n in drdata.list_nodes(sys_c):
+                try:
+                    nd = drdata.get_node_status(sys_c, handle=n.handle)
+                except Exception:
+                    nd = drdata.NodeStatusDetail(
+                        node=n, components=[], storage=[], connectors=0,
+                    )
+                nodes_detail.append(nd)
+        except Exception:
+            pass
+        self.app.call_from_thread(self._dash_apply_realm, license_info, nodes_detail)
+
+    def _dash_apply_realm(
+        self, license_info, nodes_detail: list,
+    ) -> None:
+        # License panel: render as a label/value table.
+        body = self.query_one("#dash-license-body", Static)
+        if not license_info:
+            body.update("[red]license info unavailable[/]")
+        else:
+            lines = []
+            for f in license_info:
+                # Highlight expiry + permanence.
+                v = f.value
+                if f.label == "Mode":
+                    v = f"[green]{v}[/]" if v == "PERMANENT" else f"[yellow]{v}[/]"
+                elif f.label == "Valid until":
+                    v = f"[green]{v}[/]"
+                lines.append(f"[b]{f.label}:[/] {v}")
+            body.update("\n".join(lines))
+
+        # Node panel: walk every node and render its component + storage info.
+        nbody = self.query_one("#dash-node-body", Static)
+        if not nodes_detail:
+            nbody.update("[red]no nodes returned[/]")
+            return
+        chunks = []
+        for nd in nodes_detail:
+            n = nd.node
+            chunks.append(
+                f"[b]{n.name}[/] [dim]({n.node_type}, {n.cores} cores)[/]"
+            )
+            chunks.append(
+                f"  Status: {_color_status(n.monitor_status)}  "
+                f"AE: {_color_status(n.ae_status)}  "
+                f"Connector: {_color_status(n.connector_status)}  "
+                f"Storage: {_color_status(n.storage_status)}"
+            )
+            chunks.append(
+                f"  Threads executing: [b]{n.threads_executing}[/]   "
+                f"Mode: {n.analytic_mode}"
+            )
+            if nd.components:
+                chunks.append("  [b]Components:[/]")
+                for c in nd.components:
+                    mem_gb = c.memory_bytes / (1024 ** 3)
+                    chunks.append(
+                        f"    {c.name:<22s}  {_color_status(c.status):<26s}  "
+                        f"threads={c.threads}  mem={mem_gb:.1f} GB"
+                    )
+            if nd.storage:
+                chunks.append("  [b]Storage mounts:[/]")
+                for s in nd.storage:
+                    used_gb = s.kb_used / (1024 ** 2)
+                    avail_gb = s.kb_available / (1024 ** 2)
+                    chunks.append(
+                        f"    {s.name:<24s}  "
+                        f"used {used_gb:>6.1f} GB / avail {avail_gb:>6.1f} GB  "
+                        f"{_color_status(s.status)}"
+                    )
+            chunks.append(
+                f"  [dim]Connectors registered: {nd.connectors}[/]"
+            )
+            chunks.append("")
+        nbody.update("\n".join(chunks).rstrip())
+
+    # ---- log filter buttons ----
+    def _toggle_log_filter(self, level: str) -> None:
+        if level in self._log_filter:
+            self._log_filter.discard(level)
+        else:
+            self._log_filter.add(level)
+        # Visually mark which filters are on by toggling the button variant.
+        bmap = {"INFO": "dash-flt-info", "WARN": "dash-flt-warn", "ERROR": "dash-flt-error"}
+        bvariants = {"INFO": "primary", "WARN": "warning", "ERROR": "error"}
+        for lvl, bid in bmap.items():
+            try:
+                btn = self.query_one(f"#{bid}", Button)
+                btn.variant = bvariants[lvl] if lvl in self._log_filter else "default"
+            except Exception:
+                pass
 
 
 # ============================================================ App

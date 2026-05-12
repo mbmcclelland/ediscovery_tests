@@ -36,3 +36,7 @@ playwright>=1.40.0
 # the Playwright scripts drive the UI — captures the request bodies
 # we use to build endpoint references (docs/endpoints_v0.0[56].md).
 mitmproxy>=10.0.0
+
+# Local-host metrics for the dr-tui landing dashboard
+# (CPU / memory / network / disk IOPS / top processes).
+psutil>=5.9.0

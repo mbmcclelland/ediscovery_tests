@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.07 — 2026-05-12
+
+### Added: dr-tui landing dashboard
+
+A new **Dashboard** tab is now the initial active tab after login (for
+DRSysAdmin; hidden for org users since it requires realm-scope reads).
+Layout, top to bottom:
+
+| Pane | Source | Refresh |
+|---|---|---|
+| License | `realmManager/getLicenseInfo` — every label/value pair (Application, Mode, Issued to, Valid until, AE / Express AE / OCR core counts, …) | 30 s |
+| Realm Node — Status Details | `realmManager/listNodes` + per-node `realmManager/getNodeStatus` (components, connectors, storage mounts). Mirrors the Monitoring → Node Status panel. | 30 s |
+| System Metrics | `psutil` — CPU%, Memory%, Network rx/tx bytes-per-sec, Disk read+write IOPS. Peak + average over a rolling 60-sample window. CPU + Memory rendered as `Sparkline`. | 2 s |
+| Logs | `LogTailer` — multi-file `tail -f` of `/home/auraria/AHS/output/*.log`. Detects `INFO` / `WARN` / `ERROR` per line; filter toggles in the panel header switch each level on/off. Rotation-safe (re-opens on truncate). | 1 s |
+| Top processes | `psutil.process_iter` — top 5 by CPU%, ps-aux style (PID / USER / CPU% / MEM% / CMD). | 3 s |
+
+New module `dr_tui/metrics.py` carries the pure local-OS helpers
+(`sample_metrics`, `MetricsHistory`, `LogTailer`, `top_processes`)
+separate from the REST data layer in `dr_tui/data.py` (which gains
+`get_license_info`, `list_nodes`, `get_node_status` and the
+`LicenseField` / `NodeInfo` / `NodeStatusDetail` dataclasses).
+
+The four refresh cycles are independent `set_interval` timers so a slow
+REST round-trip doesn't stall metrics or the log stream. Realm calls
+run on a worker thread; metrics / logs / processes are local and read
+on the UI thread (cheap psutil + file-stat polls).
+
+Tests: `test_dashboard_layout` now also asserts the dashboard widget
+inventory (12 widgets) on top of the existing 12 System Settings action
+buttons.
+
 ## v0.06.1 — 2026-05-12
 
 ### Added: dr-tui — Midnight Commander-style keyboard navigation

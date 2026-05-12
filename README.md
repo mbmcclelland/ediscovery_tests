@@ -1,6 +1,6 @@
 # eDiscovery API Test Suite
 
-**Version 0.06.1**
+**Version 0.07**
 
 Automated API tests, load tests, a Textual TUI for live monitoring, and a
 reinstall toolchain for the Digital Reef eDiscovery REST API. Includes:
@@ -117,6 +117,14 @@ leaves carry **action bars** with CRUD buttons that drive modal dialogs.
  [q] quit  [r] refresh  [l] logout
 ```
 
+- **Dashboard tab** (DRSysAdmin only — hidden for `admin@training`):
+  the landing page. Shows License details, Realm Node status (matching
+  Monitoring → Node Status), live system metrics (CPU / Memory / Net /
+  Disk IOPS with sparklines + peak / avg over a rolling 60-sample
+  window), a streaming `tail -f /home/auraria/AHS/output/*.log` view
+  with INFO / WARN / ERROR filter toggles, and the top 5 CPU processes
+  from `ps aux`. Refresh cadence: metrics 2 s, logs 1 s, processes 3 s,
+  license + node 30 s.
 - **System Settings tab** (DRSysAdmin only — hidden for `admin@training`):
   Storage > Document/Index Storage Depots (full CRUD), System Storage
   Depot (read), Virus Detection (read + "Update Now"), System Users
