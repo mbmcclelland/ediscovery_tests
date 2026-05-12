@@ -18,6 +18,9 @@ Captures preserved at:
   create / update / reset / addSystemUserToOrg)
 - `/tmp/dr_proxy_capture_v06_sysgroups.json` (D6 capture — system-group
   create / update / delete + groupManager/setUsers)
+- `/tmp/dr_proxy_capture_v07_connectors.json` (v0.07.1 capture —
+  connector create / update / delete / deactivate + explore +
+  validateNFS / validateExchange)
 
 Conventions follow v0.05. Auth header is the rolling raw `sessionToken`.
 All bodies include `requestHandle: null` from a fresh client **except**
@@ -470,6 +473,141 @@ endpoints.
 
 ---
 
+## ✅ Confirmed — Connectors (v0.07.1)
+
+The last v0.07 capture gap, closed 2026-05-12. The full lifecycle for a
+connector spans **two** managers — `orgManager` for create + delete and
+`connectorManager` for validate / update / browse. There's also a
+distinct `deactivate` operation that's softer than delete (marks status
+`DEACTIVATED` instead of removing the row).
+
+| Op | Endpoint | Returns | Notes |
+|---|---|---|---|
+| Create NFS | `orgManager/createNFSConnector` | 200 + `connector` | needs `mountedConnectorMode: "CLASSIC"` |
+| Create Exchange | `orgManager/createExchangeConnector` | 200 + `connector` | Azure AD or domain-controller auth |
+| Update Exchange | `connectorManager/updateExchangeConnector` | 200 | uses `handle` |
+| Validate NFS (pre-save) | `connectorManager/validateNFSConnector` | 200 + `valid: bool` | call before create / edit |
+| Validate Exchange (pre-save) | `connectorManager/validateExchangeConnector` | 200 + `valid: bool` | likely returns FAILURE if auth bad |
+| Browse NFS path | `connectorManager/exploreConnector` | 200 + `paths[]` | used by data-area picker |
+| Get Exchange detail | `connectorManager/getExchangeConnector` | 200 + `connector` | pre-fill for edit modal |
+| Delete (true removal) | `orgManager/deleteConnector` | 204 No Content | by `handle` + `taskDescription` |
+| Deactivate (soft) | `adminOrgManager/deactivateConnectors` | 204 No Content | by **name** in a `handles` list (bulk-capable) |
+
+**Create NFS:**
+
+```json
+{
+  "requestHandle": null,
+  "contextHandle": "training",
+  "description": "d9probe description",
+  "mountedConnectorMode": "CLASSIC",
+  "name": "d9probe",
+  "readOnly": true,
+  "remoteHost": "192.168.58.128",
+  "remotePath": "/data/import"
+}
+```
+
+`exploreConnector` is what the UI fires when a user expands a path in
+the create modal:
+
+```json
+{
+  "requestHandle": null,
+  "contextHandle": "training",
+  "connectorType": "NFS",
+  "connectorName": "d9probe",
+  "remoteHost": "192.168.58.128",
+  "remotePath": "/data/import",
+  "organizationName": "training",
+  "parentPath": {"name": "/data/import", "handle": "", "leaf": false, "type": null}
+}
+```
+
+Response carries `paths: [{handle, name, leaf}, …]`.
+
+**Create Exchange:**
+
+```json
+{
+  "requestHandle": null,
+  "contextHandle": "training",
+  "description": "d9probe.",
+  "name": "MSExchange",
+  "username": null,
+  "password": "password",
+  "contentUrl": null,
+  "domainController": null,
+  "azureADEnabled": true,
+  "tenantDomain": "tennant.domain",
+  "applicationId": "appid…",
+  "applicationSecret": "appsecret…",
+  "refreshToken": null,
+  "readOnly": true
+}
+```
+
+Set `azureADEnabled: false` + populate `domainController` for on-prem
+Exchange; or `azureADEnabled: true` + tenant/app/secret for cloud.
+
+**Update Exchange** — mirrors create plus `handle`:
+
+```json
+{
+  "requestHandle": null,
+  "contextHandle": "training",
+  "handle": "0000d92e…",
+  "name": "MSExchange",
+  "description": "d9probe.",
+  "password": "password",
+  "azureADEnabled": true,
+  "tenantDomain": "tennant.domain22",
+  "applicationId": "appid…",
+  "applicationSecret": "appsecret…"
+}
+```
+
+**Delete** (true removal — returns 204):
+
+```json
+{
+  "requestHandle": null,
+  "contextHandle": "training",
+  "handle": "00004a0d…",
+  "taskDescription": "d9probe"
+}
+```
+
+**Deactivate** (soft — leaves the row but flips status to
+`DEACTIVATED`). Body sends the connector's **name** (not handle) inside
+a list — supports bulk deactivation:
+
+```json
+{
+  "requestHandle": null,
+  "contextHandle": "training",
+  "handles": ["MSExchange"]
+}
+```
+
+After deactivate, the same row stays visible in `listConnectors` with
+`status: "DEACTIVATED"`. The UI's "Delete" button calls
+`deleteConnector` — the deactivate path is only reachable via the
+admin-bulk-action menu.
+
+**Pre-call validation pattern** — UI fires before create:
+
+1. `viewManager/validateName({name, objectType: "CONNECTOR", organizationName})`
+2. `connectorManager/validate(NFS|Exchange)Connector({…fields, edit: false/true})`
+3. `orgManager/create(NFS|Exchange)Connector(…)`
+
+The doc says `updateNFSConnector` exists by symmetry but wasn't
+exercised in this capture pass — likely
+`connectorManager/updateNFSConnector` with a body mirroring create +
+`handle`. Future v0.07.2 capture if needed.
+
+---
+
 ## ✅ Confirmed — Realm Settings (bonus)
 
 These weren't on the original ask but were captured in the same session.
@@ -490,9 +628,8 @@ Useful for a future "Realm Settings" tab.
 
 ## ❓ Still missing (capture gaps)
 
-| Feature | Why blocked |
-|---|---|
-| Connector edit / delete | Not in any capture pass yet |
+(All v0.06/v0.07 gaps closed. NFS update + Exchange domain-controller
+auth aren't exercised yet but are documented by symmetry.)
 
 **Closed in D5 (2026-05-12):**
 
@@ -514,6 +651,25 @@ Useful for a future "Realm Settings" tab.
   for delete.
 - ✅ `groupManager/setUsers` — bulk-replace group membership; captured
   bonus from the D6 edit gesture.
+
+**Closed in v0.07.1 (2026-05-12):**
+
+- ✅ `orgManager/createNFSConnector` / `createExchangeConnector` —
+  connector create paths for the two main flavours.
+- ✅ `connectorManager/updateExchangeConnector` — edit path. NFS
+  update is presumed to mirror it (`connectorManager/updateNFSConnector`)
+  but wasn't exercised in this capture.
+- ✅ `orgManager/deleteConnector` (returns 204) — true row removal by
+  `handle` + `taskDescription`.
+- ✅ `adminOrgManager/deactivateConnectors` (returns 204) — soft delete
+  that flips `status` to `DEACTIVATED` instead of removing the row.
+  Body takes the connector **name** in a `handles` list (bulk-capable).
+- ✅ `connectorManager/validateNFSConnector` /
+  `validateExchangeConnector` — pre-create validation hits.
+- ✅ `connectorManager/exploreConnector` — path-picker for the create
+  modal.
+- ✅ `connectorManager/getExchangeConnector` — pre-fill source for the
+  edit modal.
 
 Decision for v0.06 ship scope: build CRUD with the confirmed endpoints
 above; surface "edit user / group" as v0.06.1 capture-gap stubs. Reset-pw

@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.07.1 — 2026-05-12
+
+### Added: Connector capture (last v0.06/v0.07 gap closed)
+
+Manual mitmproxy capture during a UI Create → Edit → Delete →
+Deactivate cycle pinned down every connector-CRUD endpoint:
+
+| Op | Endpoint | Notes |
+|---|---|---|
+| Create NFS | `orgManager/createNFSConnector` | `mountedConnectorMode: "CLASSIC"` |
+| Create Exchange | `orgManager/createExchangeConnector` | Azure-AD or domain-controller auth |
+| Update Exchange | `connectorManager/updateExchangeConnector` | uses `handle` |
+| Get Exchange detail | `connectorManager/getExchangeConnector` | pre-fill for edit modal |
+| Validate NFS | `connectorManager/validateNFSConnector` | pre-save uniqueness + reachability |
+| Validate Exchange | `connectorManager/validateExchangeConnector` | pre-save |
+| Browse NFS paths | `connectorManager/exploreConnector` | path picker |
+| Delete (true removal) | `orgManager/deleteConnector` | returns 204; by `handle` + `taskDescription` |
+| Deactivate (soft) | `adminOrgManager/deactivateConnectors` | returns 204; takes connector **name** in a `handles` list |
+
+Big finding: **delete and deactivate are separate operations**.
+`deleteConnector` removes the row outright; `deactivateConnectors`
+flips `status` to `DEACTIVATED` but keeps the row visible. The capture
+also confirmed `deactivateConnectors` takes the connector's *name* (not
+handle) in a bulk-capable list.
+
+Capture saved at `/tmp/dr_proxy_capture_v07_connectors.json`. Endpoints
+documented in `docs/endpoints_v0.06.md` (Connectors section);
+`Still missing` table now empty for v0.07.
+
+### Added: dr-tui — Deactivate button on the Connectors panel
+
+`Organizations → <org> → Connectors` now carries a warning-coloured
+**Deactivate** button above the table. Click → confirmation modal →
+`adminOrgManager/deactivateConnectors`. Status flips to `DEACTIVATED`
+and the panel auto-refreshes. Already-deactivated rows are a no-op
+with a friendly status-bar hint.
+
+Backed by two new fetchers in `dr_tui/data.py`:
+
+- `deactivate_connectors(client, *, org, names)` — soft delete.
+- `delete_connector(client, *, org, handle, name)` — true removal
+  (not yet surfaced in the UI; ready for a future Delete button).
+
+Both verified live: created `d9deact` NFS connector → deactivated
+(status: `DEACTIVATED`) → deleted (row gone).
+
 ## v0.07 — 2026-05-12
 
 ### Added: distribution / RPM packaging

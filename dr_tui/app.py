@@ -657,6 +657,8 @@ class DashboardScreen(Screen):
     _sys_users_rows: list
     _sys_groups_rows: list
     _system_roles: list
+    # Connector row cache (Org panel → cursor → Connector).
+    _connectors_rows: list
     # Last-read virus defs — used by the "Update Now" handler to preserve
     # enabled/frequency on the trigger call.
     _virus_last: Optional["drdata.VirusDefs"]
@@ -809,6 +811,9 @@ class DashboardScreen(Screen):
                                             zebra_stripes=True, cursor_type="row")
                         with Vertical(id="org-connectors-view"):
                             yield Static("Connectors", classes="panel-title")
+                            with Horizontal(classes="action-bar"):
+                                yield Button("Deactivate", id="conn-deactivate",
+                                             variant="warning")
                             yield DataTable(id="connectors-table",
                                             zebra_stripes=True, cursor_type="row")
                         with Vertical(id="org-storage-view"):
@@ -823,6 +828,7 @@ class DashboardScreen(Screen):
         self._sys_users_rows = []
         self._sys_groups_rows = []
         self._system_roles = []
+        self._connectors_rows = []
         self._virus_last = None
         self._metrics_prev = None
         self._metrics_history = drmetrics.MetricsHistory(max_points=60)
@@ -1210,6 +1216,8 @@ class DashboardScreen(Screen):
         t.clear()
         for c in connectors:
             t.add_row(c.name, c.type, c.mode, c.host, c.path, c.status)
+        # Cache row order so the Deactivate action can resolve cursor → connector.
+        self._connectors_rows = list(connectors)
         self._update_status_bar(extra=f"connectors=[yellow]{len(connectors)}[/]")
 
     def _apply_org_storage(self, rows: list[drdata.OrgStorageRow]) -> None:
@@ -1293,6 +1301,8 @@ class DashboardScreen(Screen):
             self._toggle_log_filter("WARN")
         elif bid == "dash-flt-error":
             self._toggle_log_filter("ERROR")
+        elif bid == "conn-deactivate":
+            self._conn_confirm_deactivate()
 
     def _depot_selected(self, table_id: str) -> Optional[drdata.StorageDepot]:
         rows = self._depots_by_table.get(table_id, [])
@@ -1764,6 +1774,82 @@ class DashboardScreen(Screen):
             return
         if self.selected_kind == "sys-virus":
             self.app.call_from_thread(self._load_view, "sys-virus", "")
+
+    # ---------------------------------------------------------- ACTION: connector deactivate
+    def _conn_selected(self) -> Optional[drdata.Connector]:
+        if not self._connectors_rows:
+            return None
+        try:
+            t = self.query_one("#connectors-table", DataTable)
+            idx = t.cursor_row
+        except Exception:
+            return None
+        if idx is None or idx < 0 or idx >= len(self._connectors_rows):
+            return None
+        return self._connectors_rows[idx]
+
+    def _conn_confirm_deactivate(self) -> None:
+        """Confirmation modal for the soft-delete (deactivate) path.
+
+        Deactivate is reversible-feeling (the row stays, status flips to
+        DEACTIVATED), so a single-line modal is enough — no full red
+        warning UX.
+        """
+        conn = self._conn_selected()
+        if conn is None:
+            self._post_status("select a connector row first")
+            return
+        if (conn.status or "").upper() == "DEACTIVATED":
+            self._post_status(f"connector {conn.name} is already DEACTIVATED")
+            return
+        self.app.push_screen(
+            ConfirmModal(
+                title="Deactivate connector?",
+                message=(
+                    f"Mark connector [b]{conn.name}[/] ({conn.type}) as "
+                    f"[yellow]DEACTIVATED[/]?\n\n"
+                    "The row stays visible but the connector stops "
+                    "responding to new requests. Use Delete in the UI "
+                    "for true removal."
+                ),
+                confirm_label="Deactivate",
+            ),
+            lambda ok: self._conn_after_confirm(ok, conn),
+        )
+
+    def _conn_after_confirm(self, ok: bool, conn: drdata.Connector) -> None:
+        if not ok:
+            return
+        self._post_status(f"connector: deactivating {conn.name}…")
+        self.run_worker(
+            lambda: self._conn_deactivate_blocking(conn),
+            thread=True, exclusive=False, group="conn-write",
+        )
+
+    def _conn_deactivate_blocking(self, conn: drdata.Connector) -> None:
+        """Worker: call deactivateConnectors, then refresh."""
+        org = self.selected_org or self.app.target_org
+        client = self._client_for_org(org)
+        if client is None:
+            self._post_status("deactivate: no session")
+            return
+        try:
+            drdata.deactivate_connectors(client, org=org, names=[conn.name])
+            self.app.call_from_thread(
+                self._post_status_ok,
+                f"connector deactivated: {conn.name}",
+            )
+        except APIError as e:
+            self._post_status(
+                f"deactivate: {e.error_code or e.status}: {e.extended_status[:60]}"
+            )
+            return
+        except Exception as e:
+            self._post_status(f"deactivate error: {e!r}")
+            return
+        # Refresh the connectors view so the status flips.
+        if self.selected_kind == "org-connectors":
+            self.app.call_from_thread(self._load_view, "org-connectors", org)
 
     # ---------------------------------------------------------- status bar
     def _update_status_bar(self, extra: str = "") -> None:

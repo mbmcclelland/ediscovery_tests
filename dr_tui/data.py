@@ -201,6 +201,48 @@ def list_connectors(client: EDiscoveryClient, org: str) -> list[Connector]:
     return out
 
 
+def deactivate_connectors(
+    client: EDiscoveryClient, *, org: str, names: list[str],
+) -> dict:
+    """Soft-delete one or more connectors — sets status=DEACTIVATED.
+
+    Maps to `adminOrgManager/deactivateConnectors` (returns 204; the
+    D1 fix in `api_client.post()` yields `{}`). Note the body sends
+    connector **names** in a `handles` list, not the actual handles —
+    quirky API choice, but that's what the captured shape uses.
+
+    The row stays visible in `listConnectors` afterwards with
+    `status: "DEACTIVATED"` — use `delete_connector()` for true removal.
+    """
+    return client.post(
+        "adminOrgManager/deactivateConnectors",
+        extra_body={
+            "contextHandle": org,
+            "handles": list(names),
+        },
+    )
+
+
+def delete_connector(
+    client: EDiscoveryClient, *, org: str, handle: str, name: str,
+) -> dict:
+    """Hard-delete a connector — removes the row entirely (returns 204).
+
+    Maps to `orgManager/deleteConnector`. `taskDescription` is just a
+    human-readable label for the async-delete job that surfaces in
+    `realmManager/listDeletePendingProjects`-style lists; the UI fills
+    it with the connector's name.
+    """
+    return client.post(
+        "orgManager/deleteConnector",
+        extra_body={
+            "contextHandle": org,
+            "handle": handle,
+            "taskDescription": name,
+        },
+    )
+
+
 def list_organizations_sys(client: EDiscoveryClient) -> list[OrgInfo]:
     """DRSysAdmin: list every organization in the realm."""
     resp = client.post(
