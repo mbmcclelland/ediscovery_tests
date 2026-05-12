@@ -210,6 +210,8 @@ class DepotFormModal(ModalScreen[Optional[dict]]):
             with Horizontal(id="depot-buttons"):
                 yield Button.success("Save", id="depot-save")
                 yield Button("Cancel", id="depot-cancel")
+            yield Static("[dim][Enter] save · [Esc] cancel · [Tab] next field[/]",
+                         classes="modal-hint")
 
     def on_mount(self) -> None:
         # Focus first editable field — name for new, fqdn for edit.
@@ -221,6 +223,10 @@ class DepotFormModal(ModalScreen[Optional[dict]]):
             self.dismiss(None)
         elif evt.button.id == "depot-save":
             self._save()
+
+    def on_input_submitted(self, _evt: Input.Submitted) -> None:
+        """Enter inside any Input field triggers save."""
+        self._save()
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -339,6 +345,8 @@ class UserFormModal(ModalScreen[Optional[dict]]):
             with Horizontal(id="user-buttons"):
                 yield Button.success("Save", id="user-save")
                 yield Button("Cancel", id="user-cancel")
+            yield Static("[dim][Enter] save · [Esc] cancel · [Tab] next field[/]",
+                         classes="modal-hint")
 
     def on_mount(self) -> None:
         target = "#user-email" if self._existing else "#user-username"
@@ -349,6 +357,9 @@ class UserFormModal(ModalScreen[Optional[dict]]):
             self.dismiss(None)
         elif evt.button.id == "user-save":
             self._save()
+
+    def on_input_submitted(self, _evt: Input.Submitted) -> None:
+        self._save()
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -415,6 +426,8 @@ class ResetPasswordModal(ModalScreen[Optional[dict]]):
             with Horizontal(id="reset-buttons"):
                 yield Button.success("Reset", id="reset-ok")
                 yield Button("Cancel", id="reset-cancel")
+            yield Static("[dim][Enter] reset · [Esc] cancel · [Tab] next field[/]",
+                         classes="modal-hint")
 
     def on_mount(self) -> None:
         self.query_one("#reset-new", Input).focus()
@@ -423,16 +436,22 @@ class ResetPasswordModal(ModalScreen[Optional[dict]]):
         if evt.button.id == "reset-cancel":
             self.dismiss(None)
         elif evt.button.id == "reset-ok":
-            new = self.query_one("#reset-new", Input).value
-            conf = self.query_one("#reset-confirm", Input).value
-            err = self.query_one("#reset-error", Static)
-            if not new:
-                err.update("[red]Password is required.[/]")
-                return
-            if new != conf:
-                err.update("[red]Passwords do not match.[/]")
-                return
-            self.dismiss({"new_password": new})
+            self._submit()
+
+    def on_input_submitted(self, _evt: Input.Submitted) -> None:
+        self._submit()
+
+    def _submit(self) -> None:
+        new = self.query_one("#reset-new", Input).value
+        conf = self.query_one("#reset-confirm", Input).value
+        err = self.query_one("#reset-error", Static)
+        if not new:
+            err.update("[red]Password is required.[/]")
+            return
+        if new != conf:
+            err.update("[red]Passwords do not match.[/]")
+            return
+        self.dismiss({"new_password": new})
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -489,6 +508,8 @@ class GroupFormModal(ModalScreen[Optional[dict]]):
             with Horizontal(id="group-buttons"):
                 yield Button.success("Save", id="group-save")
                 yield Button("Cancel", id="group-cancel")
+            yield Static("[dim][Enter] save · [Esc] cancel · [Tab] next field[/]",
+                         classes="modal-hint")
 
     def on_mount(self) -> None:
         self.query_one("#group-name", Input).focus()
@@ -498,6 +519,9 @@ class GroupFormModal(ModalScreen[Optional[dict]]):
             self.dismiss(None)
         elif evt.button.id == "group-save":
             self._save()
+
+    def on_input_submitted(self, _evt: Input.Submitted) -> None:
+        self._save()
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -529,13 +553,73 @@ class GroupFormModal(ModalScreen[Optional[dict]]):
         })
 
 
+class HelpModal(ModalScreen[None]):
+    """F1 — keyboard reference. Dismiss with any key."""
+
+    BINDINGS = [
+        Binding("escape,f1,q,enter,space", "dismiss", "Close", show=False),
+    ]
+
+    HELP_TEXT = (
+        "[b]dr-tui — Keyboard reference[/]\n\n"
+        "[b cyan]Global[/]\n"
+        "  F1            this help screen\n"
+        "  F5            refresh current view\n"
+        "  F10  /  q     quit\n"
+        "  Tab           cycle focus (tree ↔ table)\n"
+        "  1  /  2       jump to System Settings / Organizations\n"
+        "  l             logout (back to login)\n\n"
+        "[b cyan]Within a view (System Settings)[/]\n"
+        "  F7            New entity (depot, user, group)\n"
+        "  F4            Edit selected row\n"
+        "  F8            Delete selected row\n"
+        "  F6            Reset password (on Users) / Update Now (on Virus)\n\n"
+        "[b cyan]In tree[/]\n"
+        "  ↑ / ↓         move cursor\n"
+        "  Enter / Space expand / collapse / select leaf\n\n"
+        "[b cyan]In table[/]\n"
+        "  ↑ / ↓         move row cursor\n"
+        "  PgUp / PgDn   page-scroll\n"
+        "  Home / End    first / last row\n\n"
+        "[b cyan]In a form modal[/]\n"
+        "  Tab           next field / button\n"
+        "  Enter         save (when in an Input field)\n"
+        "  Esc           cancel and close\n\n"
+        "[dim]Press any key to close.[/]"
+    )
+
+    def compose(self) -> ComposeResult:
+        with Container(id="help-card"):
+            yield Static(self.HELP_TEXT, id="help-body")
+
+    def on_key(self, evt) -> None:
+        # Any key dismisses (the BINDINGS catch common ones; this is a
+        # safety net for keys not in the bindings list).
+        self.dismiss(None)
+
+
 # ============================================================ Dashboard screen
 class DashboardScreen(Screen):
+    # Midnight Commander-style F-key action bar. Actions dispatch on the
+    # currently-selected leaf (`selected_kind`) so the same F-key drives
+    # depots, users, groups depending on context. Legacy single-letter
+    # aliases (`q`/`r`/`l`) stay as hidden bindings so old muscle memory
+    # still works.
     BINDINGS = [
-        Binding("q", "app.quit", "Quit"),
-        Binding("r", "refresh_now", "Refresh"),
-        Binding("l", "logout", "Logout"),
-        Binding("tab", "focus_next", "Cycle panel", show=False),
+        Binding("f1",  "show_help",   "Help"),
+        Binding("f4",  "ctx_edit",    "Edit"),
+        Binding("f5",  "refresh_now", "Refresh"),
+        Binding("f6",  "ctx_reset",   "Reset PW"),
+        Binding("f7",  "ctx_new",     "New"),
+        Binding("f8",  "ctx_delete",  "Delete"),
+        Binding("f10", "app.quit",    "Quit"),
+        Binding("tab", "focus_next",  "Cycle pane"),
+        Binding("1",   "switch_tab('tab-sys')",  "Sys", show=False),
+        Binding("2",   "switch_tab('tab-orgs')", "Orgs", show=False),
+        # Legacy aliases — kept for muscle memory but hidden from footer.
+        Binding("q", "app.quit",     "Quit",    show=False),
+        Binding("r", "refresh_now",  "Refresh", show=False),
+        Binding("l", "logout",       "Logout",  show=False),
     ]
 
     last_status: reactive[str] = reactive("")
@@ -1593,6 +1677,100 @@ class DashboardScreen(Screen):
         # Only refresh when a leaf is selected — avoid hammering the API.
         if self.selected_kind:
             self._load_view(self.selected_kind, self.selected_org)
+
+    def action_switch_tab(self, tab_id: str) -> None:
+        """Jump to a named tab (TabPane id)."""
+        try:
+            self.query_one("#main-tabs", TabbedContent).active = tab_id
+        except Exception:
+            pass
+
+    # ---------------------------------------------------------- F-key dispatch
+    # Each F-key resolves the currently-selected leaf and forwards to the
+    # matching CRUD entry point. Unrelated leaves get a status hint rather
+    # than failing silently.
+
+    def action_ctx_new(self) -> None:
+        kind = self.selected_kind
+        if kind == "sys-doc-depots":
+            self._depot_open_new("DOCUMENT_STORE")
+        elif kind == "sys-idx-depots":
+            self._depot_open_new("INDEX_STORE")
+        elif kind == "sys-users":
+            self._sys_user_open_new()
+        elif kind == "sys-groups":
+            self._sys_group_open_new()
+        else:
+            self._post_status("[F7] New — not available on this view")
+
+    def action_ctx_edit(self) -> None:
+        kind = self.selected_kind
+        if kind == "sys-doc-depots":
+            d = self._depot_selected("sys-doc-depots-table")
+            if d is None:
+                self._post_status("select a depot row first"); return
+            self._depot_open_edit("DOCUMENT_STORE", d)
+        elif kind == "sys-idx-depots":
+            d = self._depot_selected("sys-idx-depots-table")
+            if d is None:
+                self._post_status("select a depot row first"); return
+            self._depot_open_edit("INDEX_STORE", d)
+        elif kind == "sys-users":
+            u = self._sys_user_selected()
+            if u is None:
+                self._post_status("select a user row first"); return
+            self._sys_user_open_edit(u)
+        elif kind == "sys-groups":
+            g = self._sys_group_selected()
+            if g is None:
+                self._post_status("select a group row first"); return
+            self._sys_group_open_edit(g)
+        else:
+            self._post_status("[F4] Edit — not available on this view")
+
+    def action_ctx_delete(self) -> None:
+        kind = self.selected_kind
+        if kind == "sys-doc-depots":
+            d = self._depot_selected("sys-doc-depots-table")
+            if d is None:
+                self._post_status("select a depot row first"); return
+            self._depot_confirm_delete(d)
+        elif kind == "sys-idx-depots":
+            d = self._depot_selected("sys-idx-depots-table")
+            if d is None:
+                self._post_status("select a depot row first"); return
+            self._depot_confirm_delete(d)
+        elif kind == "sys-users":
+            u = self._sys_user_selected()
+            if u is None:
+                self._post_status("select a user row first"); return
+            self._sys_user_confirm_delete(u)
+        elif kind == "sys-groups":
+            g = self._sys_group_selected()
+            if g is None:
+                self._post_status("select a group row first"); return
+            self._sys_group_confirm_delete(g)
+        else:
+            self._post_status("[F8] Delete — not available on this view")
+
+    def action_ctx_reset(self) -> None:
+        """F6 — repurposed as Reset Password on the users panel; on the
+        Virus Detection panel it triggers an update-now (the only other
+        leaf with a meaningful 'refresh-ish' action)."""
+        kind = self.selected_kind
+        if kind == "sys-users":
+            u = self._sys_user_selected()
+            if u is None:
+                self._post_status("select a user row first"); return
+            self._sys_user_open_reset(u)
+        elif kind == "sys-virus":
+            self._virus_trigger_update()
+        else:
+            self._post_status("[F6] Reset PW — not available on this view")
+
+    def action_show_help(self) -> None:
+        """F1 — pop the help modal showing keybindings."""
+        self.app.push_screen(HelpModal())
 
 
 # ============================================================ App

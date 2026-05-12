@@ -1,6 +1,6 @@
 # eDiscovery API Test Suite
 
-**Version 0.06**
+**Version 0.06.1**
 
 Automated API tests, load tests, a Textual TUI for live monitoring, and a
 reinstall toolchain for the Digital Reef eDiscovery REST API. Includes:
@@ -135,6 +135,27 @@ etc.
 Auto-refresh ticks every 5 s but only re-fetches the currently-visible
 leaf (no API hammering). DRSysAdmin drill-down into a non-default org
 transparently calls `realmManager/initializeOrganization` first.
+
+### Keyboard navigation (Midnight Commander-style)
+
+The footer renders a live keybinding bar. Press **F1** any time for the
+in-app reference card.
+
+| Key | Action |
+|---|---|
+| **F1** | Help / keyboard reference |
+| **F4** | Edit the selected row |
+| **F5** | Refresh current view |
+| **F6** | Reset Password (on Users) / Update Now (on Virus) |
+| **F7** | New entity (depot / user / group, depending on view) |
+| **F8** | Delete the selected row |
+| **F10** | Quit |
+| **Tab** | Cycle focus (tree ↔ table) |
+| **1 / 2** | Jump to System Settings / Organizations tab |
+| **↑ ↓ Enter** | Native tree + table navigation |
+| **Esc** | Cancel modal |
+| **Enter** (in form field) | Save form |
+| **q / r / l** | Hidden aliases — quit / refresh / logout |
 
 ### Endpoints (sample — full list in `docs/endpoints_v0.05.md`)
 

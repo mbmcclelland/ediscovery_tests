@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.06.1 — 2026-05-12
+
+### Added: dr-tui — Midnight Commander-style keyboard navigation
+
+The footer now renders an F-key action bar that drives every CRUD entry
+point:
+
+| Key | Action |
+|---|---|
+| F1 | `HelpModal` — in-app keyboard reference |
+| F4 | Edit selected row (depot / user / group) |
+| F5 | Refresh current view |
+| F6 | Reset Password (on Users) / Update Now (on Virus) |
+| F7 | New entity (depot / user / group) |
+| F8 | Delete selected row |
+| F10 | Quit |
+| Tab | Cycle focus (tree ↔ table) |
+| 1 / 2 | Jump to System Settings / Organizations tab |
+
+The F-keys resolve to the right CRUD handler by inspecting
+`selected_kind`, so the same key works across depots / users / groups.
+Form modals now accept Enter inside any Input field as Save (via
+`on_input_submitted`), and a `[Enter] save · [Esc] cancel · [Tab] next`
+hint footer renders inside each modal card. Legacy `q` / `r` / `l`
+remain as hidden aliases for muscle memory.
+
+Coverage: `tests/test_dr_tui_dashboard_layout.py` adds
+`test_keybindings` (F1 opens help; 1 / 2 switch tabs; F7 on a no-leaf
+view is graceful) and `test_enter_saves_form_modal` (Enter in a
+DepotFormModal Input fires save). 6 / 6 pilot tests passing.
+
 ## v0.06 — 2026-05-12
 
 ### Summary

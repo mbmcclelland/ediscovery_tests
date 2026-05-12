@@ -110,11 +110,104 @@ async def _walk_dashboard() -> None:
         # If we got here without an exception, the no-row guards work.
 
 
+async def _walk_keybindings() -> None:
+    """Verify F-key dispatch routes to the right CRUD entry points."""
+    app = _HarnessApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        for _ in range(20):
+            if isinstance(app.screen, DashboardScreen):
+                break
+            await pilot.pause()
+        else:
+            raise AssertionError("DashboardScreen never mounted")
+        screen = app.screen
+
+        # F1 → HelpModal pops on top.
+        await pilot.press("f1")
+        await pilot.pause()
+        from dr_tui.app import HelpModal
+        assert isinstance(app.screen, HelpModal), \
+            f"F1 should open HelpModal, got {type(app.screen).__name__}"
+        # Any key dismisses.
+        await pilot.press("escape")
+        await pilot.pause()
+        # Back to dashboard.
+        for _ in range(10):
+            if isinstance(app.screen, DashboardScreen):
+                break
+            await pilot.pause()
+        assert isinstance(app.screen, DashboardScreen)
+
+        # Tab switching: 1 → System Settings, 2 → Organizations.
+        from textual.widgets import TabbedContent as _Tabs
+        tabs = screen.query_one("#main-tabs", _Tabs)
+        await pilot.press("2")
+        await pilot.pause()
+        assert tabs.active == "tab-orgs", f"expected tab-orgs, got {tabs.active}"
+        await pilot.press("1")
+        await pilot.pause()
+        assert tabs.active == "tab-sys", f"expected tab-sys, got {tabs.active}"
+
+        # F7 (New) with no selected leaf → status hint, no crash.
+        screen.selected_kind = ""
+        await pilot.press("f7")
+        await pilot.pause()
+        # No exception means dispatch handled the no-context case.
+
+
+async def _walk_enter_saves_depot() -> None:
+    """Enter inside a DepotFormModal Input triggers save."""
+    from dr_tui.app import DepotFormModal
+    from textual.app import App as _App
+    from textual.app import ComposeResult as _CR
+
+    class _H(_App):
+        def compose(self) -> _CR:
+            yield Static("h")
+
+    app = _H()
+    async with app.run_test() as pilot:
+        holder: list = []
+        app.push_screen(
+            DepotFormModal(use_type="DOCUMENT_STORE"),
+            lambda r: holder.append(r),
+        )
+        await pilot.pause()
+        from textual.widgets import Input as _In
+        app.screen.query_one("#depot-name",   _In).value = "enterSmoke"
+        app.screen.query_one("#depot-fqdn",   _In).value = "10.0.0.9"
+        app.screen.query_one("#depot-export", _In).value = "/srv/e"
+        await pilot.pause()
+        # Focus an Input field and press Enter — should fire on_input_submitted.
+        app.screen.query_one("#depot-name", _In).focus()
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        assert holder, "Enter inside Input field did not trigger save"
+        assert holder[0] is not None
+        assert holder[0]["name"] == "enterSmoke"
+
+
 def test_dashboard_layout() -> None:
     """pytest entry — full DashboardScreen action-bar inventory."""
     asyncio.run(_walk_dashboard())
 
 
+def test_keybindings() -> None:
+    """pytest entry — F-keys + tab-switch keys dispatch correctly."""
+    asyncio.run(_walk_keybindings())
+
+
+def test_enter_saves_form_modal() -> None:
+    """pytest entry — Enter inside a form-modal Input field saves."""
+    asyncio.run(_walk_enter_saves_depot())
+
+
 if __name__ == "__main__":
     test_dashboard_layout()
     print("[D8 dashboard pilot smoke: PASS]")
+    test_keybindings()
+    print("[keyboard nav pilot smoke: PASS]")
+    test_enter_saves_form_modal()
+    print("[enter-to-save pilot smoke: PASS]")

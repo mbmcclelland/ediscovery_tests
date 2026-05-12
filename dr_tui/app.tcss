@@ -306,3 +306,28 @@ GroupFormModal {
     margin: 0 1;
     min-width: 12;
 }
+
+/* ---------------------------------------------------------- modal hints */
+.modal-hint {
+    content-align: center middle;
+    color: grey;
+    margin-top: 1;
+    height: 1;
+}
+
+/* ---------------------------------------------------------- help modal */
+HelpModal {
+    align: center middle;
+}
+
+#help-card {
+    width: 70;
+    height: auto;
+    padding: 1 2;
+    border: round $accent;
+    background: $panel;
+}
+
+#help-body {
+    padding: 0 1;
+}
