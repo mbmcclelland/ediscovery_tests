@@ -1,0 +1,7 @@
+# Minimal pyproject.toml — keeps `python -m build` working with the
+# legacy setup.cfg metadata. All package definitions live in setup.cfg
+# / setup.py so existing tooling (pip install -e ., rpmbuild's wheel
+# step, etc.) continues to work unchanged.
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"

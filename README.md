@@ -22,9 +22,37 @@ Built with **pytest + requests** for functional tests, **Locust** for load testi
 - Access to the Digital Reef eDiscovery server
 - For `dr-load` full monitoring: Postgres peer auth (`sudo -u auraria psql`) and a readable log directory
 
-### Install the `dr-load` CLI (recommended)
+### Distribution (production / lab hosts) — RPM
 
-This installs `dr-load` as a console script in your virtualenv:
+For Rocky/RHEL/Fedora hosts, build a self-contained RPM that drops a
+venv at `/opt/dr-tools/` and launchers at `/usr/bin/{dr-tui,dr-load}`.
+Full build + install instructions in
+[`packaging/README.md`](packaging/README.md). TL;DR:
+
+```bash
+cd packaging
+make rpm                            # builds dr-tools-VERSION-1.el9.x86_64.rpm
+sudo dnf install ./rpmbuild/RPMS/x86_64/dr-tools-*.rpm
+```
+
+The wheelhouse (~23 MB of pre-built dependency wheels) is bundled
+inside the SRPM, so the resulting binary RPM is **offline-installable**
+on air-gapped lab hosts. The shipped venv is independent of system
+Python — `dr-tools` co-exists with any other Python apps on the box.
+
+### Quick install — shell installer
+
+For dev hosts where you don't want to build an RPM:
+
+```bash
+# From a checkout:
+bash packaging/install.sh
+
+# Or one-liner (requires internet):
+curl -sSL https://github.com/mbmcclelland/ediscovery_tests/raw/v0.06/packaging/install.sh | bash
+```
+
+### Editable install for development
 
 ```bash
 git clone <repo-url> ediscovery_tests
@@ -33,12 +61,14 @@ cd ediscovery_tests
 python3 -m venv .venv
 source .venv/bin/activate
 
-pip install -e .
+pip install -e .          # runtime deps
+pip install -e .[dev]     # + pytest + playwright + mitmproxy
 ```
 
 Verify:
 
 ```bash
+dr-tui --help        # launches the Textual login screen
 dr-load --help
 ```
 

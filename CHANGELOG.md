@@ -2,6 +2,41 @@
 
 ## v0.07 — 2026-05-12
 
+### Added: distribution / RPM packaging
+
+`packaging/` directory carries everything needed to ship a self-contained
+`dr-tools` RPM:
+
+| File | Role |
+|---|---|
+| `packaging/dr-tools.spec` | RPM spec — venv at `/opt/dr-tools/venv`, launchers at `/usr/bin/{dr-tui,dr-load}`, `%post` env-example pointer |
+| `packaging/Makefile` | `make wheels` / `make tarball` / `make srpm` / `make rpm` / `make install` / `make clean` |
+| `packaging/install.sh` | Bash one-shot installer (alternative to RPM for dev hosts) |
+| `packaging/README.md` | Build + distribution guide |
+
+**Build path:** `cd packaging && make rpm` produces
+`rpmbuild/RPMS/x86_64/dr-tools-VERSION-1.el9.x86_64.rpm` (~20 MB) plus a
+~24 MB SRPM. The SRPM bundles a pre-built **wheelhouse** of every
+runtime dependency, so the binary RPM is **offline-installable** on
+air-gapped lab hosts. Verified end-to-end:
+
+```
+$ sudo dnf install ./dr-tools-0.07-1.el9.x86_64.rpm
+$ dr-tui          # launches the login screen from the installed venv
+$ dr-load --help  # prints Typer help
+```
+
+**Supporting changes:**
+
+- `setup.cfg`: renamed package `ediscovery-tests` → `dr-tools`, moved
+  `pytest` / `playwright` / `mitmproxy` to `extras_require[dev]` so the
+  install_requires set is the minimal runtime closure. Added
+  `package_data = dr_tui/*.tcss` (without this `pip install` skipped
+  the Textual stylesheet).
+- `pyproject.toml`: new — minimal PEP 517 build-system declaration so
+  `python -m build` + `pip wheel` work cleanly.
+- `.gitignore`: ignores `build/`, `dist/`, `packaging/rpmbuild/`.
+
 ### Added: dr-tui landing dashboard
 
 A new **Dashboard** tab is now the initial active tab after login (for
