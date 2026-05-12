@@ -183,6 +183,45 @@ async def _walk_keybindings() -> None:
         # No exception means dispatch handled the no-context case.
 
 
+async def _walk_help_pane() -> None:
+    """F2 toggles the docs side-pane on/off and updates content."""
+    app = _HarnessApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        for _ in range(20):
+            if isinstance(app.screen, DashboardScreen):
+                break
+            await pilot.pause()
+        else:
+            raise AssertionError("DashboardScreen never mounted")
+        screen = app.screen
+
+        # Side panes exist and are hidden initially.
+        from textual.widgets import Markdown as _Md
+        sys_pane = screen.query_one("#sys-help-pane", _Md)
+        orgs_pane = screen.query_one("#orgs-help-pane", _Md)
+        assert sys_pane.display is False
+        assert orgs_pane.display is False
+
+        # Select a leaf that has help content.
+        screen.selected_kind = "sys-mail"
+
+        # F2 → show panes.
+        await pilot.press("f2")
+        await pilot.pause()
+        assert sys_pane.display is True
+        assert orgs_pane.display is True
+        # Content should mention the mail-server topic.
+        # (Markdown widget renders to internal nodes — we just verify the
+        # action ran without exception.)
+
+        # F2 again → hide.
+        await pilot.press("f2")
+        await pilot.pause()
+        assert sys_pane.display is False
+        assert orgs_pane.display is False
+
+
 async def _walk_enter_saves_depot() -> None:
     """Enter inside a DepotFormModal Input triggers save."""
     from dr_tui.app import DepotFormModal
@@ -229,6 +268,11 @@ def test_keybindings() -> None:
 def test_enter_saves_form_modal() -> None:
     """pytest entry — Enter inside a form-modal Input field saves."""
     asyncio.run(_walk_enter_saves_depot())
+
+
+def test_help_pane_toggle() -> None:
+    """pytest entry — F2 toggles the docs side-pane on/off."""
+    asyncio.run(_walk_help_pane())
 
 
 if __name__ == "__main__":

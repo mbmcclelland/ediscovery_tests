@@ -1,0 +1,128 @@
+{
+  "org-admins": {
+    "file": "org-admins.md",
+    "label": "Organization Administrators",
+    "source_pdf": "Add or Edit an Organization Use - Unknown.pdf",
+    "title": "Add or Edit an Organization User",
+    "view_id": "org-admins"
+  },
+  "org-completed": {
+    "file": "org-completed.md",
+    "label": "Monitor Status \u2014 Completed Jobs",
+    "source_pdf": "Monitor Status for Items Used b - Unknown.pdf",
+    "title": "Monitor Status for Items Used by Your",
+    "view_id": "org-completed"
+  },
+  "org-connectors": {
+    "file": "org-connectors.md",
+    "label": "Create or Edit a Connector",
+    "source_pdf": "Create or Edit a Connector - Unknown.pdf",
+    "title": "Create or Edit a Connector",
+    "view_id": "org-connectors"
+  },
+  "org-groups": {
+    "file": "org-groups.md",
+    "label": "Add or Edit a Group",
+    "source_pdf": "Add or Edit a Group - Unknown.pdf",
+    "title": "Add or Edit a Group",
+    "view_id": "org-groups"
+  },
+  "org-projects": {
+    "file": "org-projects.md",
+    "label": "Add or Edit a Project / Data Area",
+    "source_pdf": "Add or Edit a Project Data Area - Unknown.pdf",
+    "title": "Add or Edit a Project Data Area",
+    "view_id": "org-projects"
+  },
+  "org-running": {
+    "file": "org-running.md",
+    "label": "Monitor Status \u2014 Running Jobs",
+    "source_pdf": "Monitor Status for Items Used b - Unknown.pdf",
+    "title": "Monitor Status for Items Used by Your",
+    "view_id": "org-running"
+  },
+  "org-storage": {
+    "file": "org-storage.md",
+    "label": "Project Storage / Data Area",
+    "source_pdf": "Add or Edit a Project Data Area - Unknown.pdf",
+    "title": "Add or Edit a Project Data Area",
+    "view_id": "org-storage"
+  },
+  "org-users": {
+    "file": "org-users.md",
+    "label": "Add or Edit an Organization User",
+    "source_pdf": "Add or Edit an Organization Use - Unknown.pdf",
+    "title": "Add or Edit an Organization User",
+    "view_id": "org-users"
+  },
+  "sys-doc-depots": {
+    "file": "sys-doc-depots.md",
+    "label": "Document Storage Depots",
+    "source_pdf": "Add Storage or Edit Document St - Unknown.pdf",
+    "title": "Add Storage or Edit Document Storage",
+    "view_id": "sys-doc-depots"
+  },
+  "sys-groups": {
+    "file": "sys-groups.md",
+    "label": "Add or Edit a System Group",
+    "source_pdf": "Add or Edit a System Group - Unknown.pdf",
+    "title": "Add or Edit a System Group",
+    "view_id": "sys-groups"
+  },
+  "sys-idx-depots": {
+    "file": "sys-idx-depots.md",
+    "label": "Index Storage Depots",
+    "source_pdf": "Add Storage or Edit Document St - Unknown.pdf",
+    "title": "Add Storage or Edit Document Storage",
+    "view_id": "sys-idx-depots"
+  },
+  "sys-inactivity": {
+    "file": "sys-inactivity.md",
+    "label": "Inactivity / Session Timeout (within Password & Logout Policy)",
+    "source_pdf": "Add or Edit a System User - Unknown.pdf",
+    "title": "View and Manage the Password and",
+    "view_id": "sys-inactivity"
+  },
+  "sys-mail": {
+    "file": "sys-mail.md",
+    "label": "Configure an Email Server & Notifications",
+    "source_pdf": "Add or Edit a System User - Unknown.pdf",
+    "title": "Configure an Email Server &",
+    "view_id": "sys-mail"
+  },
+  "sys-pwpolicy": {
+    "file": "sys-pwpolicy.md",
+    "label": "Password & User Logout Policy",
+    "source_pdf": "Add or Edit a System User - Unknown.pdf",
+    "title": "View and Manage the Password and",
+    "view_id": "sys-pwpolicy"
+  },
+  "sys-splash": {
+    "file": "sys-splash.md",
+    "label": "System Message (Splash)",
+    "source_pdf": "Add or Edit a System User - Unknown.pdf",
+    "title": "Configure a System Message for All",
+    "view_id": "sys-splash"
+  },
+  "sys-sysdepot": {
+    "file": "sys-sysdepot.md",
+    "label": "System Storage Depot",
+    "source_pdf": "Select a System Storage Depot - Unknown.pdf",
+    "title": "Select a System Storage Depot",
+    "view_id": "sys-sysdepot"
+  },
+  "sys-users": {
+    "file": "sys-users.md",
+    "label": "Add or Edit a System User",
+    "source_pdf": "Add or Edit a System User - Unknown.pdf",
+    "title": "Add or Edit a System User",
+    "view_id": "sys-users"
+  },
+  "sys-virus": {
+    "file": "sys-virus.md",
+    "label": "Virus Detection",
+    "source_pdf": "View and Request Virus Detectio - Unknown.pdf",
+    "title": "View and Request Virus Detection",
+    "view_id": "sys-virus"
+  }
+}

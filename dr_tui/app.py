@@ -28,7 +28,7 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
 from textual.widgets import (
     Button, ContentSwitcher, DataTable, Footer, Header, Input, Label,
-    RadioButton, RadioSet, RichLog, Select, Sparkline, Static,
+    Markdown, RadioButton, RadioSet, RichLog, Select, Sparkline, Static,
     TabbedContent, TabPane, Tree,
 )
 from textual.worker import get_current_worker
@@ -37,6 +37,7 @@ from config import Config, OrgUserConfig
 from helpers.api_client import APIError, EDiscoveryClient
 
 from dr_tui import data as drdata
+from dr_tui import help as drhelp
 from dr_tui import metrics as drmetrics
 
 urllib3.disable_warnings()
@@ -636,6 +637,7 @@ class DashboardScreen(Screen):
     # still works.
     BINDINGS = [
         Binding("f1",  "show_help",   "Help"),
+        Binding("f2",  "toggle_doc",  "Docs"),
         Binding("f4",  "ctx_edit",    "Edit"),
         Binding("f5",  "refresh_now", "Refresh"),
         Binding("f6",  "ctx_reset",   "Reset PW"),
@@ -654,6 +656,9 @@ class DashboardScreen(Screen):
     last_status: reactive[str] = reactive("")
     selected_kind: reactive[str] = reactive("")     # e.g. "org-connectors"
     selected_org: reactive[str] = reactive("")
+    # F2 help side-pane visibility (per-tab, but a single shared flag —
+    # the active tab's pane is the one that responds to F2).
+    help_visible: reactive[bool] = reactive(False)
 
     # cursor-row → StorageDepot, keyed by table id. Refreshed on every
     # _apply_storage_depots() so CRUD actions can resolve the selected row.
@@ -797,6 +802,9 @@ class DashboardScreen(Screen):
                             yield Static("Inactivity Timeout", classes="panel-title")
                             yield Static("Loading…", id="sys-inactivity-body",
                                          classes="detail-body")
+                    # F2 help side-pane — hidden by default; populated by
+                    # `_help_apply` when toggled on.
+                    yield Markdown("", id="sys-help-pane", classes="help-pane")
 
             # ----------------------- Organizations (both roles) ------------
             with TabPane("Organizations", id="tab-orgs"):
@@ -842,6 +850,8 @@ class DashboardScreen(Screen):
                             yield Static("Storage", classes="panel-title")
                             yield DataTable(id="org-storage-table",
                                             zebra_stripes=True, cursor_type="row")
+                    # F2 help side-pane — same pattern as the System Settings tab.
+                    yield Markdown("", id="orgs-help-pane", classes="help-pane")
         yield Footer()
 
     # ---------------------------------------------------------- mount
@@ -899,6 +909,14 @@ class DashboardScreen(Screen):
         )
 
         self._populate_sys_tree()
+
+        # F2 help panes — both default to hidden. F2 toggles whichever tab
+        # the user is currently on.
+        for pane_id in ("#sys-help-pane", "#orgs-help-pane"):
+            try:
+                self.query_one(pane_id, Markdown).display = False
+            except Exception:
+                pass
 
         # Role-gate: hide System Settings tab for admin@training.
         if self.app.role == ROLE_ORG:
@@ -996,6 +1014,8 @@ class DashboardScreen(Screen):
             self.selected_kind = kind
             self.selected_org = ""
             self._load_view(kind, "")
+            if self.help_visible:
+                self._refresh_help_pane()
             return
 
         if kind in ORG_VIEW_MAP:
@@ -1005,6 +1025,8 @@ class DashboardScreen(Screen):
             if org:
                 self.app.target_org = org
             self._load_view(kind, self.selected_org)
+            if self.help_visible:
+                self._refresh_help_pane()
             return
 
         # Non-leaf clicks (category headings, org root) — keep current pane.
@@ -2060,6 +2082,44 @@ class DashboardScreen(Screen):
     def action_show_help(self) -> None:
         """F1 — pop the help modal showing keybindings."""
         self.app.push_screen(HelpModal())
+
+    # ---------------------------------------------------------- F2: docs side-pane
+    def action_toggle_doc(self) -> None:
+        """Toggle the DR-documentation side-pane on the active tab."""
+        self.help_visible = not self.help_visible
+        for pane_id in ("#sys-help-pane", "#orgs-help-pane"):
+            try:
+                p = self.query_one(pane_id, Markdown)
+                p.display = self.help_visible
+            except Exception:
+                pass
+        if self.help_visible:
+            self._refresh_help_pane()
+
+    def _refresh_help_pane(self) -> None:
+        """Populate both help panes with the current view's documentation."""
+        kind = self.selected_kind
+        entry = drhelp.get_help(kind) if kind else None
+        if entry is None:
+            md = (
+                f"# Documentation\n\n"
+                f"_No help topic mapped for view `{kind or '<none>'}`._\n\n"
+                f"Use the tree on the left to pick a leaf, then press "
+                f"**F2** again to refresh this pane."
+            )
+        else:
+            md = (
+                f"# {entry.label}\n\n"
+                f"_Source: {entry.source_pdf}_\n\n"
+                f"---\n\n"
+                f"{entry.body_markdown}"
+            )
+        for pane_id in ("#sys-help-pane", "#orgs-help-pane"):
+            try:
+                p = self.query_one(pane_id, Markdown)
+                p.update(md)
+            except Exception:
+                pass
 
     # ============================================================ Dashboard tab
     # Four independent tick cycles. Metrics + logs + procs are local-host

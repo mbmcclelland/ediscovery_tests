@@ -1,5 +1,64 @@
 # Changelog
 
+## v0.09 — 2026-05-12
+
+### Added: dr-tui — F2 documentation side-pane (DR PDFs as built-in help)
+
+The 217 Digital Reef help PDFs (1.3 GB at
+`/data/import/Digital Reef PDFs/5.5.3.1 complete`) are now searchable
+from inside the TUI. Press **F2** on any leaf to slide in a 35%-width
+markdown pane showing the matching DR topic — title, navigation path,
+required permissions, description, and field-by-field options. F2
+again to hide. Help content updates automatically when you pick a new
+tree leaf.
+
+**Pipeline (preprocessor + runtime):**
+
+1. `tools/extract_help.py` — one-shot script, run locally. For each
+   of the 18 TUI views currently rendering data:
+   - Picks a matching PDF (44 small "per-topic" PDFs cover some views
+     directly; for the rest it locates the topic inside a big-corpus
+     PDF using the recurring `"You are here:"` boundary marker).
+   - Runs `pdftotext`, strips the web-help nav boilerplate
+     (`Skip To Main Content / Account / Settings / Logout / Search /
+     Filter / Submit Search / You are here: / Copyright …`).
+   - Writes `dr_tui/help_content/<view_id>.md` and a
+     `help_index.json` with metadata (label, source PDF, file).
+2. `dr_tui/help.py` — runtime loader. `get_help(view_id)` returns a
+   `HelpEntry(view_id, label, title, source_pdf, body_markdown)` or
+   None. Index is cached after first load; per-view payloads are
+   cached on first access.
+3. `dr_tui/app.py` — adds a `Markdown` widget to both the System
+   Settings and Organizations tabs, `display=False` by default. F2
+   toggles visibility on both tabs simultaneously and refreshes
+   content. Tree-leaf selection auto-updates content while the pane
+   is open.
+
+**Coverage (18/18 views with extracted help):**
+
+| Tab | Views with help |
+|---|---|
+| System Settings | doc/idx depots, system depot, virus, system users, system groups, mail server, splash message, password policy, inactivity timeout |
+| Organizations | users, admins, groups, projects, connectors, storage, running jobs, completed jobs |
+
+The 4 hardest topics (Mail Server, Splash, Password Policy, Inactivity
+Timeout) had no dedicated PDF — they live as sub-sections of the big
+"View and Manage the Password and User Logout Policy" / "Configure an
+Email Server & Notifications" / "Configure a System Message" topics
+inside any big-corpus PDF. The extractor finds them by `topic_title`
+substring match against the title line that follows each
+`"You are here:"` marker.
+
+**Packaging:**
+
+- `setup.cfg` extends `package_data` to ship `help_content/*.md` and
+  `help_content/help_index.json` alongside the existing `*.tcss`. The
+  RPM build picks these up automatically through `pip wheel`, so no
+  spec-file change is needed.
+
+**Tests:** `test_help_pane_toggle` verifies F2 flips both panes from
+hidden → visible → hidden without exceptions. 7 / 7 pilot tests passing.
+
 ## v0.08.1 — 2026-05-12
 
 ### Added: dr-tui — Realm Settings sub-tree (read-only)
