@@ -1,0 +1,86 @@
+# CI for dr-tui pilot smoke tests.
+#
+# The pytest suite as a whole talks to a live DR server (REST API +
+# Postgres), so we can't run those tests in CI. The dr-tui pilot tests,
+# though, mount the Textual app with fake clients and exercise every
+# modal + keyboard shortcut purely client-side. Those run cleanly here.
+#
+# Runs on:
+#   - push to master / v0.06 / v0.07 / main branches
+#   - every pull request
+#
+# Matrix is Python 3.9 (RHEL 9 default) and 3.11 (newer hosts).
+
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - 'v0.*'
+  pull_request:
+    branches:
+      - master
+      - main
+
+jobs:
+  pilot-tests:
+    name: dr-tui pilot tests (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python:
+          - '3.9'
+          - '3.11'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: 'pip'
+
+      - name: Install runtime + dev deps
+        run: |
+          python -m pip install --upgrade pip
+          # psycopg2-binary brings the libpq client lib — needed for the
+          # JobPoller import path the package walks at startup.
+          pip install -e .[dev]
+
+      - name: Run dr-tui pilot smoke tests
+        run: |
+          python -m pytest \
+              tests/test_dr_tui_depot_modal.py \
+              tests/test_dr_tui_dashboard_layout.py \
+              -v --tb=short
+
+  rpm-build:
+    name: Build RPM (dry-run)
+    runs-on: ubuntu-latest
+    # RPM build only on push to a v* branch — keeps PR latency down.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/v0.')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rpmbuild + Python
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm python3 python3-pip python3-venv rsync
+          python3 -m pip install --upgrade pip
+
+      - name: Build wheelhouse + RPM
+        run: |
+          cd packaging
+          make rpm
+
+      - name: Upload RPM as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dr-tools-rpm
+          path: packaging/rpmbuild/RPMS/x86_64/*.rpm
+          retention-days: 30
