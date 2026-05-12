@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.10.2 — 2026-05-12
+
+### Fixed: dr-tui terminal compatibility (PuTTY + other legacy SSH clients)
+
+PuTTY's default `TERM=xterm` + Win-1252 character set + missing
+kitty-keyboard support left dr-tui unusable: garbled box-drawing,
+escape codes leaking onto the screen, keystrokes not reaching the app.
+
+Three changes landed:
+
+1. **`/usr/bin/dr-tui` launcher** (in both `packaging/dr-tools.spec`
+   and `packaging/install.sh`) now sets two env vars defensively:
+
+   ```sh
+   if [ "$TERM" = "xterm" ] && [ -f /usr/share/terminfo/x/xterm-256color ]; then
+       TERM=xterm-256color
+   fi
+   : "${TEXTUAL_FEATURES=}"
+   ```
+
+   `TERM=xterm-256color` gives Textual the right terminfo entry for
+   true-colour rendering. `TEXTUAL_FEATURES=` (empty) skips the
+   kitty-keyboard probe that PuTTY swallows.
+
+2. **README** gained a new "Terminal compatibility" section under
+   `TUI Usage` listing recommended terminals (Windows Terminal, Tabby,
+   Alacritty, iTerm2, GNOME Terminal, …), the two PuTTY-specific
+   knobs (UTF-8 remote charset + the env-var workaround), and a
+   diagnostic recipe for capturing a `TEXTUAL_LOG=` trace.
+
+3. The env-var workaround was confirmed live in a PuTTY session —
+   `TERM=xterm-256color TEXTUAL_FEATURES= dr-tui` rendered cleanly and
+   accepted input.
+
+Existing RPM installs (v0.10 / v0.10.1) can either rebuild + reinstall
+the RPM to pick up the launcher fix, or just use the env-var
+workaround until the next upgrade.
+
 ## v0.10.1 — 2026-05-12
 
 ### Added: dr-tui — Jobs Monitor: Pause / Resume / Cancel / Set Priority

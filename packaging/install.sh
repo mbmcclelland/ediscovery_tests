@@ -77,6 +77,13 @@ install_dr_tools() {
     log "creating launcher scripts in $BIN_DIR"
     cat <<'EOF' | $SUDO tee "$BIN_DIR/dr-tui" >/dev/null
 #!/bin/sh
+# Force a sane TERM + skip kitty-keyboard probe for legacy SSH clients
+# (PuTTY in particular). See README "Terminal compatibility" for why.
+if [ "$TERM" = "xterm" ] && [ -f /usr/share/terminfo/x/xterm-256color ]; then
+    TERM=xterm-256color
+fi
+: "${TEXTUAL_FEATURES=}"
+export TERM TEXTUAL_FEATURES
 exec /opt/dr-tools/venv/bin/dr-tui "$@"
 EOF
     cat <<'EOF' | $SUDO tee "$BIN_DIR/dr-load" >/dev/null

@@ -1,6 +1,6 @@
 # eDiscovery API Test Suite
 
-**Version 0.10.1**
+**Version 0.10.2**
 
 Automated API tests, load tests, a Textual TUI for live monitoring, and a
 reinstall toolchain for the Digital Reef eDiscovery REST API. Includes:
@@ -196,6 +196,43 @@ in-app reference card.
 | **Esc** | Cancel modal |
 | **Enter** (in form field) | Save form |
 | **q / r / l** | Hidden aliases — quit / refresh / logout |
+
+### Terminal compatibility
+
+`dr-tui` is built on **Textual**, which uses modern terminal capabilities
+(true colour, kitty-keyboard protocol, UTF-8 box-drawing). Most modern
+terminals Just Work; a few legacy ones need a nudge.
+
+**Recommended terminals** (tested):
+
+- Linux: GNOME Terminal, Konsole, Alacritty, kitty, foot, xterm
+- macOS: iTerm2, Terminal.app, WezTerm, Alacritty
+- Windows: **Windows Terminal** (Microsoft Store, free), Tabby, WezTerm
+- WSL terminals
+- VS Code integrated terminal
+
+**PuTTY** works *but needs two non-default settings*:
+
+1. **PuTTY → Window → Translation → Remote character set → `UTF-8`**
+   (default is Win-1252 — produces "chunky" box-drawing characters)
+2. **`TERM=xterm-256color`** in your session — PuTTY advertises bare
+   `xterm` by default, which lacks 256-color terminfo on RHEL/Rocky.
+
+The `/usr/bin/dr-tui` launcher (RPM v0.10.2+) sets these defensively, so
+on a clean install you just need to flip PuTTY's UTF-8 setting once.
+
+If the screen renders but **keystrokes don't reach the app**, run with
+the kitty-keyboard probe disabled:
+
+```bash
+TERM=xterm-256color TEXTUAL_FEATURES= dr-tui
+```
+
+(PuTTY swallows the keyboard-enhancement query that Textual sends on
+startup. Setting `TEXTUAL_FEATURES=` to empty skips the probe.)
+
+If all else fails, switch to **Windows Terminal** — it handles Textual
+apps natively with zero config.
 
 ### Endpoints (sample — full list in `docs/endpoints_v0.05.md`)
 

@@ -89,6 +89,17 @@ find %{buildroot}%{drroot}/venv/bin -type f \
 mkdir -p %{buildroot}/usr/bin
 cat > %{buildroot}/usr/bin/dr-tui <<'EOF'
 #!/bin/sh
+# PuTTY (and some other older SSH clients) advertises TERM=xterm which
+# lacks 256-color and confuses Textual's terminal-capability probes.
+# Force xterm-256color when terminfo for it exists and TERM looks weak.
+if [ "$TERM" = "xterm" ] && [ -f /usr/share/terminfo/x/xterm-256color ]; then
+    TERM=xterm-256color
+fi
+# PuTTY swallows the kitty-keyboard handshake (CSI > 1 u) — keep
+# Textual on the simpler ANSI input path unless the user explicitly
+# wants enhancements via TEXTUAL_FEATURES=...
+: "${TEXTUAL_FEATURES=}"
+export TERM TEXTUAL_FEATURES
 exec /opt/dr-tools/venv/bin/dr-tui "$@"
 EOF
 cat > %{buildroot}/usr/bin/dr-load <<'EOF'
