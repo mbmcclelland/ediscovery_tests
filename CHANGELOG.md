@@ -1,5 +1,103 @@
 # Changelog
 
+## v0.13.0 — 2026-05-13
+
+### Added: dr-tui — Job Scheduler tab
+
+A new top-level tab for defining + running indexing jobs as reusable
+templates, with optional retention-driven cleanup scheduled via
+systemd user timers.
+
+**The tab is divided into four leaf views** (left-tree, content-switcher
+on the right, same idiom as the System Settings / Organizations tabs):
+
+| Leaf | Source | Notes |
+|---|---|---|
+| Running Jobs | `realmManager/listRealmTasks` filtered to `operationState=RUNNING` | Action bar mirrors the F3 modal (Pause/Resume/Cancel/Priority paths land in v0.14). |
+| Saved Templates | `~/.dr-tools/jobs/*.json` | One row per JobDefinition; **"longterm" anywhere in the name renders yellow-bold**, per spec. |
+| Retention Timers | `systemctl --user list-timers --all` filtered to `dr-tools-retention-*` | Live view of pending retention deletions. |
+| Run History | append-only `~/.dr-tools/runs/<slug>.jsonl` | Status colour-coded (RUNNING=yellow, SUCCESS=green, FAILURE=red, DELETED=dim). |
+
+**New Job wizard (`NewJobModal`):**
+
+- Org picker, project picker (filtered by org), connector picker
+  (filtered by org).
+- File tree backed by `connectorManager/exploreConnector` — lazy-loads
+  children on node-select via a worker thread; folders are `🗀`, files
+  `🗎`. The currently-selected path is echoed below the tree.
+- **Count files** button does a client-side recursive walk using
+  `count_files_recursively()`. DR's REST API exposes **no folder-size
+  endpoint** and exploreConnector returns no size data, so v0.13 ships
+  with file/directory counts only (no byte totals).
+- Retention period: integer input + units Select (seconds / minutes /
+  hours / days / weeks). Default **1 week**. `0 = keep forever`.
+
+**New endpoints + helpers (`dr_tui/data.py`):**
+
+- `explore_connector(client, *, org_name, connector_*, parent_path)` →
+  `list[PathEntry]`
+- `count_files_recursively(client, …, root_path, progress_cb, max_depth=12)`
+  → `(files, dirs)`. Iterative BFS so deep trees don't blow the stack;
+  `progress_cb(files, dirs, current)` fires every 100 entries.
+- `submit_indexing_job(client, *, project_handle, connector_handle,
+  path, dataset_name)` — wraps the full
+  `createDataArea → getCorpusSetByName → createCorpus → addCorpus →
+  createRepresentation` chain (body shapes pinned from
+  `locustfile_indexing.py`).
+- `delete_corpus(...)`, `delete_data_area(...)` — used by the retention
+  cleanup CLI.
+
+**New module: `dr_tui/scheduler.py`**
+
+- `JobDefinition` dataclass (template) + `RunRecord` (one execution) +
+  `TimerInfo` (parsed `list-timers` row).
+- State layout under `~/.dr-tools/`:
+  - `jobs/<slug>.json` — saved JobDefinition
+  - `runs/<slug>.jsonl` — append-only run log
+  - `logs/<slug>-<ts>.log` — captured stdout/stderr of one run
+- `save_job` / `load_saved_jobs` / `get_job` / `delete_saved_job`.
+- `append_run` / `list_runs`.
+- `schedule_retention_delete(...)` writes
+  `~/.config/systemd/user/dr-tools-retention-<slug>-<run_id>.{service,timer}`,
+  `systemctl --user daemon-reload`, `enable --now`. One-shot
+  `OnCalendar=` timer with `RemainAfterElapse=false` so the unit GCs
+  itself after firing.
+- `cancel_retention_delete(...)` (idempotent stop+disable+rm).
+- `list_dr_timers()` parses `systemctl --user list-timers --all
+  --no-legend` and filters to our prefix.
+- `lingering_enabled()` + `systemctl_user_available()` probes — the UI
+  hints at the user to run `loginctl enable-linger $USER` if the timer
+  unit will die at logout.
+- `DR_TOOLS_STATE_DIR` env-var lets tests redirect state to a tmp dir
+  without smearing real saved jobs.
+
+**Two new CLIs** (entry points added in `setup.cfg`):
+
+- `dr-job-run <name-or-slug>` — same code path the TUI "Run Now"
+  button shells out to; loads JobDefinition, logs in via
+  `Config`/`OrgUserConfig`, runs the submit chain, appends a
+  RunRecord, schedules retention timer if applicable, tees stdout to
+  `~/.dr-tools/logs/<slug>-<ts>.log`.
+- `dr-job-delete <slug> <run-id>` — invoked by the systemd
+  `.service` at retention horizon; calls `deleteCorpus +
+  deleteDataArea` against the handles stored in the matching
+  RunRecord, then rewrites the JSONL with `status=DELETED`.
+
+**Why a separate CLI rather than inline:** single code path for "Run
+Now" + future cron/timer launches, runs even when dr-tui isn't open,
+debuggable from a shell, and dr-job-delete needs to be invokable by
+the systemd unit without an interactive TUI process.
+
+**Tests:** new `tests/test_dr_tui_scheduler.py` covers
+JobDefinition save/load round-trip, RunRecord append+read, slugify
+edge cases, NewJobModal mount + cancel, and the 'longterm' coloring
+rule. 15 / 15 pilot tests pass.
+
+**Operational note:** systemd user timers stop when the user logs
+out unless `loginctl enable-linger <user>` has been run. README §
+"Job Scheduler" covers this; `lingering_enabled()` will eventually
+surface a one-line hint in the TUI.
+
 ## v0.12.0 — 2026-05-13
 
 ### Added: dr-tui — Realm Settings edit modals (Mail / Splash / Password / Inactivity)

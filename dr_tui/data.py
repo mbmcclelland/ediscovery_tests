@@ -1631,3 +1631,290 @@ def org_storage_rows(
             kb_available=int(u.get("kbAvailable") or depot.get("kbAvailable") or 0),
         ))
     return out
+
+
+# === v0.13 Job Scheduler — connector browse + indexing-chain submitter === #
+
+@dataclass
+class PathEntry:
+    """One row of `connectorManager/exploreConnector.paths[]`.
+
+    `leaf=True` means a file (no children); `leaf=False` is a directory
+    that we can recurse into by re-calling exploreConnector with
+    `parentPath.name = this.name`.
+    """
+    name: str
+    handle: str
+    leaf: bool
+
+
+def explore_connector(
+    client: EDiscoveryClient,
+    *,
+    org_name: str,
+    connector_name: str,
+    connector_type: str,
+    remote_host: str,
+    remote_path: str,
+    parent_path: str = "",
+) -> list[PathEntry]:
+    """Browse one directory under a connector.
+
+    `parent_path` is the directory you want to list, anchored relative
+    to `remote_path` (the connector's root). Use "" for the connector
+    root itself. The captured response uses `name` for the path
+    component; the DR Web UI builds a breadcrumb by concatenating these.
+    """
+    pp_name = parent_path or remote_path
+    try:
+        resp = client.post(
+            "connectorManager/exploreConnector",
+            extra_body={
+                "contextHandle": org_name,
+                "connectorType": connector_type,
+                "connectorName": connector_name,
+                "remoteHost": remote_host,
+                "remotePath": remote_path,
+                "organizationName": org_name,
+                "parentPath": {
+                    "name": pp_name,
+                    "handle": "",
+                    "leaf": False,
+                    "type": None,
+                },
+            },
+        )
+    except APIError:
+        return []
+    out: list[PathEntry] = []
+    for p in resp.get("paths") or []:
+        # The server emits "." as a self-reference in some captures —
+        # filter it out; clients never want to navigate into "."
+        nm = str(p.get("name") or "")
+        if nm in ("", "."):
+            continue
+        out.append(PathEntry(
+            name=nm,
+            handle=str(p.get("handle") or ""),
+            leaf=bool(p.get("leaf")),
+        ))
+    return out
+
+
+def count_files_recursively(
+    client: EDiscoveryClient,
+    *,
+    org_name: str,
+    connector_name: str,
+    connector_type: str,
+    remote_host: str,
+    remote_path: str,
+    root_path: str,
+    progress_cb=None,
+    max_depth: int = 12,
+) -> tuple[int, int]:
+    """Walk a connector subtree client-side; return (files, dirs).
+
+    DR's REST API exposes no "folder size" endpoint and exploreConnector
+    response paths carry no size field — so we limit to counts. Walk is
+    iterative (deque) to keep stack usage flat even on deep trees, and
+    capped by `max_depth` (default 12) as a runaway-recursion guard.
+
+    `progress_cb`, if provided, is called as `progress_cb(files, dirs,
+    current_path)` every 100 path entries so the UI can show a live
+    counter.
+    """
+    from collections import deque
+    files = 0
+    dirs = 0
+    seen_paths = 0
+    queue: deque[tuple[str, int]] = deque([(root_path, 0)])
+    while queue:
+        current, depth = queue.popleft()
+        if depth > max_depth:
+            continue
+        entries = explore_connector(
+            client,
+            org_name=org_name,
+            connector_name=connector_name,
+            connector_type=connector_type,
+            remote_host=remote_host,
+            remote_path=remote_path,
+            parent_path=current,
+        )
+        for e in entries:
+            seen_paths += 1
+            if e.leaf:
+                files += 1
+            else:
+                dirs += 1
+                # Anchor child paths relative to the current dir. The
+                # server takes absolute-ish paths (rooted at remote_path),
+                # so we concatenate with "/".
+                child = current.rstrip("/") + "/" + e.name
+                queue.append((child, depth + 1))
+            if progress_cb is not None and seen_paths % 100 == 0:
+                try:
+                    progress_cb(files, dirs, current)
+                except Exception:
+                    pass
+    if progress_cb is not None:
+        try:
+            progress_cb(files, dirs, root_path)
+        except Exception:
+            pass
+    return files, dirs
+
+
+# --- v0.13 indexing-chain submitter ----------------------------------------
+def submit_indexing_job(
+    client: EDiscoveryClient,
+    *,
+    project_handle: str,
+    connector_handle: str,
+    path: str,
+    dataset_name: str,
+) -> dict:
+    """Run createDataArea → getCorpusSetByName → createCorpus →
+    addCorpus → createRepresentation. Returns:
+
+        {"task_handle": str, "corpus_handle": str, "data_area_handle": str}
+
+    The caller is responsible for owning the failure mode — every
+    APIError propagates with the call name in the error chain via
+    `APIError.extended_status`.
+
+    Body shapes are pinned from `locustfile_indexing.py` (the load-test
+    workflow that exercises this chain at scale, so they're known good).
+    """
+    # 1) createDataArea
+    da_resp = client.post(
+        "orgManager/createDataArea",
+        extra_body={
+            "contextHandle": project_handle,
+            "connectorHandle": connector_handle,
+            "name": f"{dataset_name}_data",
+            "description": "",
+            "mode": "IMPORT",
+            "path": path,
+            "skippedDirectories": [],
+        },
+    )
+    da = da_resp.get("dataArea") or {}
+    data_area_handle = str(da.get("handle") or da_resp.get("handle") or "")
+    if not data_area_handle:
+        raise APIError(
+            "FAILURE", "MISSING_HANDLE",
+            "createDataArea returned no handle", da_resp,
+        )
+
+    # 2) Look up "AllCorpora" corpus set (default container).
+    cs_handle = ""
+    try:
+        cs_resp = client.post(
+            "corpusSetManager/getCorpusSetByName",
+            extra_body={
+                "contextHandle": project_handle,
+                "projectHandle": project_handle,
+                "corpusSetName": "AllCorpora",
+            },
+        )
+        cs = cs_resp.get("corpusSet") or {}
+        cs_handle = str(cs.get("handle") or "")
+    except APIError:
+        # Some realms ship without AllCorpora; falling through is fine
+        # — the corpus is still created, just not added to a set.
+        pass
+
+    # 3) createCorpus
+    corp_resp = client.post(
+        "orgManager/createCorpus",
+        extra_body={
+            "contextHandle": project_handle,
+            "name": dataset_name,
+            "description": "",
+            "brand": True,
+            "dataAreaHandles": [data_area_handle],
+            "loadFileName": "",
+            "loadFileType": "EDRM_XML",
+            "loadFileProfileId": -1,
+            "attributes": [{"name": "projecthandle", "value": project_handle}],
+        },
+    )
+    corp = corp_resp.get("corpus") or {}
+    corpus_handle = str(corp.get("handle") or corp_resp.get("handle") or "")
+    if not corpus_handle:
+        raise APIError(
+            "FAILURE", "MISSING_HANDLE",
+            "createCorpus returned no handle", corp_resp,
+        )
+
+    # 4) addCorpus (best-effort — depends on step 2 succeeding)
+    if cs_handle:
+        try:
+            client.post(
+                "corpusSetManager/addCorpus",
+                extra_body={
+                    "contextHandle": project_handle,
+                    "corpusHandle": corpus_handle,
+                    "corpusSetHandle": cs_handle,
+                },
+            )
+        except APIError:
+            pass
+
+    # 5) createRepresentation — starts the indexing task
+    rep_resp = client.post(
+        "corpusManager/createRepresentation",
+        extra_body={
+            "contextHandle": project_handle,
+            "corpusHandle": corpus_handle,
+            "attributes": [{"name": "projecthandle", "value": project_handle}],
+            "scanAttributes": [
+                {"name": "batchNumber", "value": dataset_name},
+                {"name": "projecthandle", "value": project_handle},
+            ],
+            "taskDescription": (
+                f"Creating representation Analytic Index for {dataset_name}"
+            ),
+            "typeList": ["CONTENT_INDEX", "VECTOR_SET"],
+            "enablePatternDetection": True,
+        },
+    )
+    task_handle = str(rep_resp.get("taskHandle") or "")
+
+    return {
+        "task_handle": task_handle,
+        "corpus_handle": corpus_handle,
+        "data_area_handle": data_area_handle,
+    }
+
+
+def delete_corpus(
+    client: EDiscoveryClient, *, project_handle: str, corpus_handle: str,
+) -> None:
+    """Delete a corpus via `orgManager/deleteCorpus`. Returns nothing.
+
+    Used by the retention-cleanup script — wipes the indexed data so
+    it doesn't outlive its retention window.
+    """
+    client.post(
+        "orgManager/deleteCorpus",
+        extra_body={
+            "contextHandle": project_handle,
+            "corpusHandle": corpus_handle,
+        },
+    )
+
+
+def delete_data_area(
+    client: EDiscoveryClient, *, project_handle: str, data_area_handle: str,
+) -> None:
+    """Delete a data area via `orgManager/deleteDataArea`. Returns nothing."""
+    client.post(
+        "orgManager/deleteDataArea",
+        extra_body={
+            "contextHandle": project_handle,
+            "dataAreaHandle": data_area_handle,
+        },
+    )

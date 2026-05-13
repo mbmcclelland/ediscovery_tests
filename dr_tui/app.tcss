@@ -519,6 +519,109 @@ InactivityTimeoutFormModal {
     min-width: 8;
 }
 
+/* ---------------------------------------------------------- v0.13 New Job wizard */
+NewJobModal {
+    align: center middle;
+}
+
+#newjob-card {
+    width: 90%;
+    height: 90%;
+    padding: 1 2;
+    border: round $accent;
+    background: $panel;
+}
+
+#newjob-title {
+    content-align: center middle;
+    color: $accent;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#newjob-row1 {
+    height: 1fr;
+    margin-bottom: 1;
+}
+
+#newjob-pickers {
+    width: 36;
+    padding-right: 2;
+}
+
+#newjob-pickers Label {
+    margin-top: 1;
+    color: grey;
+}
+
+#newjob-tree-wrap {
+    width: 1fr;
+}
+
+#newjob-tree {
+    height: 1fr;
+    border: round grey;
+    margin: 0 0 1 0;
+}
+
+#newjob-tree-actions {
+    height: 3;
+}
+
+#newjob-tree-actions Button {
+    margin-right: 1;
+    min-width: 12;
+}
+
+#newjob-selected {
+    height: 1;
+    padding: 0 1;
+}
+
+#newjob-count-status {
+    height: 1;
+    padding: 0 1;
+}
+
+#newjob-meta {
+    height: auto;
+    margin-bottom: 1;
+}
+
+.newjob-meta-col {
+    width: 1fr;
+    padding-right: 2;
+}
+
+.newjob-meta-col Label {
+    margin-top: 1;
+    color: grey;
+}
+
+#newjob-error {
+    color: $error;
+    height: auto;
+}
+
+/* Job Scheduler tab — main panel layout */
+#scheduler-tree {
+    width: 28;
+}
+
+#scheduler-switcher {
+    width: 1fr;
+}
+
+#scheduler-actions {
+    height: 3;
+    padding: 0 1;
+}
+
+#scheduler-actions Button {
+    margin-right: 1;
+    min-width: 10;
+}
+
 /* ---------------------------------------------------------- v0.11 task log */
 TaskLogModal {
     align: center middle;

@@ -1,6 +1,6 @@
 # eDiscovery API Test Suite
 
-**Version 0.12.0**
+**Version 0.13.0**
 
 Automated API tests, load tests, a Textual TUI for live monitoring, and a
 reinstall toolchain for the Digital Reef eDiscovery REST API. Includes:
@@ -243,6 +243,63 @@ apps natively with zero config.
 | Connectors | `initializeOrganization` → `adminOrgManager/listConnectors` | direct |
 | Projects | `realmManager/listSystemUserProjectsByUserName` | `orgManager/listUserProjectsForAllOrgs` |
 | Tasks | `projectManager/listTasks` (split by `dateCompleted`) | same |
+
+---
+
+### Job Scheduler tab (v0.13+)
+
+The Job Scheduler tab lets you define **indexing job templates** and
+run them on demand or via a saved CLI. Each template captures the
+org, project, connector, target path, retention window, and a
+description; the same template can be re-run any number of times.
+
+- **New Job** opens a wizard that lets you pick org → project →
+  connector, then browse the connector's filesystem in a lazy-loading
+  tree (folders are `🗀`, files `🗎`). Select a directory and click
+  **Count files** for a recursive count (DR's REST API exposes no
+  folder size endpoint, so v0.13 reports file/dir counts only).
+- **Retention period** is set in seconds / minutes / hours / days /
+  weeks. Default is **1 week**; `0` means keep forever. When a job
+  runs and retention is non-zero, dr-tui writes a one-shot **systemd
+  user timer** at `~/.config/systemd/user/dr-tools-retention-<slug>-<run_id>.timer`
+  that fires `dr-job-delete <slug> <run_id>` at the retention horizon.
+- **Run Now** shells out to `dr-job-run <slug>` — the same code path
+  cron / systemd would use, so behaviour is identical in interactive
+  and unattended runs.
+- Jobs whose name contains the substring **`longterm`** render
+  yellow-bold in the Saved Templates table, as a visual cue for
+  long-retention archives.
+
+State layout under `~/.dr-tools/`:
+
+```
+jobs/<slug>.json       saved JobDefinition (template)
+runs/<slug>.jsonl      append-only run history (one JSON per line)
+logs/<slug>-<ts>.log   tee'd stdout/stderr of one dr-job-run
+```
+
+Override the state root via `DR_TOOLS_STATE_DIR=<path>` (tests use
+this; you can use it to relocate state to e.g. `/var/lib/dr-tools`).
+
+**systemd user timers + linger.** A user-scope systemd timer dies the
+moment that user logs out unless lingering is enabled. To keep
+retention deletes running across logouts:
+
+```bash
+sudo loginctl enable-linger $USER
+```
+
+Check the current state with `loginctl show-user $USER --property=Linger`.
+The TUI surfaces a hint when lingering is off but the user has scheduled
+retention timers.
+
+The two CLIs ship as console-script entry points:
+
+- `dr-job-run <name-or-slug>` — run one job manually (also wired to
+  the **Run Now** button).
+- `dr-job-delete <slug> <run-id>` — retention cleanup; invoked by the
+  systemd `.service` automatically, but can be run manually to expire
+  a single run early.
 
 ---
 

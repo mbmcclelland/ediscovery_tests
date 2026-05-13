@@ -39,6 +39,7 @@ from helpers.api_client import APIError, EDiscoveryClient
 from dr_tui import data as drdata
 from dr_tui import help as drhelp
 from dr_tui import metrics as drmetrics
+from dr_tui import scheduler as drsch
 
 urllib3.disable_warnings()
 
@@ -71,6 +72,13 @@ ORG_VIEW_MAP = {
     "org-connectors":  "org-connectors-view",
     "org-storage":     "org-storage-view",
 }
+# v0.13 Job Scheduler tab — same idiom as SYS/ORG view maps.
+SCH_VIEW_MAP = {
+    "sch-running": "sch-running-view",
+    "sch-saved":   "sch-saved-view",
+    "sch-timers":  "sch-timers-view",
+    "sch-runs":    "sch-runs-view",
+}
 
 
 def _fmt_kb(kb: int) -> str:
@@ -88,6 +96,17 @@ def _fmt_kb(kb: int) -> str:
 
 def _yn(b: bool) -> str:
     return "yes" if b else "no"
+
+
+def _fmt_retention(seconds: int) -> str:
+    """Render a retention duration in the largest unit that divides cleanly."""
+    if seconds <= 0:
+        return "forever"
+    for label, mult in (("w", 604800), ("d", 86400),
+                        ("h", 3600), ("m", 60)):
+        if seconds % mult == 0:
+            return f"{seconds // mult}{label}"
+    return f"{seconds}s"
 
 
 def _fmt_rate(bytes_per_sec: float) -> str:
@@ -1464,6 +1483,414 @@ class InactivityTimeoutFormModal(ModalScreen[Optional[dict]]):
         self.dismiss({"seconds": seconds})
 
 
+# === v0.13 New Job wizard ================================================== #
+
+# Retention unit choices for the NewJobModal Select widget. Stored as a
+# tuple (display, seconds-multiplier) so we can convert in one place.
+_RETENTION_UNITS = [
+    ("seconds", 1),
+    ("minutes", 60),
+    ("hours",   3600),
+    ("days",    86400),
+    ("weeks",   604800),
+]
+
+
+class NewJobModal(ModalScreen[Optional[dict]]):
+    """v0.13 — New / Edit dialog for the Job Scheduler.
+
+    Returns a dict shaped like JobDefinition (minus `created_at` /
+    `slug`) on save, None on cancel. The DashboardScreen unpacks the
+    dict into a JobDefinition and persists it via `drsch.save_job`.
+
+    Org / Project / Connector are populated by the parent before the
+    modal is pushed (passed in as ctor args) to keep the modal itself
+    side-effect-free aside from the file-tree lazy loads.
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(
+        self,
+        *,
+        orgs: list[str],
+        connectors_by_org: dict[str, list[drdata.Connector]],
+        projects_by_org: dict[str, list[dict]],
+        api_client,
+        existing: Optional["drsch.JobDefinition"] = None,
+    ) -> None:
+        super().__init__()
+        self._orgs = orgs or []
+        self._connectors_by_org = connectors_by_org or {}
+        self._projects_by_org = projects_by_org or {}
+        self._client = api_client
+        self._existing = existing
+        # Track the currently-selected connector + path so the Tree
+        # lazy-loader and Count-Files button have a stable target.
+        self._cur_org: str = (existing.org if existing else
+                              (orgs[0] if orgs else ""))
+        self._cur_conn_handle: str = (existing.connector_handle if existing else "")
+        self._cur_path: str = (existing.path if existing else "")
+
+    # ---- compose -----------------------------------------------------
+    def compose(self) -> ComposeResult:
+        # Seed values for edit mode.
+        e = self._existing
+        with Container(id="newjob-card"):
+            yield Static(
+                ("Edit Job" if e else "New Indexing Job"),
+                id="newjob-title",
+            )
+            with Horizontal(id="newjob-row1"):
+                with Vertical(id="newjob-pickers"):
+                    yield Label("Org:")
+                    yield Select(
+                        [(o, o) for o in self._orgs] or [("(none)", "")],
+                        id="newjob-org",
+                        value=(self._cur_org or (self._orgs[0] if self._orgs else "")),
+                        allow_blank=False,
+                    )
+                    yield Label("Project:")
+                    proj_opts = self._project_options(self._cur_org)
+                    proj_select = Select(
+                        proj_opts,
+                        id="newjob-project",
+                        allow_blank=False,
+                    )
+                    if e and any(v == e.project_handle for _, v in proj_opts):
+                        proj_select.value = e.project_handle
+                    yield proj_select
+                    yield Label("Connector:")
+                    conn_opts = self._connector_options(self._cur_org)
+                    conn_select = Select(
+                        conn_opts,
+                        id="newjob-connector",
+                        allow_blank=False,
+                    )
+                    if e and any(v == e.connector_handle for _, v in conn_opts):
+                        conn_select.value = e.connector_handle
+                    yield conn_select
+                with Vertical(id="newjob-tree-wrap"):
+                    yield Label("Filesystem (click a folder to expand):")
+                    yield Tree("(pick a connector)", id="newjob-tree")
+                    yield Static(
+                        "[dim]Selected: —[/]",
+                        id="newjob-selected",
+                    )
+                    with Horizontal(id="newjob-tree-actions"):
+                        yield Button("Browse", id="newjob-browse",
+                                     variant="primary")
+                        yield Button("Count files (recursive)",
+                                     id="newjob-count")
+                    yield Static("", id="newjob-count-status")
+            with Horizontal(id="newjob-meta"):
+                with Vertical(classes="newjob-meta-col"):
+                    yield Label("Job name:")
+                    yield Input(
+                        value=(e.name if e else ""),
+                        placeholder="e.g. nightly-payroll-longterm",
+                        id="newjob-name",
+                    )
+                    yield Label("Description (optional):")
+                    yield Input(
+                        value=(e.description if e else ""),
+                        id="newjob-desc",
+                    )
+                with Vertical(classes="newjob-meta-col"):
+                    yield Label("Retention period:")
+                    with Horizontal():
+                        yield Input(
+                            value=str(self._initial_retention_value()),
+                            id="newjob-retention",
+                        )
+                        yield Select(
+                            [(u, str(m)) for u, m in _RETENTION_UNITS],
+                            id="newjob-retention-unit",
+                            value=str(self._initial_retention_mult()),
+                            allow_blank=False,
+                        )
+                    yield Static(
+                        "[dim]Indexed data + corpus auto-deleted after this "
+                        "period. 0 = keep forever.[/]",
+                        classes="modal-hint",
+                    )
+            yield Static("", id="newjob-error")
+            with Horizontal(classes="settings-buttons"):
+                yield Button.success("Save", id="newjob-save")
+                yield Button("Cancel", id="newjob-cancel")
+            yield Static("[dim][Esc] cancel · selecting a folder opens it[/]",
+                         classes="modal-hint")
+
+    def _project_options(self, org: str) -> list[tuple[str, str]]:
+        projs = self._projects_by_org.get(org, [])
+        out = []
+        for p in projs:
+            name = p.get("name") or "?"
+            handle = str(p.get("handle") or "")
+            if handle:
+                out.append((name, handle))
+        return out or [("(no projects)", "")]
+
+    def _connector_options(self, org: str) -> list[tuple[str, str]]:
+        conns = self._connectors_by_org.get(org, [])
+        return [(f"{c.name}  ({c.type})", c.handle) for c in conns] \
+            or [("(no connectors)", "")]
+
+    def _initial_retention_value(self) -> int:
+        if not self._existing:
+            return 1                 # default: 1 week
+        # Pick the largest unit that divides exactly.
+        s = self._existing.retention_seconds
+        for _, mult in reversed(_RETENTION_UNITS):
+            if s % mult == 0 and s // mult >= 1:
+                return s // mult
+        return s
+
+    def _initial_retention_mult(self) -> int:
+        if not self._existing:
+            return 604800              # weeks (default)
+        s = self._existing.retention_seconds
+        for _, mult in reversed(_RETENTION_UNITS):
+            if s % mult == 0 and s // mult >= 1:
+                return mult
+        return 1
+
+    # ---- mount -------------------------------------------------------
+    def on_mount(self) -> None:
+        # Build the root if we're in edit mode (so the user sees the
+        # tree they previously navigated).
+        if self._existing and self._cur_conn_handle:
+            self._action_browse()
+        self.query_one("#newjob-name", Input).focus()
+
+    # ---- events ------------------------------------------------------
+    def on_button_pressed(self, evt: Button.Pressed) -> None:
+        bid = evt.button.id
+        if bid == "newjob-cancel":
+            self.dismiss(None)
+        elif bid == "newjob-save":
+            self._save()
+        elif bid == "newjob-browse":
+            self._action_browse()
+        elif bid == "newjob-count":
+            self._action_count()
+
+    def on_select_changed(self, evt) -> None:
+        sid = getattr(evt.select, "id", "")
+        if sid == "newjob-org":
+            org = evt.value if evt.value != Select.BLANK else ""
+            self._cur_org = str(org)
+            # Re-populate project + connector dropdowns from the new org.
+            try:
+                self.query_one("#newjob-project", Select).set_options(
+                    self._project_options(self._cur_org)
+                )
+                self.query_one("#newjob-connector", Select).set_options(
+                    self._connector_options(self._cur_org)
+                )
+            except Exception:
+                pass
+        elif sid == "newjob-connector":
+            self._cur_conn_handle = (str(evt.value)
+                                     if evt.value != Select.BLANK else "")
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    # ---- file tree ---------------------------------------------------
+    def _selected_connector(self) -> Optional[drdata.Connector]:
+        conns = self._connectors_by_org.get(self._cur_org, [])
+        for c in conns:
+            if c.handle == self._cur_conn_handle:
+                return c
+        return None
+
+    def _action_browse(self) -> None:
+        """Repopulate the tree with the connector root listing."""
+        conn = self._selected_connector()
+        if conn is None:
+            self.query_one("#newjob-error", Static).update(
+                "[red]Pick an org + connector first.[/]"
+            )
+            return
+        self.query_one("#newjob-error", Static).update("")
+        tree = self.query_one("#newjob-tree", Tree)
+        tree.reset(conn.path or conn.host or conn.name,
+                   data={"path": conn.path or "", "leaf": False,
+                         "loaded": False, "host": conn.host,
+                         "ctype": conn.type, "cname": conn.name})
+        # Fire the lazy-loader on the root.
+        self.run_worker(
+            lambda: self._load_children_blocking(tree.root),
+            thread=True, exclusive=False, group="newjob-tree",
+        )
+
+    def on_tree_node_selected(self, evt) -> None:
+        node = evt.node
+        data = node.data or {}
+        # Remember the current path for "Count Files" / "Save".
+        self._cur_path = str(data.get("path") or "")
+        self.query_one("#newjob-selected", Static).update(
+            f"[dim]Selected: {self._cur_path or '(connector root)'}[/]"
+        )
+        # Lazy-load children if this is a directory we haven't expanded yet.
+        if data.get("leaf"):
+            return
+        if data.get("loaded"):
+            return
+        self.run_worker(
+            lambda: self._load_children_blocking(node),
+            thread=True, exclusive=False, group="newjob-tree",
+        )
+
+    def _load_children_blocking(self, node) -> None:
+        data = node.data or {}
+        conn = self._selected_connector()
+        if conn is None or self._client is None:
+            return
+        try:
+            entries = drdata.explore_connector(
+                self._client,
+                org_name=self._cur_org,
+                connector_name=conn.name,
+                connector_type=conn.type,
+                remote_host=conn.host,
+                remote_path=conn.path or "",
+                parent_path=data.get("path") or conn.path or "",
+            )
+        except Exception:
+            entries = []
+        self.app.call_from_thread(self._apply_children, node, entries)
+
+    def _apply_children(self, node, entries: list[drdata.PathEntry]) -> None:
+        node.remove_children()
+        parent_path = (node.data or {}).get("path") or ""
+        for e in entries:
+            child_path = (parent_path.rstrip("/") + "/" + e.name).lstrip("/")
+            label = (f"[dim]🗎[/] {e.name}" if e.leaf
+                     else f"[b]🗀[/] {e.name}")
+            child_data = {
+                "path": child_path,
+                "leaf": e.leaf,
+                "loaded": False,
+            }
+            if e.leaf:
+                node.add_leaf(label, data=child_data)
+            else:
+                node.add(label, data=child_data)
+        if node.data is not None:
+            node.data["loaded"] = True
+        node.expand()
+
+    # ---- count files -------------------------------------------------
+    def _action_count(self) -> None:
+        conn = self._selected_connector()
+        if conn is None:
+            self.query_one("#newjob-error", Static).update(
+                "[red]Pick a connector first.[/]"
+            )
+            return
+        if not self._cur_path:
+            self.query_one("#newjob-error", Static).update(
+                "[red]Select a directory in the tree first.[/]"
+            )
+            return
+        self.query_one("#newjob-count-status", Static).update(
+            "[yellow]counting…[/]"
+        )
+        self.run_worker(
+            self._count_blocking, thread=True, exclusive=True,
+            group="newjob-count",
+        )
+
+    def _count_blocking(self) -> None:
+        conn = self._selected_connector()
+        if conn is None: return
+
+        def _cb(files, dirs, current):
+            try:
+                self.app.call_from_thread(
+                    self.query_one("#newjob-count-status", Static).update,
+                    f"[yellow]counting… {files} files / {dirs} dirs  "
+                    f"current={current[:40]}[/]",
+                )
+            except Exception:
+                pass
+
+        try:
+            files, dirs = drdata.count_files_recursively(
+                self._client,
+                org_name=self._cur_org,
+                connector_name=conn.name,
+                connector_type=conn.type,
+                remote_host=conn.host,
+                remote_path=conn.path or "",
+                root_path=self._cur_path,
+                progress_cb=_cb,
+            )
+        except Exception as e:
+            self.app.call_from_thread(
+                self.query_one("#newjob-count-status", Static).update,
+                f"[red]count error: {e!r}[/]",
+            )
+            return
+        self.app.call_from_thread(
+            self.query_one("#newjob-count-status", Static).update,
+            f"[green]{files} files, {dirs} dirs under "
+            f"{self._cur_path}[/]  "
+            f"[dim](no byte total — DR API exposes no size)[/]",
+        )
+
+    # ---- save --------------------------------------------------------
+    def _save(self) -> None:
+        err = self.query_one("#newjob-error", Static)
+        name = self.query_one("#newjob-name", Input).value.strip()
+        if not name:
+            err.update("[red]Job name is required.[/]")
+            return
+        try:
+            project = str(self.query_one("#newjob-project", Select).value or "")
+            connector_handle = str(
+                self.query_one("#newjob-connector", Select).value or ""
+            )
+        except Exception:
+            project = connector_handle = ""
+        if not project or not connector_handle:
+            err.update("[red]Pick a project + connector first.[/]")
+            return
+        if not self._cur_path:
+            err.update("[red]Pick a directory in the tree before saving.[/]")
+            return
+        try:
+            ret_raw = self.query_one("#newjob-retention", Input).value.strip() or "0"
+            ret_n = int(ret_raw)
+            ret_mult = int(self.query_one(
+                "#newjob-retention-unit", Select,
+            ).value or "1")
+            ret_seconds = ret_n * ret_mult
+            if ret_seconds < 0:
+                raise ValueError
+        except ValueError:
+            err.update("[red]Retention must be a non-negative integer.[/]")
+            return
+
+        conn = self._selected_connector()
+        payload = {
+            "name": name,
+            "org": self._cur_org,
+            "project_handle": project,
+            "connector_name": (conn.name if conn else ""),
+            "connector_handle": connector_handle,
+            "connector_type": (conn.type if conn else "NFS"),
+            "remote_host": (conn.host if conn else ""),
+            "remote_path": (conn.path if conn else ""),
+            "path": self._cur_path,
+            "retention_seconds": ret_seconds,
+            "description": self.query_one("#newjob-desc", Input).value.strip(),
+        }
+        self.dismiss(payload)
+
+
 class HelpModal(ModalScreen[None]):
     """F1 — keyboard reference. Dismiss with any key."""
 
@@ -1753,6 +2180,46 @@ class DashboardScreen(Screen):
                                             zebra_stripes=True, cursor_type="row")
                     # F2 help side-pane — same pattern as the System Settings tab.
                     yield Markdown("", id="orgs-help-pane", classes="help-pane")
+
+            # ----------------------- Job Scheduler (v0.13) -----------------
+            with TabPane("Job Scheduler", id="tab-scheduler"):
+                with Vertical():
+                    with Horizontal(id="scheduler-actions"):
+                        yield Button("New Job", id="sch-new",
+                                     variant="success")
+                        yield Button("Run", id="sch-run", variant="primary")
+                        yield Button("Edit", id="sch-edit")
+                        yield Button("Delete", id="sch-delete",
+                                     variant="error")
+                        yield Button("Refresh", id="sch-refresh")
+                    with Horizontal():
+                        yield Tree("Scheduler", id="scheduler-tree")
+                        with ContentSwitcher(id="scheduler-switcher",
+                                             initial="sch-running-view"):
+                            with Vertical(id="sch-running-view"):
+                                yield Static("Running Jobs",
+                                             classes="panel-title")
+                                yield DataTable(id="sch-running-table",
+                                                zebra_stripes=True,
+                                                cursor_type="row")
+                            with Vertical(id="sch-saved-view"):
+                                yield Static("Saved Job Templates",
+                                             classes="panel-title")
+                                yield DataTable(id="sch-saved-table",
+                                                zebra_stripes=True,
+                                                cursor_type="row")
+                            with Vertical(id="sch-timers-view"):
+                                yield Static("Scheduled Retention Timers",
+                                             classes="panel-title")
+                                yield DataTable(id="sch-timers-table",
+                                                zebra_stripes=True,
+                                                cursor_type="row")
+                            with Vertical(id="sch-runs-view"):
+                                yield Static("Run History",
+                                             classes="panel-title")
+                                yield DataTable(id="sch-runs-table",
+                                                zebra_stripes=True,
+                                                cursor_type="row")
         yield Footer()
 
     # ---------------------------------------------------------- mount
@@ -1812,8 +2279,22 @@ class DashboardScreen(Screen):
         self.query_one("#org-storage-table", DataTable).add_columns(
             "Depot", "Use", "Used", "Available",
         )
+        # v0.13 Job Scheduler tables.
+        self.query_one("#sch-running-table", DataTable).add_columns(
+            "Org", "Project", "Job", "State", "Started", "Duration", "User",
+        )
+        self.query_one("#sch-saved-table", DataTable).add_columns(
+            "Job Name", "Org", "Path", "Retention", "Description",
+        )
+        self.query_one("#sch-timers-table", DataTable).add_columns(
+            "Unit", "Next fire", "Time left", "Activates",
+        )
+        self.query_one("#sch-runs-table", DataTable).add_columns(
+            "Run ID", "Started", "Status", "Task Handle", "Finished",
+        )
 
         self._populate_sys_tree()
+        self._populate_scheduler_tree()
 
         # F2 help panes — both default to hidden. F2 toggles whichever tab
         # the user is currently on.
@@ -1875,6 +2356,20 @@ class DashboardScreen(Screen):
         realm.add_leaf("Password Policy",    data={"kind": "sys-pwpolicy"})
         realm.add_leaf("Inactivity Timeout", data={"kind": "sys-inactivity"})
 
+    def _populate_scheduler_tree(self) -> None:
+        """v0.13 — tree on the Job Scheduler tab: four leaf views."""
+        t = self.query_one("#scheduler-tree", Tree)
+        t.show_root = False
+        t.root.expand()
+        t.root.add_leaf("Running Jobs",         data={"kind": "sch-running"})
+        t.root.add_leaf("Saved Templates",      data={"kind": "sch-saved"})
+        t.root.add_leaf("Retention Timers",     data={"kind": "sch-timers"})
+        t.root.add_leaf("Run History",          data={"kind": "sch-runs"})
+        # Default landing: Saved Templates (matches what most users open
+        # the tab to do — pick a job and run it).
+        self.query_one("#scheduler-switcher", ContentSwitcher).current = \
+            "sch-saved-view"
+
     def _load_orgs_tree(self) -> None:
         orgs: list[drdata.OrgInfo] = []
         try:
@@ -1932,6 +2427,14 @@ class DashboardScreen(Screen):
             self._load_view(kind, self.selected_org)
             if self.help_visible:
                 self._refresh_help_pane()
+            return
+
+        if kind in SCH_VIEW_MAP:
+            self.query_one("#scheduler-switcher", ContentSwitcher).current = \
+                SCH_VIEW_MAP[kind]
+            self.selected_kind = kind
+            self.selected_org = ""
+            self._load_view(kind, "")
             return
 
         # Non-leaf clicks (category headings, org root) — keep current pane.
@@ -2028,6 +2531,29 @@ class DashboardScreen(Screen):
                     return
                 rows = drdata.org_storage_rows(sys_c, org)
                 self._cb(worker, self._apply_org_storage, rows)
+
+            # ----- v0.13 Job Scheduler -----
+            elif kind == "sch-running":
+                c = self.app.sys_client or self.app.org_client
+                if c is None:
+                    return
+                rows, _ = drdata.list_realm_tasks(c)
+                running = [r for r in rows if r.state == "RUNNING"]
+                self._cb(worker, self._apply_sch_running, running)
+            elif kind == "sch-saved":
+                jobs = drsch.load_saved_jobs()
+                self._cb(worker, self._apply_sch_saved, jobs)
+            elif kind == "sch-timers":
+                timers = drsch.list_dr_timers()
+                self._cb(worker, self._apply_sch_timers, timers)
+            elif kind == "sch-runs":
+                # All runs across all saved jobs, newest first.
+                all_runs: list[tuple[str, drsch.RunRecord]] = []
+                for j in drsch.load_saved_jobs():
+                    for r in drsch.list_runs(j.slug()):
+                        all_runs.append((j.name, r))
+                all_runs.sort(key=lambda kv: kv[1].started_at, reverse=True)
+                self._cb(worker, self._apply_sch_runs, all_runs)
 
         except APIError as e:
             self._post_status(f"{kind}: {e.error_code or e.status}")
@@ -2251,6 +2777,71 @@ class DashboardScreen(Screen):
             t.add_row(r.depot_name, r.use_type, _fmt_kb(r.kb_used), _fmt_kb(r.kb_available))
         self._update_status_bar(extra=f"depots=[yellow]{len(rows)}[/]")
 
+    # ---- v0.13 Job Scheduler appliers ----
+    def _apply_sch_running(self, running: list["drdata.JobRow"]) -> None:
+        t = self.query_one("#sch-running-table", DataTable)
+        t.clear()
+        for r in running:
+            state_disp = (f"[green]{r.state}[/]" if r.state == "RUNNING"
+                          else f"[dim]{r.state}[/]")
+            t.add_row(
+                r.org or "—", r.project, r.job, state_disp,
+                r.started or "—", r.duration or "—", r.user or "—",
+            )
+        self._update_status_bar(extra=f"running=[green]{len(running)}[/]")
+
+    def _apply_sch_saved(self, jobs: list[drsch.JobDefinition]) -> None:
+        t = self.query_one("#sch-saved-table", DataTable)
+        t.clear()
+        self._sch_saved_rows = jobs
+        for j in jobs:
+            # "longterm" anywhere in the name → yellow-bold highlight,
+            # per the user's request: visually flag long-retention jobs.
+            name_disp = (f"[yellow b]{j.name}[/]"
+                         if "longterm" in j.name.lower()
+                         else j.name)
+            t.add_row(
+                name_disp, j.org, j.path,
+                _fmt_retention(j.retention_seconds),
+                j.description or "",
+            )
+        self._update_status_bar(extra=f"saved=[cyan]{len(jobs)}[/]")
+
+    def _apply_sch_timers(self, timers: list[drsch.TimerInfo]) -> None:
+        t = self.query_one("#sch-timers-table", DataTable)
+        t.clear()
+        for ti in timers:
+            t.add_row(ti.unit, ti.next_fire, ti.left, ti.activates or "—")
+        self._update_status_bar(extra=f"timers=[yellow]{len(timers)}[/]")
+
+    def _apply_sch_runs(
+        self, all_runs: list[tuple[str, "drsch.RunRecord"]],
+    ) -> None:
+        t = self.query_one("#sch-runs-table", DataTable)
+        t.clear()
+        for job_name, r in all_runs:
+            colour = {
+                "RUNNING": "yellow", "SUCCESS": "green",
+                "FAILURE": "red", "DELETED": "dim",
+                "DELETE_FAILED": "red",
+            }.get(r.status, "")
+            status_disp = f"[{colour}]{r.status}[/]" if colour else r.status
+            t.add_row(
+                f"{job_name}:{r.run_id}", r.started_at, status_disp,
+                r.task_handle[:16], r.finished_at or "—",
+            )
+        self._update_status_bar(extra=f"runs=[cyan]{len(all_runs)}[/]")
+
+    def _sch_saved_selected(self) -> Optional["drsch.JobDefinition"]:
+        rows = getattr(self, "_sch_saved_rows", None) or []
+        try:
+            idx = self.query_one("#sch-saved-table", DataTable).cursor_row
+        except Exception:
+            return None
+        if idx is None or idx < 0 or idx >= len(rows):
+            return None
+        return rows[idx]
+
     # ---------------------------------------------------------- CRUD: depots
     # Button id → (action, use_type). Action is "new" / "edit" / "delete".
     _DEPOT_BTN_MAP = {
@@ -2327,6 +2918,30 @@ class DashboardScreen(Screen):
             self._settings_pwpolicy_open_edit(); return
         if bid == "sys-inactivity-edit":
             self._settings_inactivity_open_edit(); return
+
+        # ----- v0.13 Job Scheduler -----
+        if bid == "sch-new":
+            self._sch_open_new(); return
+        if bid == "sch-edit":
+            j = self._sch_saved_selected()
+            if j is None:
+                self._post_status("select a saved job first")
+                return
+            self._sch_open_edit(j); return
+        if bid == "sch-delete":
+            j = self._sch_saved_selected()
+            if j is None:
+                self._post_status("select a saved job first")
+                return
+            self._sch_confirm_delete(j); return
+        if bid == "sch-run":
+            j = self._sch_saved_selected()
+            if j is None:
+                self._post_status("select a saved job first")
+                return
+            self._sch_run_now(j); return
+        if bid == "sch-refresh":
+            self._load_view(self.selected_kind or "sch-saved", ""); return
 
         # ----- dashboard log filters -----
         if bid == "dash-flt-info":
@@ -2576,6 +3191,147 @@ class DashboardScreen(Screen):
         if leaf:
             self.app.call_from_thread(self._post_status_ok, f"{kind}: saved")
             self.app.call_from_thread(self._load_view, leaf, "")
+
+    # ---- v0.13 Job Scheduler open/run helpers ----
+    def _sch_open_new(self) -> None:
+        """Open NewJobModal — fetch orgs/connectors/projects in a worker first."""
+        self._post_status("loading orgs + connectors…")
+        self.run_worker(
+            lambda: self._sch_collect_then_open(existing=None),
+            thread=True, exclusive=True, group="sch-open",
+        )
+
+    def _sch_open_edit(self, job: "drsch.JobDefinition") -> None:
+        self._post_status(f"loading wizard for {job.name}…")
+        self.run_worker(
+            lambda: self._sch_collect_then_open(existing=job),
+            thread=True, exclusive=True, group="sch-open",
+        )
+
+    def _sch_collect_then_open(
+        self, *, existing: Optional["drsch.JobDefinition"],
+    ) -> None:
+        """Gather org/connector/project data, then push NewJobModal."""
+        client = self.app.sys_client or self.app.org_client
+        if client is None:
+            self._post_status("scheduler: no API session")
+            return
+        try:
+            if self.app.role == ROLE_SYS and self.app.sys_client is not None:
+                orgs_full = drdata.list_organizations_sys(self.app.sys_client)
+                org_names = [o.name for o in orgs_full]
+            else:
+                # admin@<org> only sees their own org.
+                org_names = [self.app.org_client.cfg.organization] \
+                    if self.app.org_client is not None else []
+        except Exception:
+            org_names = []
+
+        connectors_by_org: dict[str, list[drdata.Connector]] = {}
+        projects_by_org: dict[str, list[dict]] = {}
+        for org in org_names:
+            try:
+                connectors_by_org[org] = drdata.list_connectors(client, org)
+            except Exception:
+                connectors_by_org[org] = []
+        try:
+            for org, p in self._list_projects():
+                projects_by_org.setdefault(org, []).append(p)
+        except Exception:
+            pass
+
+        self.app.call_from_thread(
+            self._sch_push_modal,
+            org_names, connectors_by_org, projects_by_org, client, existing,
+        )
+
+    def _sch_push_modal(
+        self, orgs, connectors_by_org, projects_by_org, client, existing,
+    ) -> None:
+        self.app.push_screen(
+            NewJobModal(
+                orgs=orgs,
+                connectors_by_org=connectors_by_org,
+                projects_by_org=projects_by_org,
+                api_client=client,
+                existing=existing,
+            ),
+            self._sch_after_modal,
+        )
+
+    def _sch_after_modal(self, payload: Optional[dict]) -> None:
+        if not payload:
+            return
+        # Save (or overwrite) the JobDefinition.
+        job = drsch.JobDefinition(**payload)
+        drsch.save_job(job)
+        self._post_status_ok(f"job saved: {job.name}")
+        # Refresh the Saved Templates view if we're on it.
+        if self.selected_kind == "sch-saved":
+            self._load_view("sch-saved", "")
+
+    def _sch_confirm_delete(self, job: "drsch.JobDefinition") -> None:
+        self.app.push_screen(
+            ConfirmModal(
+                title="Delete saved job?",
+                message=(
+                    f"Permanently delete the saved job template "
+                    f"[b]{job.name}[/]?\n\n"
+                    "Scheduled retention timers for past runs are not "
+                    "cancelled by this action — manage those from the "
+                    "Retention Timers view."
+                ),
+                confirm_label="Delete",
+            ),
+            lambda ok: self._sch_delete_after_confirm(ok, job),
+        )
+
+    def _sch_delete_after_confirm(
+        self, ok: bool, job: "drsch.JobDefinition",
+    ) -> None:
+        if not ok:
+            return
+        if drsch.delete_saved_job(job.name):
+            self._post_status_ok(f"deleted: {job.name}")
+        else:
+            self._post_status(f"delete: file missing for {job.name}")
+        if self.selected_kind == "sch-saved":
+            self._load_view("sch-saved", "")
+
+    def _sch_run_now(self, job: "drsch.JobDefinition") -> None:
+        """Shell out to dr-job-run in a background thread.
+
+        Same code path as cron / systemd would use — we deliberately
+        don't replicate the submit-chain inline so there's exactly one
+        place where things can go wrong.
+        """
+        import shutil, subprocess
+        bin_path = shutil.which("dr-job-run") or "/opt/dr-tools/venv/bin/dr-job-run"
+        self._post_status(f"running: {job.name} via {bin_path}")
+        def _run():
+            try:
+                r = subprocess.run(
+                    [bin_path, job.slug()],
+                    capture_output=True, text=True, timeout=120,
+                )
+                msg = (f"run {job.name}: rc={r.returncode}"
+                       + (f"  {r.stderr.strip()[:80]}" if r.stderr else ""))
+                self.app.call_from_thread(self._post_status, msg)
+            except FileNotFoundError:
+                self.app.call_from_thread(
+                    self._post_status,
+                    f"dr-job-run not found at {bin_path}",
+                )
+            except Exception as e:
+                self.app.call_from_thread(
+                    self._post_status, f"run error: {e!r}",
+                )
+            # Refresh run history if visible.
+            if self.selected_kind in ("sch-runs", "sch-saved"):
+                self.app.call_from_thread(
+                    self._load_view, self.selected_kind, "",
+                )
+        self.run_worker(_run, thread=True, exclusive=False, group="sch-run")
 
     def _sys_user_open_new(self) -> None:
         # Need roles loaded before the modal renders.
