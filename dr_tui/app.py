@@ -27,9 +27,9 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.reactive import reactive
 from textual.screen import ModalScreen, Screen
 from textual.widgets import (
-    Button, ContentSwitcher, DataTable, Footer, Header, Input, Label,
+    Button, Checkbox, ContentSwitcher, DataTable, Footer, Header, Input, Label,
     Markdown, RadioButton, RadioSet, RichLog, Select, Sparkline, Static,
-    TabbedContent, TabPane, Tree,
+    TabbedContent, TabPane, TextArea, Tree,
 )
 from textual.worker import get_current_worker
 
@@ -1185,6 +1185,285 @@ class TaskLogModal(ModalScreen[None]):
         )
 
 
+# === v0.12 Realm Settings edit modals ====================================== #
+
+class MailServerFormModal(ModalScreen[Optional[dict]]):
+    """v0.12 — edit SMTP host + port for `realmManager/createMailServerConfig`.
+
+    Returns `{"smtp_host": str, "smtp_port": int}` on save, None on cancel.
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, *, existing: Optional[drdata.MailServerConfig] = None) -> None:
+        super().__init__()
+        self._existing = existing
+
+    def compose(self) -> ComposeResult:
+        with Container(id="settings-card"):
+            yield Static("Mail Server Configuration", id="settings-title")
+            yield Label("SMTP host (FQDN / IP):")
+            yield Input(
+                value=(self._existing.smtp_host if self._existing else ""),
+                placeholder="smtp.example.com",
+                id="mail-host",
+            )
+            yield Label("SMTP port:")
+            yield Input(
+                value=str(self._existing.smtp_port if self._existing else 25),
+                placeholder="25",
+                id="mail-port",
+            )
+            yield Static("", id="settings-error")
+            with Horizontal(classes="settings-buttons"):
+                yield Button.success("Save", id="settings-save")
+                yield Button("Cancel", id="settings-cancel")
+            yield Static("[dim][Enter] save · [Esc] cancel · [Tab] next field[/]",
+                         classes="modal-hint")
+
+    def on_mount(self) -> None:
+        self.query_one("#mail-host", Input).focus()
+
+    def on_button_pressed(self, evt: Button.Pressed) -> None:
+        if evt.button.id == "settings-cancel":
+            self.dismiss(None)
+        elif evt.button.id == "settings-save":
+            self._save()
+
+    def on_input_submitted(self, _evt: Input.Submitted) -> None:
+        self._save()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    def _save(self) -> None:
+        host = self.query_one("#mail-host", Input).value.strip()
+        port_raw = self.query_one("#mail-port", Input).value.strip() or "0"
+        err = self.query_one("#settings-error", Static)
+        if not host:
+            err.update("[red]SMTP host is required.[/]")
+            return
+        try:
+            port = int(port_raw)
+            if not 1 <= port <= 65535:
+                raise ValueError
+        except ValueError:
+            err.update("[red]Port must be an integer in 1–65535.[/]")
+            return
+        self.dismiss({"smtp_host": host, "smtp_port": port})
+
+
+class SplashMessageFormModal(ModalScreen[Optional[dict]]):
+    """v0.12 — edit login-banner splash message via `setSplashMessage`.
+
+    Returns `{"enabled": bool, "message": str}` on save, None on cancel.
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, *, existing: Optional[drdata.SplashMessage] = None) -> None:
+        super().__init__()
+        self._existing = existing
+
+    def compose(self) -> ComposeResult:
+        with Container(id="settings-card"):
+            yield Static("Splash Message (login banner)", id="settings-title")
+            yield Checkbox(
+                "Enabled (shown to users at login)",
+                value=bool(self._existing and self._existing.enabled),
+                id="splash-enabled",
+            )
+            yield Label("Message text:")
+            yield TextArea(
+                (self._existing.message if self._existing else ""),
+                id="splash-message",
+            )
+            yield Static("", id="settings-error")
+            with Horizontal(classes="settings-buttons"):
+                yield Button.success("Save", id="settings-save")
+                yield Button("Cancel", id="settings-cancel")
+            yield Static("[dim][Esc] cancel · message can be multi-line[/]",
+                         classes="modal-hint")
+
+    def on_mount(self) -> None:
+        # Focus the TextArea so users can start typing immediately.
+        self.query_one("#splash-message", TextArea).focus()
+
+    def on_button_pressed(self, evt: Button.Pressed) -> None:
+        if evt.button.id == "settings-cancel":
+            self.dismiss(None)
+        elif evt.button.id == "settings-save":
+            self._save()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    def _save(self) -> None:
+        enabled = bool(self.query_one("#splash-enabled", Checkbox).value)
+        message = self.query_one("#splash-message", TextArea).text
+        # If enabling, require some text — empty enabled banner is a UX trap.
+        if enabled and not message.strip():
+            self.query_one("#settings-error", Static).update(
+                "[red]Message text required when enabled.[/]"
+            )
+            return
+        self.dismiss({"enabled": enabled, "message": message})
+
+
+class PasswordPolicyFormModal(ModalScreen[Optional[dict]]):
+    """v0.12 — edit realm password policy via `setPasswordPolicy`.
+
+    Returns a `PasswordPolicy` instance on save, None on cancel.
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, *, existing: Optional[drdata.PasswordPolicy] = None) -> None:
+        super().__init__()
+        # Default policy mirrors DR's out-of-box values (min_length=6,
+        # everything else zero, 90-day expiration).
+        self._existing = existing or drdata.PasswordPolicy(
+            enforce_strong=False, min_length=6,
+            min_uppercase=0, min_lowercase=0, min_numbers=0, min_symbols=0,
+            expiration_days=90,
+        )
+
+    def compose(self) -> ComposeResult:
+        e = self._existing
+        with Container(id="settings-card"):
+            yield Static("Password Policy", id="settings-title")
+            yield Checkbox(
+                "Enforce strong passwords",
+                value=bool(e.enforce_strong),
+                id="pwp-strong",
+            )
+            for field_id, label, value in (
+                ("pwp-length",     "Minimum length:",            e.min_length),
+                ("pwp-upper",      "Minimum uppercase letters:", e.min_uppercase),
+                ("pwp-lower",      "Minimum lowercase letters:", e.min_lowercase),
+                ("pwp-numbers",    "Minimum numbers:",           e.min_numbers),
+                ("pwp-symbols",    "Minimum symbols:",           e.min_symbols),
+                ("pwp-expiration", "Expiration (days, 0 = never):", e.expiration_days),
+            ):
+                yield Label(label)
+                yield Input(value=str(value), id=field_id)
+            yield Static("", id="settings-error")
+            with Horizontal(classes="settings-buttons"):
+                yield Button.success("Save", id="settings-save")
+                yield Button("Cancel", id="settings-cancel")
+            yield Static("[dim][Enter] save · [Esc] cancel · [Tab] next field[/]",
+                         classes="modal-hint")
+
+    def on_mount(self) -> None:
+        self.query_one("#pwp-length", Input).focus()
+
+    def on_button_pressed(self, evt: Button.Pressed) -> None:
+        if evt.button.id == "settings-cancel":
+            self.dismiss(None)
+        elif evt.button.id == "settings-save":
+            self._save()
+
+    def on_input_submitted(self, _evt: Input.Submitted) -> None:
+        self._save()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    def _save(self) -> None:
+        err = self.query_one("#settings-error", Static)
+        try:
+            vals = {
+                "min_length":      int(self.query_one("#pwp-length", Input).value or "0"),
+                "min_uppercase":   int(self.query_one("#pwp-upper", Input).value or "0"),
+                "min_lowercase":   int(self.query_one("#pwp-lower", Input).value or "0"),
+                "min_numbers":     int(self.query_one("#pwp-numbers", Input).value or "0"),
+                "min_symbols":     int(self.query_one("#pwp-symbols", Input).value or "0"),
+                "expiration_days": int(self.query_one("#pwp-expiration", Input).value or "0"),
+            }
+        except ValueError:
+            err.update("[red]All numeric fields must be integers.[/]")
+            return
+        if vals["min_length"] < 1:
+            err.update("[red]Minimum length must be at least 1.[/]")
+            return
+        if any(v < 0 for v in vals.values()):
+            err.update("[red]No field may be negative.[/]")
+            return
+        composition = (vals["min_uppercase"] + vals["min_lowercase"]
+                       + vals["min_numbers"] + vals["min_symbols"])
+        if composition > vals["min_length"]:
+            err.update(
+                f"[red]Composition requirements ({composition}) exceed "
+                f"min length ({vals['min_length']}).[/]"
+            )
+            return
+        self.dismiss(drdata.PasswordPolicy(
+            enforce_strong=bool(self.query_one("#pwp-strong", Checkbox).value),
+            **vals,
+        ))
+
+
+class InactivityTimeoutFormModal(ModalScreen[Optional[dict]]):
+    """v0.12 — edit session inactivity timeout (seconds).
+
+    Returns `{"seconds": int}` on save, None on cancel.
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, *, existing: Optional[drdata.InactivityTimeout] = None) -> None:
+        super().__init__()
+        self._existing = existing
+
+    def compose(self) -> ComposeResult:
+        with Container(id="settings-card"):
+            yield Static("Inactivity Timeout", id="settings-title")
+            yield Label("Session timeout (seconds):")
+            yield Input(
+                value=str(self._existing.seconds if self._existing else 5940),
+                placeholder="5940",
+                id="inact-seconds",
+            )
+            yield Static(
+                "[dim]Tip: 1800=30 min, 3600=1 h, 5940=99 min (DR default), "
+                "0=disable timeout.[/]",
+                classes="modal-hint",
+            )
+            yield Static("", id="settings-error")
+            with Horizontal(classes="settings-buttons"):
+                yield Button.success("Save", id="settings-save")
+                yield Button("Cancel", id="settings-cancel")
+            yield Static("[dim][Enter] save · [Esc] cancel[/]",
+                         classes="modal-hint")
+
+    def on_mount(self) -> None:
+        self.query_one("#inact-seconds", Input).focus()
+
+    def on_button_pressed(self, evt: Button.Pressed) -> None:
+        if evt.button.id == "settings-cancel":
+            self.dismiss(None)
+        elif evt.button.id == "settings-save":
+            self._save()
+
+    def on_input_submitted(self, _evt: Input.Submitted) -> None:
+        self._save()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    def _save(self) -> None:
+        raw = self.query_one("#inact-seconds", Input).value.strip() or "0"
+        err = self.query_one("#settings-error", Static)
+        try:
+            seconds = int(raw)
+            if seconds < 0:
+                raise ValueError
+        except ValueError:
+            err.update("[red]Seconds must be a non-negative integer.[/]")
+            return
+        self.dismiss({"seconds": seconds})
+
+
 class HelpModal(ModalScreen[None]):
     """F1 — keyboard reference. Dismiss with any key."""
 
@@ -1277,6 +1556,11 @@ class DashboardScreen(Screen):
     # Last-read virus defs — used by the "Update Now" handler to preserve
     # enabled/frequency on the trigger call.
     _virus_last: Optional["drdata.VirusDefs"]
+    # v0.12 — last-read Realm Settings, used to pre-populate edit modals.
+    _mail_last:       Optional["drdata.MailServerConfig"]
+    _splash_last:     Optional["drdata.SplashMessage"]
+    _pwpolicy_last:   Optional["drdata.PasswordPolicy"]
+    _inactivity_last: Optional["drdata.InactivityTimeout"]
 
     # ---- Landing dashboard state ----
     _metrics_prev: Optional["drmetrics.MetricsSample"]
@@ -1393,18 +1677,30 @@ class DashboardScreen(Screen):
                         # ---- Realm Settings sub-tree (v0.08) ----
                         with Vertical(id="sys-mail-view"):
                             yield Static("Mail Server", classes="panel-title")
+                            with Horizontal(classes="settings-actions"):
+                                yield Button("Edit", id="sys-mail-edit",
+                                             variant="primary")
                             yield Static("Loading…", id="sys-mail-body",
                                          classes="detail-body")
                         with Vertical(id="sys-splash-view"):
                             yield Static("Splash Message", classes="panel-title")
+                            with Horizontal(classes="settings-actions"):
+                                yield Button("Edit", id="sys-splash-edit",
+                                             variant="primary")
                             yield Static("Loading…", id="sys-splash-body",
                                          classes="detail-body")
                         with Vertical(id="sys-pwpolicy-view"):
                             yield Static("Password Policy", classes="panel-title")
+                            with Horizontal(classes="settings-actions"):
+                                yield Button("Edit", id="sys-pwpolicy-edit",
+                                             variant="primary")
                             yield Static("Loading…", id="sys-pwpolicy-body",
                                          classes="detail-body")
                         with Vertical(id="sys-inactivity-view"):
                             yield Static("Inactivity Timeout", classes="panel-title")
+                            with Horizontal(classes="settings-actions"):
+                                yield Button("Edit", id="sys-inactivity-edit",
+                                             variant="primary")
                             yield Static("Loading…", id="sys-inactivity-body",
                                          classes="detail-body")
                     # F2 help side-pane — hidden by default; populated by
@@ -1467,6 +1763,10 @@ class DashboardScreen(Screen):
         self._system_roles = []
         self._connectors_rows = []
         self._virus_last = None
+        self._mail_last = None
+        self._splash_last = None
+        self._pwpolicy_last = None
+        self._inactivity_last = None
         self._metrics_prev = None
         self._metrics_history = drmetrics.MetricsHistory(max_points=60)
         self._log_filter = {"INFO", "WARN", "ERROR"}
@@ -1820,6 +2120,7 @@ class DashboardScreen(Screen):
                 f"[b]SMTP port:[/] {cfg.smtp_port}",
                 f"[b]SMTP auth:[/] {_yn(cfg.smtp_auth)}",
             ]))
+        self._mail_last = cfg
         self._update_status_bar()
 
     def _apply_splash(self, sp: "drdata.SplashMessage") -> None:
@@ -1829,6 +2130,7 @@ class DashboardScreen(Screen):
             f"[b]Message:[/]",
             f"  {sp.message or '[dim]—[/]'}",
         ]))
+        self._splash_last = sp
         self._update_status_bar()
 
     def _apply_pwpolicy(self, pp: "drdata.PasswordPolicy") -> None:
@@ -1842,6 +2144,7 @@ class DashboardScreen(Screen):
             f"[b]Minimum symbols:[/] {pp.min_symbols}",
             f"[b]Password expiration:[/] {pp.expiration_days} days",
         ]))
+        self._pwpolicy_last = pp
         self._update_status_bar()
 
     def _apply_inactivity(self, it: "drdata.InactivityTimeout") -> None:
@@ -1857,6 +2160,7 @@ class DashboardScreen(Screen):
             "[dim]Idle sessions are automatically logged out after this[/]",
             "[dim]duration. Set to 0 to disable.[/]",
         ]))
+        self._inactivity_last = it
         self._update_status_bar()
 
     def _apply_sys_users_groups(
@@ -2014,6 +2318,16 @@ class DashboardScreen(Screen):
             self._virus_trigger_update()
             return
 
+        # ----- v0.12 realm settings edit buttons -----
+        if bid == "sys-mail-edit":
+            self._settings_mail_open_edit(); return
+        if bid == "sys-splash-edit":
+            self._settings_splash_open_edit(); return
+        if bid == "sys-pwpolicy-edit":
+            self._settings_pwpolicy_open_edit(); return
+        if bid == "sys-inactivity-edit":
+            self._settings_inactivity_open_edit(); return
+
         # ----- dashboard log filters -----
         if bid == "dash-flt-info":
             self._toggle_log_filter("INFO")
@@ -2153,6 +2467,115 @@ class DashboardScreen(Screen):
         if idx is None or idx < 0 or idx >= len(self._sys_users_rows):
             return None
         return self._sys_users_rows[idx]
+
+    # ---- v0.12 Realm Settings edit dispatch ----
+    def _settings_mail_open_edit(self) -> None:
+        self.app.push_screen(
+            MailServerFormModal(existing=self._mail_last),
+            self._settings_mail_after,
+        )
+
+    def _settings_splash_open_edit(self) -> None:
+        self.app.push_screen(
+            SplashMessageFormModal(existing=self._splash_last),
+            self._settings_splash_after,
+        )
+
+    def _settings_pwpolicy_open_edit(self) -> None:
+        self.app.push_screen(
+            PasswordPolicyFormModal(existing=self._pwpolicy_last),
+            self._settings_pwpolicy_after,
+        )
+
+    def _settings_inactivity_open_edit(self) -> None:
+        self.app.push_screen(
+            InactivityTimeoutFormModal(existing=self._inactivity_last),
+            self._settings_inactivity_after,
+        )
+
+    def _settings_mail_after(self, result: Optional[dict]) -> None:
+        if not result: return
+        self._post_status("mail: saving…")
+        self.run_worker(
+            lambda: self._settings_write_blocking(
+                "mail", lambda c: drdata.set_mail_server_config(
+                    c, smtp_host=result["smtp_host"],
+                    smtp_port=result["smtp_port"],
+                ),
+            ),
+            thread=True, exclusive=False, group="settings-write",
+        )
+
+    def _settings_splash_after(self, result: Optional[dict]) -> None:
+        if not result: return
+        self._post_status("splash: saving…")
+        self.run_worker(
+            lambda: self._settings_write_blocking(
+                "splash", lambda c: drdata.set_splash_message(
+                    c, enabled=result["enabled"], message=result["message"],
+                ),
+            ),
+            thread=True, exclusive=False, group="settings-write",
+        )
+
+    def _settings_pwpolicy_after(self, result) -> None:
+        # PasswordPolicyFormModal returns a PasswordPolicy directly.
+        if not result: return
+        self._post_status("password policy: saving…")
+        self.run_worker(
+            lambda: self._settings_write_blocking(
+                "pwpolicy",
+                lambda c: drdata.set_password_policy(c, policy=result),
+            ),
+            thread=True, exclusive=False, group="settings-write",
+        )
+
+    def _settings_inactivity_after(self, result: Optional[dict]) -> None:
+        if not result: return
+        self._post_status("inactivity: saving…")
+        self.run_worker(
+            lambda: self._settings_write_blocking(
+                "inactivity",
+                lambda c: drdata.set_inactivity_timeout(
+                    c, seconds=result["seconds"],
+                ),
+            ),
+            thread=True, exclusive=False, group="settings-write",
+        )
+
+    def _settings_write_blocking(self, kind: str, op) -> None:
+        """Worker thread: run a Realm Settings write + refresh the view.
+
+        `op` is a 1-arg callable taking the API client; it returns the
+        new dataclass (Mail / Splash / PasswordPolicy / Inactivity).
+        Any APIError lands in the status bar; other exceptions are
+        surfaced verbatim for the user to copy/paste.
+        """
+        client = self.app.sys_client or self.app.org_client
+        if client is None:
+            self._post_status(f"{kind}: no API session")
+            return
+        try:
+            op(client)
+        except APIError as e:
+            self._post_status(
+                f"{kind}: {e.error_code or e.status} {e.extended_status[:60]}"
+            )
+            return
+        except Exception as e:
+            self._post_status(f"{kind} error: {e!r}")
+            return
+        # Refresh the matching sub-view so the body reflects the new state.
+        kind_to_leaf = {
+            "mail":       "sys-mail",
+            "splash":     "sys-splash",
+            "pwpolicy":   "sys-pwpolicy",
+            "inactivity": "sys-inactivity",
+        }
+        leaf = kind_to_leaf.get(kind)
+        if leaf:
+            self.app.call_from_thread(self._post_status_ok, f"{kind}: saved")
+            self.app.call_from_thread(self._load_view, leaf, "")
 
     def _sys_user_open_new(self) -> None:
         # Need roles loaded before the modal renders.
@@ -2641,6 +3064,14 @@ class DashboardScreen(Screen):
             if g is None:
                 self._post_status("select a group row first"); return
             self._sys_group_open_edit(g)
+        elif kind == "sys-mail":
+            self._settings_mail_open_edit()
+        elif kind == "sys-splash":
+            self._settings_splash_open_edit()
+        elif kind == "sys-pwpolicy":
+            self._settings_pwpolicy_open_edit()
+        elif kind == "sys-inactivity":
+            self._settings_inactivity_open_edit()
         else:
             self._post_status("[F4] Edit — not available on this view")
 

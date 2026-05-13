@@ -450,6 +450,75 @@ JobsMonitorModal {
     margin: 0 1;
 }
 
+/* ---------------------------------------------------------- v0.12 Realm Settings edit modals */
+MailServerFormModal,
+SplashMessageFormModal,
+PasswordPolicyFormModal,
+InactivityTimeoutFormModal {
+    align: center middle;
+}
+
+#settings-card {
+    width: 76;
+    height: auto;
+    padding: 1 2;
+    border: round $accent;
+    background: $panel;
+}
+
+#settings-title {
+    content-align: center middle;
+    color: $accent;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#settings-card Label {
+    margin-top: 1;
+    color: grey;
+}
+
+#settings-card Input {
+    margin-bottom: 0;
+}
+
+#settings-card Checkbox {
+    margin: 1 0;
+}
+
+#settings-card TextArea {
+    height: 6;
+    margin-bottom: 1;
+}
+
+#settings-error {
+    color: $error;
+    margin-top: 1;
+    height: auto;
+}
+
+.settings-buttons {
+    height: 3;
+    align: center middle;
+    margin-top: 1;
+}
+
+.settings-buttons Button {
+    margin: 0 1;
+    min-width: 12;
+}
+
+/* In-panel Edit button row for the read-only Realm Settings views. */
+.settings-actions {
+    height: 3;
+    padding: 0 0 1 0;
+}
+
+.settings-actions Button {
+    margin-right: 1;
+    min-width: 8;
+}
+
 /* ---------------------------------------------------------- v0.11 task log */
 TaskLogModal {
     align: center middle;

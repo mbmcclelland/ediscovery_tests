@@ -1,5 +1,72 @@
 # Changelog
 
+## v0.12.0 — 2026-05-13
+
+### Added: dr-tui — Realm Settings edit modals (Mail / Splash / Password / Inactivity)
+
+The four Realm Settings sub-tree views shipped as read-only in v0.08.1.
+v0.12 closes the loop with edit modals for every one of them, plus an
+inline **Edit** button in each panel and full F4 dispatch on the
+matching tree leaf.
+
+**Endpoints wired** (captured in v0.08, see
+`docs/endpoints_v0.08.md`):
+
+| View | Write endpoint | Body |
+|---|---|---|
+| Mail Server | `realmManager/createMailServerConfig` | `smtpHostId`, `smtpHostPort`, `contextHandle`, `systemScope: true` |
+| Splash Message | `realmManager/setSplashMessage` | `enabled`, `splashMessage`, `contextHandle`, `systemScope: true` |
+| Password Policy | `realmManager/setPasswordPolicy` | `enforceStrongPasswords` + six numeric fields (length / upper / lower / numbers / symbols / expiration days) |
+| Inactivity Timeout | `realmManager/setInactivityTimeout` | `inactivityTimeoutInSeconds` — returns 204 |
+
+Despite the "create" name, `createMailServerConfig` is the upsert path:
+there's no separate update endpoint. `setPasswordPolicy` demands all
+eight fields every call (server's "missing field" handling is
+inconsistent); the modal computes a composition guard so users can't
+accidentally configure `minLength=4` with `minUppercase+minNumbers=6`.
+
+**New modals (`dr_tui/app.py`):**
+
+- `MailServerFormModal` — SMTP host + port, port validated to 1–65535.
+- `SplashMessageFormModal` — `Checkbox` for enabled + multi-line
+  `TextArea` for the banner text. Refuses save when enabled with
+  empty text (would be a silent footgun).
+- `PasswordPolicyFormModal` — `Checkbox` + six numeric inputs.
+  Validation: every field non-negative, `min_length ≥ 1`,
+  `min_upper + min_lower + min_numbers + min_symbols ≤ min_length`.
+- `InactivityTimeoutFormModal` — single seconds field with hint text
+  listing the common conversions (1800 = 30 min, 3600 = 1 h,
+  5940 = 99 min DR default, 0 = disable).
+
+**UI dispatch (`DashboardScreen`):**
+
+- Each `sys-*-view` now has an inline **Edit** button (top of the
+  panel) calling `_settings_*_open_edit()`.
+- `action_ctx_edit` (F4) routes `sys-mail` / `sys-splash` /
+  `sys-pwpolicy` / `sys-inactivity` leaves to the same handlers.
+- Last-read state is cached in `_mail_last`, `_splash_last`,
+  `_pwpolicy_last`, `_inactivity_last` (set on each `_apply_*`) so
+  modals open pre-populated with the current values.
+- After save, the matching leaf is re-loaded via `_load_view(kind, "")`
+  so the panel reflects the new state without a manual refresh.
+
+**Data layer (`dr_tui/data.py`):**
+
+- `set_mail_server_config(client, *, smtp_host, smtp_port)` →
+  `MailServerConfig`
+- `set_splash_message(client, *, enabled, message)` → `SplashMessage`
+- `set_password_policy(client, *, policy)` → `PasswordPolicy`
+- `set_inactivity_timeout(client, *, seconds)` → `InactivityTimeout`
+
+Each write returns the canonical state echoed by the server (or, for
+the 204 `setInactivityTimeout`, the value just submitted) so callers
+can refresh local caches without an extra read.
+
+**Tests:** new `test_settings_modal_paths` exercises happy-path save,
+bad-input validation, and Cancel on every modal. 10 / 10 pilot tests
+pass; existing v0.11 jobs-monitor / depot / user / group / priority
+suites unchanged.
+
 ## v0.11.0 — 2026-05-12
 
 ### Added: dr-tui — Jobs Monitor v2 (realm-wide tasks, type filter, live log)

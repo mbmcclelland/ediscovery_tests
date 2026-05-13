@@ -28,10 +28,15 @@ from textual.app import App, ComposeResult
 from textual.widgets import Button, Input, Static
 
 from dr_tui.app import (
-    ConfirmModal, DepotFormModal, GroupFormModal, PriorityModal,
-    ResetPasswordModal, UserFormModal,
+    ConfirmModal, DepotFormModal, GroupFormModal,
+    InactivityTimeoutFormModal, MailServerFormModal,
+    PasswordPolicyFormModal, PriorityModal,
+    ResetPasswordModal, SplashMessageFormModal, UserFormModal,
 )
-from dr_tui.data import GroupRow, StorageDepot, UserRow
+from dr_tui.data import (
+    GroupRow, InactivityTimeout, MailServerConfig, PasswordPolicy,
+    SplashMessage, StorageDepot, UserRow,
+)
 
 
 class _Harness(App):
@@ -304,9 +309,98 @@ async def _walk_priority_scenarios() -> None:
         assert holder == [None]
 
 
+async def _walk_settings_scenarios() -> None:
+    """v0.12 Realm Settings modals: save returns the right payload; cancel = None."""
+    app = _Harness()
+    async with app.run_test() as pilot:
+        # ---- MailServerFormModal ----
+        existing = MailServerConfig(
+            configured=True, smtp_host="smtp.old.com", smtp_port=2525,
+            smtp_auth=False,
+        )
+        holder = await _push_and_get(
+            app, pilot, MailServerFormModal(existing=existing),
+        )
+        # Pre-populate fields, edit host, save.
+        app.screen.query_one("#mail-host", Input).value = "smtp.new.com"
+        app.screen.query_one("#mail-port", Input).value = "587"
+        app.screen.query_one("#settings-save", Button).action_press()
+        await pilot.pause()
+        assert holder == [{"smtp_host": "smtp.new.com", "smtp_port": 587}], \
+            f"mail save: {holder!r}"
+
+        # Bad port → error + no dismiss.
+        holder = await _push_and_get(app, pilot, MailServerFormModal())
+        app.screen.query_one("#mail-host", Input).value = "smtp.x"
+        app.screen.query_one("#mail-port", Input).value = "no"
+        app.screen.query_one("#settings-save", Button).action_press()
+        await pilot.pause()
+        assert holder == [], "bad port should not dismiss"
+        # Cancel out of this one.
+        app.screen.query_one("#settings-cancel", Button).action_press()
+        await pilot.pause()
+        assert holder == [None]
+
+        # ---- SplashMessageFormModal ----
+        sp = SplashMessage(enabled=False, message="hello")
+        holder = await _push_and_get(
+            app, pilot, SplashMessageFormModal(existing=sp),
+        )
+        app.screen.query_one("#settings-save", Button).action_press()
+        await pilot.pause()
+        # enabled=False + non-empty message → saves fine.
+        assert holder == [{"enabled": False, "message": "hello"}], \
+            f"splash save: {holder!r}"
+
+        # ---- PasswordPolicyFormModal ----
+        pp = PasswordPolicy(
+            enforce_strong=False, min_length=6, min_uppercase=0,
+            min_lowercase=0, min_numbers=0, min_symbols=0,
+            expiration_days=90,
+        )
+        holder = await _push_and_get(
+            app, pilot, PasswordPolicyFormModal(existing=pp),
+        )
+        app.screen.query_one("#pwp-length", Input).value = "8"
+        app.screen.query_one("#pwp-upper", Input).value = "1"
+        app.screen.query_one("#settings-save", Button).action_press()
+        await pilot.pause()
+        assert len(holder) == 1
+        out: PasswordPolicy = holder[0]
+        assert out.min_length == 8 and out.min_uppercase == 1, \
+            f"pwpolicy save: {out!r}"
+
+        # Composition > length → blocked.
+        holder = await _push_and_get(app, pilot, PasswordPolicyFormModal())
+        app.screen.query_one("#pwp-length", Input).value = "4"
+        app.screen.query_one("#pwp-upper", Input).value = "3"
+        app.screen.query_one("#pwp-numbers", Input).value = "3"
+        app.screen.query_one("#settings-save", Button).action_press()
+        await pilot.pause()
+        assert holder == [], "composition overflow should not dismiss"
+        app.screen.query_one("#settings-cancel", Button).action_press()
+        await pilot.pause()
+        assert holder == [None]
+
+        # ---- InactivityTimeoutFormModal ----
+        existing = InactivityTimeout(seconds=300)
+        holder = await _push_and_get(
+            app, pilot, InactivityTimeoutFormModal(existing=existing),
+        )
+        app.screen.query_one("#inact-seconds", Input).value = "1800"
+        app.screen.query_one("#settings-save", Button).action_press()
+        await pilot.pause()
+        assert holder == [{"seconds": 1800}], f"inactivity save: {holder!r}"
+
+
 def test_depot_modal_paths() -> None:
     """pytest entry point — wraps the async pilot walk."""
     asyncio.run(_walk_all_scenarios())
+
+
+def test_settings_modal_paths() -> None:
+    """pytest entry point — v0.12 Realm Settings edit modals."""
+    asyncio.run(_walk_settings_scenarios())
 
 
 def test_user_modal_paths() -> None:

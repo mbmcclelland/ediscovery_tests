@@ -975,6 +975,117 @@ def get_inactivity_timeout(client: EDiscoveryClient) -> InactivityTimeout:
     return InactivityTimeout(seconds=int(secs))
 
 
+# --- v0.12: realm-settings writes -------------------------------------------
+def set_mail_server_config(
+    client: EDiscoveryClient, *, smtp_host: str, smtp_port: int,
+) -> MailServerConfig:
+    """Write SMTP / mail server config via `realmManager/createMailServerConfig`.
+
+    Despite the "create" name, this is the upsert path — there's no
+    separate update endpoint. Body shape per v0.08 capture: `smtpHostId`
+    + `smtpHostPort` (both as strings server-side; we coerce). Response
+    echoes the persisted `mailServerConfig` block.
+    """
+    resp = client.post(
+        "realmManager/createMailServerConfig",
+        extra_body={
+            "contextHandle": "super_system_customer",
+            "smtpHostId": str(smtp_host),
+            "smtpHostPort": str(smtp_port),
+            "systemScope": True,
+        },
+    )
+    cfg = resp.get("mailServerConfig") or {}
+    return MailServerConfig(
+        configured=bool(cfg),
+        smtp_host=str(cfg.get("smtpHostId") or smtp_host),
+        smtp_port=int(cfg.get("smtpHostPort") or smtp_port),
+        smtp_auth=bool(cfg.get("mailSmtpAuth")),
+    )
+
+
+def set_splash_message(
+    client: EDiscoveryClient, *, enabled: bool, message: str,
+) -> SplashMessage:
+    """Write login banner via `realmManager/setSplashMessage`.
+
+    Server echoes `enabled` + `splashMessage` on success. To clear the
+    banner, pass `enabled=False` — the message text can stay (DR
+    persists it for the next time the banner is re-enabled).
+    """
+    resp = client.post(
+        "realmManager/setSplashMessage",
+        extra_body={
+            "contextHandle": "super_system_customer",
+            "enabled": bool(enabled),
+            "splashMessage": str(message or ""),
+            "systemScope": True,
+        },
+    )
+    return SplashMessage(
+        enabled=bool(resp.get("enabled", enabled)),
+        message=str(resp.get("splashMessage") or message or ""),
+    )
+
+
+def set_password_policy(
+    client: EDiscoveryClient, *, policy: PasswordPolicy,
+) -> PasswordPolicy:
+    """Write realm password policy via `realmManager/setPasswordPolicy`.
+
+    All eight numeric fields are mandatory in the body — server treats
+    a missing field as "leave unchanged" inconsistently, so we send the
+    whole policy every time.
+    """
+    resp = client.post(
+        "realmManager/setPasswordPolicy",
+        extra_body={
+            "contextHandle": "super_system_customer",
+            "enforceStrongPasswords": bool(policy.enforce_strong),
+            "minimumPasswordLength": int(policy.min_length),
+            "minimumUppercaseLetters": int(policy.min_uppercase),
+            "minimumLowercaseLetters": int(policy.min_lowercase),
+            "minimumNumbers": int(policy.min_numbers),
+            "minimumSymbols": int(policy.min_symbols),
+            "passwordExpirationInDays": int(policy.expiration_days),
+            "systemScope": True,
+        },
+    )
+    # Response echoes the persisted policy — re-hydrate so the caller
+    # sees the canonical state (server may clamp out-of-range values).
+    return PasswordPolicy(
+        enforce_strong=bool(resp.get("enforceStrongPasswords", policy.enforce_strong)),
+        min_length=int(resp.get("minimumPasswordLength") or policy.min_length),
+        min_uppercase=int(resp.get("minimumUppercaseLetters") or policy.min_uppercase),
+        min_lowercase=int(resp.get("minimumLowercaseLetters") or policy.min_lowercase),
+        min_numbers=int(resp.get("minimumNumbers") or policy.min_numbers),
+        min_symbols=int(resp.get("minimumSymbols") or policy.min_symbols),
+        expiration_days=int(
+            resp.get("passwordExpirationInDays") or policy.expiration_days,
+        ),
+    )
+
+
+def set_inactivity_timeout(
+    client: EDiscoveryClient, *, seconds: int,
+) -> InactivityTimeout:
+    """Write session inactivity timeout (seconds) via `realmManager/setInactivityTimeout`.
+
+    Server returns 204 No Content on success — api_client.post()'s D1
+    fix yields {}. The fetcher returns the value we just wrote (the
+    server doesn't echo it).
+    """
+    client.post(
+        "realmManager/setInactivityTimeout",
+        extra_body={
+            "contextHandle": "super_system_customer",
+            "inactivityTimeoutInSeconds": int(seconds),
+            "systemScope": True,
+        },
+    )
+    return InactivityTimeout(seconds=int(seconds))
+
+
 # ----------------------------------------------------------------------------- storage depots (F1, F2)
 def list_storage_depots(client: EDiscoveryClient, use_type: str) -> list[StorageDepot]:
     """List NFS storage areas filtered by storageUseType.
