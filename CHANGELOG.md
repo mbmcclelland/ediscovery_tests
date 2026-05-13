@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.13.1 — 2026-05-13
+
+### Fixed: New Job wizard — Org → Connector → folder now actually flows
+
+The v0.13.0 New Job modal had two flow bugs and one missed
+assumption from the spec:
+
+1. **Browse failed silently after auto-pick.** `_cur_conn_handle` /
+   `_cur_org` were initialized from the (often empty) `existing`
+   argument and never updated when Textual's `Select(allow_blank=False)`
+   auto-selected its first option on mount. `on_select_changed` only
+   fires on a *change*, so the initial pick went unrecorded — clicking
+   **Browse** then hit "Pick a connector first" against a dropdown that
+   visually showed one selected.
+2. **Org changes didn't propagate.** Switching the Org Select
+   re-populated the Connector Select via `set_options()` but didn't
+   update `_cur_conn_handle` to track the new first option.
+3. **Project picker wasn't in the spec.** The user asked for
+   Organization / Connector / folder. v0.13.0 added a Project picker
+   on top of that — every saved job still needs a project context
+   server-side, but the user shouldn't have to think about it.
+
+**Changes:**
+
+- **Drop the Project Select.** First project of the chosen org is
+  auto-picked behind the scenes; a small hint line under the Connector
+  picker tells the user which project (and warns when the org has
+  none).
+- **Sync `_cur_org` / `_cur_conn_handle` from the Select's auto-pick**
+  in `__init__` so the first Browse works without a click.
+- **Auto-load the file tree on mount and on connector change.** The
+  Browse button is still there (relabelled "Re-browse") as a manual
+  refresh.
+- New regression test
+  `test_newjob_modal_auto_picks_org_connector_project` confirms the
+  modal opens with org, connector, and project handle all populated
+  from realistic mock data, and that switching orgs propagates
+  correctly to both connector and project.
+
+16 / 16 pilot tests pass.
+
 ## v0.13.0 — 2026-05-13
 
 ### Added: dr-tui — Job Scheduler tab

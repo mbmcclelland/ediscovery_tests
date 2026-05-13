@@ -1525,12 +1525,42 @@ class NewJobModal(ModalScreen[Optional[dict]]):
         self._projects_by_org = projects_by_org or {}
         self._client = api_client
         self._existing = existing
-        # Track the currently-selected connector + path so the Tree
-        # lazy-loader and Count-Files button have a stable target.
-        self._cur_org: str = (existing.org if existing else
-                              (orgs[0] if orgs else ""))
-        self._cur_conn_handle: str = (existing.connector_handle if existing else "")
+        # Track the currently-selected org / connector / path / project so
+        # the Tree lazy-loader and save() have a stable target. The org
+        # and connector handle default to the first available — Select
+        # widgets with allow_blank=False auto-pick the first option, but
+        # don't fire on_select_changed for that initial pick, so we
+        # mirror it manually here.
+        self._cur_org: str = (
+            (existing.org if existing else "")
+            or (orgs[0] if orgs else "")
+        )
+        first_conn = (self._connectors_by_org.get(self._cur_org) or [None])[0]
+        self._cur_conn_handle: str = (
+            (existing.connector_handle if existing else "")
+            or (first_conn.handle if first_conn else "")
+        )
         self._cur_path: str = (existing.path if existing else "")
+        # Project is auto-picked from the chosen org — the user only
+        # cares about org + connector + folder, per the v0.13 spec.
+        self._cur_project_handle: str = self._auto_pick_project(self._cur_org)
+        if existing and existing.project_handle:
+            self._cur_project_handle = existing.project_handle
+
+    def _auto_pick_project(self, org: str) -> str:
+        """Pick the first project in *org* as the indexing context.
+
+        Indexing requires a project handle server-side, but the spec
+        only asks the user to choose org + connector + folder — so we
+        pick a sensible default behind the scenes. If the org has no
+        projects yet, save() surfaces a clear error.
+        """
+        projs = self._projects_by_org.get(org) or []
+        for p in projs:
+            h = str(p.get("handle") or "")
+            if h:
+                return h
+        return ""
 
     # ---- compose -----------------------------------------------------
     def compose(self) -> ComposeResult:
@@ -1543,43 +1573,40 @@ class NewJobModal(ModalScreen[Optional[dict]]):
             )
             with Horizontal(id="newjob-row1"):
                 with Vertical(id="newjob-pickers"):
-                    yield Label("Org:")
+                    yield Label("1. Organization:")
                     yield Select(
                         [(o, o) for o in self._orgs] or [("(none)", "")],
                         id="newjob-org",
-                        value=(self._cur_org or (self._orgs[0] if self._orgs else "")),
+                        value=(self._cur_org
+                               or (self._orgs[0] if self._orgs else "")),
                         allow_blank=False,
                     )
-                    yield Label("Project:")
-                    proj_opts = self._project_options(self._cur_org)
-                    proj_select = Select(
-                        proj_opts,
-                        id="newjob-project",
-                        allow_blank=False,
-                    )
-                    if e and any(v == e.project_handle for _, v in proj_opts):
-                        proj_select.value = e.project_handle
-                    yield proj_select
-                    yield Label("Connector:")
+                    yield Label("2. Connector:")
                     conn_opts = self._connector_options(self._cur_org)
                     conn_select = Select(
                         conn_opts,
                         id="newjob-connector",
                         allow_blank=False,
                     )
-                    if e and any(v == e.connector_handle for _, v in conn_opts):
-                        conn_select.value = e.connector_handle
+                    if (self._cur_conn_handle
+                        and any(v == self._cur_conn_handle for _, v in conn_opts)):
+                        conn_select.value = self._cur_conn_handle
                     yield conn_select
+                    yield Static(
+                        "", id="newjob-project-status",
+                        classes="modal-hint",
+                    )
                 with Vertical(id="newjob-tree-wrap"):
-                    yield Label("Filesystem (click a folder to expand):")
-                    yield Tree("(pick a connector)", id="newjob-tree")
+                    yield Label("3. Folder to index (click to expand):")
+                    yield Tree("(loading…)", id="newjob-tree")
                     yield Static(
                         "[dim]Selected: —[/]",
                         id="newjob-selected",
                     )
                     with Horizontal(id="newjob-tree-actions"):
-                        yield Button("Browse", id="newjob-browse",
-                                     variant="primary")
+                        yield Button("Re-browse",
+                                     id="newjob-browse",
+                                     variant="default")
                         yield Button("Count files (recursive)",
                                      id="newjob-count")
                     yield Static("", id="newjob-count-status")
@@ -1621,15 +1648,28 @@ class NewJobModal(ModalScreen[Optional[dict]]):
             yield Static("[dim][Esc] cancel · selecting a folder opens it[/]",
                          classes="modal-hint")
 
-    def _project_options(self, org: str) -> list[tuple[str, str]]:
-        projs = self._projects_by_org.get(org, [])
-        out = []
-        for p in projs:
-            name = p.get("name") or "?"
-            handle = str(p.get("handle") or "")
-            if handle:
-                out.append((name, handle))
-        return out or [("(no projects)", "")]
+    def _refresh_project_status(self) -> None:
+        """Show which project this org will index into (informational)."""
+        try:
+            line = self.query_one("#newjob-project-status", Static)
+        except Exception:
+            return
+        if not self._cur_project_handle:
+            line.update(
+                f"[yellow]Org '{self._cur_org}' has no projects — pick a "
+                f"different org or create a project first.[/]"
+            )
+            return
+        # Look up the friendly name for the auto-picked project.
+        proj_name = ""
+        for p in self._projects_by_org.get(self._cur_org, []):
+            if str(p.get("handle") or "") == self._cur_project_handle:
+                proj_name = p.get("name") or ""
+                break
+        line.update(
+            f"[dim]Indexing into project: {proj_name or '?'} "
+            f"(handle {self._cur_project_handle})[/]"
+        )
 
     def _connector_options(self, org: str) -> list[tuple[str, str]]:
         conns = self._connectors_by_org.get(org, [])
@@ -1657,11 +1697,18 @@ class NewJobModal(ModalScreen[Optional[dict]]):
 
     # ---- mount -------------------------------------------------------
     def on_mount(self) -> None:
-        # Build the root if we're in edit mode (so the user sees the
-        # tree they previously navigated).
-        if self._existing and self._cur_conn_handle:
+        # Auto-load the file tree on open. Without this the user has to
+        # click Re-browse to get anything to appear, even though the
+        # dropdowns already auto-picked an org + connector.
+        self._refresh_project_status()
+        if self._cur_conn_handle:
             self._action_browse()
-        self.query_one("#newjob-name", Input).focus()
+        # Focus the name field so the user can type a job name straight
+        # away — the tree drives itself in the background.
+        try:
+            self.query_one("#newjob-name", Input).focus()
+        except Exception:
+            pass
 
     # ---- events ------------------------------------------------------
     def on_button_pressed(self, evt: Button.Pressed) -> None:
@@ -1680,19 +1727,31 @@ class NewJobModal(ModalScreen[Optional[dict]]):
         if sid == "newjob-org":
             org = evt.value if evt.value != Select.BLANK else ""
             self._cur_org = str(org)
-            # Re-populate project + connector dropdowns from the new org.
+            # Re-populate the connector dropdown from the new org.
             try:
-                self.query_one("#newjob-project", Select).set_options(
-                    self._project_options(self._cur_org)
-                )
+                conn_opts = self._connector_options(self._cur_org)
                 self.query_one("#newjob-connector", Select).set_options(
-                    self._connector_options(self._cur_org)
+                    conn_opts
                 )
+                # set_options resets to the first option; mirror that into
+                # `_cur_conn_handle` so Browse works immediately.
+                first = (self._connectors_by_org.get(self._cur_org) or [None])[0]
+                self._cur_conn_handle = (first.handle if first else "")
             except Exception:
                 pass
+            # New org → re-pick project + clear the tree until the new
+            # connector loads its root.
+            self._cur_project_handle = self._auto_pick_project(self._cur_org)
+            self._refresh_project_status()
+            if self._cur_conn_handle:
+                self._action_browse()
         elif sid == "newjob-connector":
             self._cur_conn_handle = (str(evt.value)
                                      if evt.value != Select.BLANK else "")
+            # User picked a different connector — refresh the tree at
+            # the new root automatically.
+            if self._cur_conn_handle:
+                self._action_browse()
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -1849,14 +1908,20 @@ class NewJobModal(ModalScreen[Optional[dict]]):
             err.update("[red]Job name is required.[/]")
             return
         try:
-            project = str(self.query_one("#newjob-project", Select).value or "")
             connector_handle = str(
                 self.query_one("#newjob-connector", Select).value or ""
             )
         except Exception:
-            project = connector_handle = ""
-        if not project or not connector_handle:
-            err.update("[red]Pick a project + connector first.[/]")
+            connector_handle = ""
+        project = self._cur_project_handle
+        if not project:
+            err.update(
+                f"[red]Org '{self._cur_org}' has no projects — pick a "
+                f"different org or create a project first.[/]"
+            )
+            return
+        if not connector_handle:
+            err.update("[red]Pick a connector first.[/]")
             return
         if not self._cur_path:
             err.update("[red]Pick a directory in the tree before saving.[/]")

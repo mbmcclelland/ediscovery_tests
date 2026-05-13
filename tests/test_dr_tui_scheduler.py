@@ -142,8 +142,77 @@ async def _walk_newjob_modal() -> None:
         assert holder == [None]
 
 
+async def _walk_newjob_autoflow() -> None:
+    """NewJobModal with realistic data: org+connector auto-pick on open.
+
+    Regression coverage for v0.13.1 — the first ship had
+    `_cur_conn_handle = ""` after compose because Select's auto-pick of
+    the first option doesn't fire on_select_changed, so Browse failed
+    silently. Verify the modal opens with both pre-populated.
+    """
+    from dr_tui.app import NewJobModal
+    from dr_tui.data import Connector
+    app = _Harness()
+    orgs = ["training", "ops"]
+    connectors = {
+        "training": [
+            Connector(name="nfs-a", type="NFS", mode="IMPORT", status="OK",
+                      host="10.0.0.1", path="/data/import", handle="c-1"),
+            Connector(name="nfs-b", type="NFS", mode="IMPORT", status="OK",
+                      host="10.0.0.2", path="/srv", handle="c-2"),
+        ],
+        "ops": [],
+    }
+    projects = {
+        "training": [{"name": "test1", "handle": "254"}],
+        "ops": [],
+    }
+    async with app.run_test() as pilot:
+        holder: list = []
+        modal = NewJobModal(
+            orgs=orgs, connectors_by_org=connectors,
+            projects_by_org=projects, api_client=None,
+        )
+        app.push_screen(modal, lambda r: holder.append(r))
+        await pilot.pause()
+        scr = app.screen
+        # On open: first org + first connector auto-picked, project handle
+        # auto-resolved from the org's first project.
+        assert scr._cur_org == "training", scr._cur_org
+        assert scr._cur_conn_handle == "c-1", scr._cur_conn_handle
+        assert scr._cur_project_handle == "254", scr._cur_project_handle
+        # Project-status hint is populated.
+        # (Static.renderable is private; just confirm the widget exists.)
+        assert scr.query_one("#newjob-project-status") is not None
+
+        # Switch org → no projects, no connectors. Status flips.
+        from textual.widgets import Select as _S
+        scr.query_one("#newjob-org", _S).value = "ops"
+        await pilot.pause()
+        assert scr._cur_org == "ops"
+        assert scr._cur_conn_handle == ""
+        assert scr._cur_project_handle == ""
+
+        # Switch back to training; both should re-resolve.
+        scr.query_one("#newjob-org", _S).value = "training"
+        await pilot.pause()
+        assert scr._cur_org == "training"
+        assert scr._cur_conn_handle == "c-1"
+        assert scr._cur_project_handle == "254"
+
+        # Cancel.
+        scr.query_one("#newjob-cancel", Button).action_press()
+        await pilot.pause()
+        assert holder == [None]
+
+
 def test_newjob_modal_mount_and_cancel() -> None:
     asyncio.run(_walk_newjob_modal())
+
+
+def test_newjob_modal_auto_picks_org_connector_project() -> None:
+    """Regression for the v0.13.0 bug where Browse failed silently."""
+    asyncio.run(_walk_newjob_autoflow())
 
 
 # ---------- 'longterm' coloring rule ----------
