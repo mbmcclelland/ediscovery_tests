@@ -68,6 +68,16 @@ _REPO = Path(__file__).resolve().parent
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
+# Read the version string from the canonical __version__.py at the repo
+# root. Falls back to "?.?.?" so a missing/garbled __version__.py
+# doesn't crash the banner.
+try:
+    _vmod: dict = {}
+    exec((_REPO / "__version__.py").read_text(), _vmod)
+    _VERSION = _vmod.get("__version__", "?.?.?")
+except Exception:
+    _VERSION = "?.?.?"
+
 from config import Config                                           # noqa: E402
 from helpers.api_client import EDiscoveryClient, APIError           # noqa: E402
 from dr_tui import data as drdata                                   # noqa: E402
@@ -90,6 +100,62 @@ from rich.text import Text                                          # noqa: E402
 _DEFAULT_LOG_DIR = Path("/tmp")
 _LOG_TS = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 _DEFAULT_LOG_PATH = _DEFAULT_LOG_DIR / f"dr-freshinstall-{_LOG_TS}.log"
+
+
+# ---------- Reef-a-TUI logo ----------------------------------------------------
+
+# Path to the bit-generated logo (5 lines of ASCII art). The .txt is the
+# uncoloured source; we apply a blue→white vertical gradient at render
+# time so we don't have to ship a colored version + plain version.
+# Re-generate via `bit "Reef-a-TUI" -save reef-a-tui-logo`.
+_LOGO_PATH = _REPO / "reef-a-tui-logo.txt"
+
+# Digital Reef ocean palette — Blue → White → Black, top to bottom,
+# like looking down into deepening water.
+#   row 0  surface blue          (sky reflected on the water)
+#   row 1  shallow / foam-edge   (sunlight scattering)
+#   row 2  white foam            (the breaker)
+#   row 3  deep blue-grey        (light fading with depth)
+#   row 4  abyssal               (dark, with a hint of blue so it's
+#                                 still visible on a black terminal)
+_LOGO_COLORS = [
+    "rgb(50,130,220)",     # row 0 — surface blue
+    "rgb(150,200,240)",    # row 1 — shallow / foam edge
+    "rgb(255,255,255)",    # row 2 — white foam (the breaker)
+    "rgb(70,90,130)",      # row 3 — deep blue-grey (light fading)
+    "rgb(10,20,40)",       # row 4 — abyssal (near-black with hint of blue)
+]
+
+
+def _render_logo(version: str) -> None:
+    """Print the Reef-a-TUI logo + the bright-yellow product subtitle.
+
+    Falls back to a plain text banner if the logo file is missing
+    (e.g. running from an editable install where someone deleted it).
+    """
+    try:
+        lines = _LOGO_PATH.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        console.print()
+        console.print(f"[bold cyan]Reef-a-TUI[/]", highlight=False)
+        console.print(
+            f"[bold bright_yellow]Digital Reef Fresh Installer "
+            f"version {version}[/]"
+        )
+        console.print()
+        return
+    console.print()
+    for i, line in enumerate(lines):
+        color = _LOGO_COLORS[min(i, len(_LOGO_COLORS) - 1)]
+        # markup=False/highlight=False so Rich treats the line as opaque
+        # text — the █▄▀ etc. block-drawing chars sometimes trigger
+        # Rich's auto-highlight rules and get colour-mangled.
+        console.print(line, style=color, markup=False, highlight=False)
+    console.print(
+        f"[bold bright_yellow]    Digital Reef Fresh Installer "
+        f"version {version}[/]"
+    )
+    console.print()
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -311,6 +377,56 @@ def _set_progress_description(description: str) -> None:
         _progress.update(_progress_task, description=description)
 
 
+def _stream_subprocess(
+    cmd: list[str], *, cwd: Optional[str] = None,
+    line_style: str = "dim",
+) -> int:
+    """Run *cmd* and stream every output line through Rich's console.
+
+    v0.17.4 — replaces the v0.17.3 pause/resume hack. Instead of
+    pausing the Rich progress bar during long subprocess phases, we
+    route the subprocess's stdout + stderr line-by-line through
+    `console.print()`. Rich's `Live` underpinning the `Progress`
+    automatically routes those prints **above** the live region —
+    so the progress bar stays pinned at the bottom of the visible
+    output while logs scroll cleanly above it.
+
+    Net effect: a stable bottom-of-frame status bar with the spec'd
+    "current phase" text, while subprocess output (cleandr's
+    `rm -rfv` flood, the InstallAnywhere installer's dialogs, drd's
+    systemd debug stream) flows into the scroll-back like a normal
+    tail.
+
+    Returns the subprocess exit code. Like `subprocess.run().returncode`,
+    a non-zero return is a signal to the caller — we don't raise.
+    """
+    proc = subprocess.Popen(
+        cmd, cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True, bufsize=1,
+        errors="replace",
+    )
+    try:
+        assert proc.stdout is not None
+        for raw in proc.stdout:
+            # Strip the trailing newline that console.print() re-adds.
+            line_text = raw.rstrip("\n")
+            if not line_text:
+                continue
+            # Use Rich's Text builder so the subprocess output is
+            # treated as opaque body text — its `[…]` markers (e.g.
+            # the InstallAnywhere `[========]` bar, systemd's
+            # "Started X [OK]") never get interpreted as Rich markup.
+            # The dim "│" prefix matches the bar's visual style.
+            body = Text("    │ ", style=line_style) + Text(line_text)
+            console.print(body, highlight=False)
+            log.debug("subproc: %s", line_text)
+    finally:
+        proc.wait()
+    return proc.returncode
+
+
 # ---------- user-facing output helpers -----------------------------------------
 
 # These mirror every line into:
@@ -447,13 +563,10 @@ def phase_clean(args: argparse.Namespace) -> None:
         _info(f"DRY-RUN: would run: {' '.join(cmd)}")
         return
     _info(f"running: {' '.join(cmd)}")
-    # v0.17.3 — pause Rich's progress bar so cleandr's `rm -rfv`
-    # flood doesn't interleave with bar redraws.
-    _pause_progress()
-    try:
-        rc = subprocess.run(cmd).returncode
-    finally:
-        _resume_progress()
+    # v0.17.4 — stream each subprocess line via Rich so the progress
+    # bar stays pinned at the bottom of the live region while
+    # cleandr's `rm -rfv` flood scrolls cleanly above it.
+    rc = _stream_subprocess(cmd)
     if rc != 0:
         raise RuntimeError(f"cleandr.sh exited with {rc}")
     _ok("teardown complete")
@@ -484,15 +597,11 @@ def phase_installer(args: argparse.Namespace) -> None:
     # The expect script spawns `./5.5.3.2.bin -i console` from /tmp,
     # so we cd there first. cwd= isolates the change from the rest
     # of the driver.
-    # v0.17.3 — pause Rich's progress bar so the InstallAnywhere
-    # `[==============]` markers + drd-restart systemd debug output
-    # don't get inter-leaved with bar redraws (8 Hz × ~9 min = ~4000
-    # duplicate bar-lines pre-fix).
-    _pause_progress()
-    try:
-        rc = subprocess.run(cmd, cwd="/tmp").returncode
-    finally:
-        _resume_progress()
+    # v0.17.4 — stream each subprocess line via Rich. The
+    # InstallAnywhere `[========]` markers and drd-restart systemd
+    # debug output scroll above the pinned progress bar instead of
+    # competing with it. Replaces the v0.17.3 pause/resume hack.
+    rc = _stream_subprocess(cmd, cwd="/tmp")
     if rc != 0:
         raise RuntimeError(f"DR_freshinstall.exp exited with {rc}")
     _ok("installer finished")
@@ -1133,13 +1242,17 @@ def main() -> int:
     _setup_logging(log_path, args.log_level, args.verbose)
     log.debug("args: %s", vars(args))
 
-    # ---- 2. Banner. ----
-    title = (f"DR_freshinstall.py v0.17.1 — fresh-install driver "
-             f"(target: {args.hostname})")
-    console.print()
+    # ---- 2. Banner: Reef-a-TUI logo + bright-yellow product subtitle. ----
+    # The logo is loaded from the bit-generated reef-a-tui-logo.txt
+    # and colour-graded blue→white at render time. The subtitle is
+    # the v0.17.4 spec'd "Digital Reef Fresh Installer version X.Y.Z"
+    # in bold bright yellow.
+    _render_logo(_VERSION)
+    # Run-config summary stays underneath as a small panel — same
+    # info as before (phases, mode, log path, target).
     console.print(Panel.fit(
         Text(
-            f"{title}\n"
+            f"Target:  {args.hostname}\n"
             f"Phases:  clean={'no' if args.skip_clean else 'YES'}  "
             f"|  installer={'no' if args.skip_installer else 'YES'}  "
             f"|  api={'no' if args.skip_api else 'YES'}\n"
