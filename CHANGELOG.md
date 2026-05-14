@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.14.1 — 2026-05-13
+
+### Changed: New Job dialog — readable layout + four explicit buttons + 5-day default
+
+User feedback: "the screen makes no sense". The fix:
+
+- **Two-column layout**: form fields (Name, Description, Organization,
+  Connector, Keep indexed data for) stack vertically on the left;
+  the file tree owns the right column. Labels are plain English,
+  no jargon, no numbered "Step N" prefixes.
+- **Default retention is 5 days** (was 1 week / 604800s with weeks
+  as the unit). Wired through `_initial_retention_value()` and
+  `_initial_retention_mult()` so the input box reads "5" with "days"
+  selected on a fresh open.
+- **Four explicit buttons** matching the user's spec:
+  - **Cancel** — discard the dialog, return None
+  - **Schedule** — save the JobDefinition as a reusable template
+  - **Run now** — save *and* immediately invoke `dr-job-run`
+  - **Close** — same as Cancel; both labels exist so the user
+    has the familiar wording regardless of habit
+- **Field-specific error messages.** Validation now names the field
+  that's wrong and tells the user how to fix it:
+  - "Name is empty — please enter a name for this job (e.g.
+    'payroll-archive')."
+  - "Organization 'X' has no projects. Pick a different organization,
+    or create a project in DR before scheduling a job here."
+  - "Connector not selected. Pick one from the Connector dropdown
+    for organization 'X'."
+  - "Folder to index not selected. Click a folder in the tree on the
+    right, then try again."
+  - "Retention period must be a whole number (got 'foo'). Enter 0 to
+    keep forever."
+  - "Retention period can't be negative. Enter 0 to keep forever,
+    or a positive number."
+
+**Dispatch:** the modal returns a payload with an extra `_action` key
+("schedule" or "run"). `_sch_after_modal` strips that key, saves the
+JobDefinition, and on `"run"` shells out to `dr-job-run` immediately —
+same code path the **Run** button on the Saved Templates view uses.
+
+**Pilot test:** new `test_newjob_modal_v0141_defaults_and_buttons`
+covers defaults (5 days, "days" unit, 86400 multiplier), the presence
+of all four buttons, Close-equals-Cancel, empty-name error doesn't
+dismiss, and that a complete form returns the right `_action` for
+both Schedule and Run now. 19 / 19 pilot tests pass.
+
 ## v0.14.0 — 2026-05-13
 
 ### Added: Job Scheduler — per-view actions, log viewer, timer toggle, linger banner

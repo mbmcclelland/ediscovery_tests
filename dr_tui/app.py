@@ -1629,12 +1629,29 @@ class NewJobModal(ModalScreen[Optional[dict]]):
         e = self._existing
         with Container(id="newjob-card"):
             yield Static(
-                ("Edit Job" if e else "New Indexing Job"),
+                ("Edit Indexing Job" if e else "New Indexing Job"),
                 id="newjob-title",
             )
+            # Two-column body: form fields on the left, file tree on
+            # the right. Vertical flow within each column keeps the
+            # labels and inputs adjacent so there's no "what does this
+            # belong to?" ambiguity.
             with Horizontal(id="newjob-row1"):
                 with Vertical(id="newjob-pickers"):
-                    yield Label("1. Organization:")
+                    yield Label("Name")
+                    yield Input(
+                        value=(e.name if e else ""),
+                        placeholder="e.g. payroll-archive",
+                        id="newjob-name",
+                    )
+
+                    yield Label("Description (optional)")
+                    yield Input(
+                        value=(e.description if e else ""),
+                        id="newjob-desc",
+                    )
+
+                    yield Label("Organization")
                     yield Select(
                         [(o, o) for o in self._orgs] or [("(none)", "")],
                         id="newjob-org",
@@ -1642,7 +1659,8 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                                or (self._orgs[0] if self._orgs else "")),
                         allow_blank=False,
                     )
-                    yield Label("2. Connector:")
+
+                    yield Label("Connector")
                     conn_opts = self._connector_options(self._cur_org)
                     conn_select = Select(
                         conn_opts,
@@ -1657,8 +1675,27 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                         "", id="newjob-project-status",
                         classes="modal-hint",
                     )
+
+                    yield Label("Keep indexed data for")
+                    with Horizontal(id="newjob-retention-row"):
+                        yield Input(
+                            value=str(self._initial_retention_value()),
+                            id="newjob-retention",
+                        )
+                        yield Select(
+                            [(u, str(m)) for u, m in _RETENTION_UNITS],
+                            id="newjob-retention-unit",
+                            value=str(self._initial_retention_mult()),
+                            allow_blank=False,
+                        )
+                    yield Static(
+                        "[dim]Data + corpus auto-deleted after this period. "
+                        "Enter 0 to keep forever.[/]",
+                        classes="modal-hint",
+                    )
+
                 with Vertical(id="newjob-tree-wrap"):
-                    yield Label("3. Folder to index (click to expand):")
+                    yield Label("Folder to index — click a folder to expand")
                     yield Tree("(loading…)", id="newjob-tree")
                     yield Static(
                         "[dim]Selected: —[/]",
@@ -1671,43 +1708,19 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                         yield Button("Count files (recursive)",
                                      id="newjob-count")
                     yield Static("", id="newjob-count-status")
-            with Horizontal(id="newjob-meta"):
-                with Vertical(classes="newjob-meta-col"):
-                    yield Label("Job name:")
-                    yield Input(
-                        value=(e.name if e else ""),
-                        placeholder="e.g. nightly-payroll-longterm",
-                        id="newjob-name",
-                    )
-                    yield Label("Description (optional):")
-                    yield Input(
-                        value=(e.description if e else ""),
-                        id="newjob-desc",
-                    )
-                with Vertical(classes="newjob-meta-col"):
-                    yield Label("Retention period:")
-                    with Horizontal():
-                        yield Input(
-                            value=str(self._initial_retention_value()),
-                            id="newjob-retention",
-                        )
-                        yield Select(
-                            [(u, str(m)) for u, m in _RETENTION_UNITS],
-                            id="newjob-retention-unit",
-                            value=str(self._initial_retention_mult()),
-                            allow_blank=False,
-                        )
-                    yield Static(
-                        "[dim]Indexed data + corpus auto-deleted after this "
-                        "period. 0 = keep forever.[/]",
-                        classes="modal-hint",
-                    )
+
             yield Static("", id="newjob-error")
+            # v0.14.1: four explicit actions per user spec.
             with Horizontal(classes="settings-buttons"):
-                yield Button.success("Save", id="newjob-save")
                 yield Button("Cancel", id="newjob-cancel")
-            yield Static("[dim][Esc] cancel · selecting a folder opens it[/]",
-                         classes="modal-hint")
+                yield Button.success("Schedule", id="newjob-schedule")
+                yield Button("Run now", id="newjob-run", variant="primary")
+                yield Button("Close", id="newjob-close")
+            yield Static(
+                "[dim]Cancel = discard · Schedule = save · Run now = "
+                "save + execute · Close = discard · [Esc] also closes[/]",
+                classes="modal-hint",
+            )
 
     def _refresh_project_status(self) -> None:
         """Show which project this org will index into (informational)."""
@@ -1737,22 +1750,24 @@ class NewJobModal(ModalScreen[Optional[dict]]):
         return [(f"{c.name}  ({c.type})", c.handle) for c in conns] \
             or [("(no connectors)", "")]
 
+    # v0.14.1: default retention is 5 days (per user request).
+    _DEFAULT_RETENTION_SECONDS = 5 * 86400
+
     def _initial_retention_value(self) -> int:
-        if not self._existing:
-            return 1                 # default: 1 week
-        # Pick the largest unit that divides exactly.
-        s = self._existing.retention_seconds
+        s = (self._existing.retention_seconds if self._existing
+             else self._DEFAULT_RETENTION_SECONDS)
+        # Pick the largest unit that divides exactly so the display
+        # reads "5 days" rather than "432000 seconds".
         for _, mult in reversed(_RETENTION_UNITS):
-            if s % mult == 0 and s // mult >= 1:
+            if mult > 0 and s % mult == 0 and s // mult >= 1:
                 return s // mult
         return s
 
     def _initial_retention_mult(self) -> int:
-        if not self._existing:
-            return 604800              # weeks (default)
-        s = self._existing.retention_seconds
+        s = (self._existing.retention_seconds if self._existing
+             else self._DEFAULT_RETENTION_SECONDS)
         for _, mult in reversed(_RETENTION_UNITS):
-            if s % mult == 0 and s // mult >= 1:
+            if mult > 0 and s % mult == 0 and s // mult >= 1:
                 return mult
         return 1
 
@@ -1774,10 +1789,15 @@ class NewJobModal(ModalScreen[Optional[dict]]):
     # ---- events ------------------------------------------------------
     def on_button_pressed(self, evt: Button.Pressed) -> None:
         bid = evt.button.id
-        if bid == "newjob-cancel":
+        # Cancel + Close both abandon the dialog. We keep both labels so
+        # the user has the familiar wording regardless of habit; either
+        # one returns None to the parent screen.
+        if bid in ("newjob-cancel", "newjob-close"):
             self.dismiss(None)
-        elif bid == "newjob-save":
-            self._save()
+        elif bid == "newjob-schedule":
+            self._submit(action="schedule")
+        elif bid == "newjob-run":
+            self._submit(action="run")
         elif bid == "newjob-browse":
             self._action_browse()
         elif bid == "newjob-count":
@@ -1961,47 +1981,101 @@ class NewJobModal(ModalScreen[Optional[dict]]):
             f"[dim](no byte total — DR API exposes no size)[/]",
         )
 
-    # ---- save --------------------------------------------------------
-    def _save(self) -> None:
+    # ---- submit ------------------------------------------------------
+    def _submit(self, *, action: str) -> None:
+        """Validate every field; on success dismiss with the payload.
+
+        `action` is "schedule" (save the template only) or "run" (save
+        + immediately invoke dr-job-run). The parent screen reads the
+        `_action` key from the returned dict to decide which path to
+        take — keeps the modal itself free of any execution side
+        effects.
+
+        Each validation step writes a *specific* error message naming
+        the field that's wrong, so the user doesn't have to guess.
+        """
         err = self.query_one("#newjob-error", Static)
+        # Field 1: Name
         name = self.query_one("#newjob-name", Input).value.strip()
         if not name:
-            err.update("[red]Job name is required.[/]")
+            err.update(
+                "[red]Name is empty — please enter a name for this job "
+                "(e.g. 'payroll-archive').[/]"
+            )
             return
+
+        # Field 2: Organization (always populated from the Select).
+        if not self._cur_org:
+            err.update(
+                "[red]Organization not selected. Pick one from the "
+                "Organization dropdown.[/]"
+            )
+            return
+
+        # Auto-picked project — surfaces here if the org has none.
+        project = self._cur_project_handle
+        if not project:
+            err.update(
+                f"[red]Organization '{self._cur_org}' has no projects. "
+                f"Pick a different organization, or create a project in "
+                f"DR before scheduling a job here.[/]"
+            )
+            return
+
+        # Field 3: Connector
         try:
             connector_handle = str(
                 self.query_one("#newjob-connector", Select).value or ""
             )
         except Exception:
             connector_handle = ""
-        project = self._cur_project_handle
-        if not project:
+        if not connector_handle:
             err.update(
-                f"[red]Org '{self._cur_org}' has no projects — pick a "
-                f"different org or create a project first.[/]"
+                f"[red]Connector not selected. Pick one from the "
+                f"Connector dropdown for organization "
+                f"'{self._cur_org}'.[/]"
             )
             return
-        if not connector_handle:
-            err.update("[red]Pick a connector first.[/]")
-            return
+
+        # Field 4: Folder
         if not self._cur_path:
-            err.update("[red]Pick a directory in the tree before saving.[/]")
-            return
-        try:
-            ret_raw = self.query_one("#newjob-retention", Input).value.strip() or "0"
-            ret_n = int(ret_raw)
-            ret_mult = int(self.query_one(
-                "#newjob-retention-unit", Select,
-            ).value or "1")
-            ret_seconds = ret_n * ret_mult
-            if ret_seconds < 0:
-                raise ValueError
-        except ValueError:
-            err.update("[red]Retention must be a non-negative integer.[/]")
+            err.update(
+                "[red]Folder to index not selected. Click a folder in "
+                "the tree on the right, then try again.[/]"
+            )
             return
 
+        # Field 5: Retention period
+        ret_raw = self.query_one(
+            "#newjob-retention", Input,
+        ).value.strip() or "0"
+        try:
+            ret_n = int(ret_raw)
+        except ValueError:
+            err.update(
+                f"[red]Retention period must be a whole number "
+                f"(got '{ret_raw}'). Enter 0 to keep forever.[/]"
+            )
+            return
+        if ret_n < 0:
+            err.update(
+                "[red]Retention period can't be negative. Enter 0 to "
+                "keep forever, or a positive number.[/]"
+            )
+            return
+        try:
+            ret_mult = int(
+                self.query_one("#newjob-retention-unit", Select).value or "1"
+            )
+        except Exception:
+            ret_mult = 1
+        ret_seconds = ret_n * ret_mult
+
+        # All checks passed — clear the error line and dismiss.
+        err.update("")
         conn = self._selected_connector()
         payload = {
+            "_action": action,
             "name": name,
             "org": self._cur_org,
             "project_handle": project,
@@ -2012,7 +2086,9 @@ class NewJobModal(ModalScreen[Optional[dict]]):
             "remote_path": (conn.path if conn else ""),
             "path": self._cur_path,
             "retention_seconds": ret_seconds,
-            "description": self.query_one("#newjob-desc", Input).value.strip(),
+            "description": self.query_one(
+                "#newjob-desc", Input,
+            ).value.strip(),
         }
         self.dismiss(payload)
 
@@ -3538,13 +3614,21 @@ class DashboardScreen(Screen):
     def _sch_after_modal(self, payload: Optional[dict]) -> None:
         if not payload:
             return
-        # Save (or overwrite) the JobDefinition.
+        # v0.14.1 — the modal returns an `_action` key telling us which
+        # button the user pressed: "schedule" (save template only) or
+        # "run" (save + execute). Strip it before constructing the
+        # JobDefinition, which doesn't know about it.
+        action = payload.pop("_action", "schedule")
         job = drsch.JobDefinition(**payload)
         drsch.save_job(job)
         self._post_status_ok(f"job saved: {job.name}")
         # Refresh the Saved Templates view if we're on it.
         if self.selected_kind == "sch-saved":
             self._load_view("sch-saved", "")
+        # On "Run now", shell out to dr-job-run immediately — same code
+        # path the Run button on the Saved Templates view uses.
+        if action == "run":
+            self._sch_run_now(job)
 
     def _sch_confirm_delete(self, job: "drsch.JobDefinition") -> None:
         self.app.push_screen(

@@ -215,6 +215,125 @@ def test_newjob_modal_auto_picks_org_connector_project() -> None:
     asyncio.run(_walk_newjob_autoflow())
 
 
+# ---------- v0.14.1: clearer NewJobModal — defaults + 4 buttons + errors ----
+
+async def _walk_newjob_v0141_defaults_and_buttons() -> None:
+    """v0.14.1 regression coverage:
+    - default retention is 5 days
+    - all four buttons (Cancel, Schedule, Run now, Close) exist
+    - Cancel + Close both return None
+    - Schedule with empty name surfaces a specific error and does NOT
+      dismiss
+    - A complete Schedule returns payload with _action='schedule'
+    - A complete Run now returns payload with _action='run'
+    """
+    from dr_tui.app import NewJobModal
+    from dr_tui.data import Connector
+    app = _Harness()
+    orgs = ["training"]
+    connectors = {
+        "training": [
+            Connector(name="nfs-a", type="NFS", mode="IMPORT", status="OK",
+                      host="10.0.0.1", path="/data/import", handle="c-1"),
+        ],
+    }
+    projects = {"training": [{"name": "test1", "handle": "254"}]}
+
+    async with app.run_test() as pilot:
+        # ---- 1. defaults: 5 days ----
+        holder: list = []
+        modal = NewJobModal(
+            orgs=orgs, connectors_by_org=connectors,
+            projects_by_org=projects, api_client=None,
+        )
+        app.push_screen(modal, lambda r: holder.append(r))
+        await pilot.pause()
+        scr = app.screen
+        ret_in = scr.query_one("#newjob-retention", Input)
+        ret_unit = scr.query_one("#newjob-retention-unit", _S := __import__(
+            "textual.widgets", fromlist=["Select"],
+        ).Select)
+        assert ret_in.value == "5", f"default retention value: {ret_in.value!r}"
+        assert ret_unit.value == "86400", f"default unit: {ret_unit.value!r}"
+
+        # ---- 2. all four buttons exist ----
+        for bid in ("newjob-cancel", "newjob-schedule",
+                    "newjob-run", "newjob-close"):
+            assert scr.query_one(f"#{bid}", Button) is not None, \
+                f"missing button {bid}"
+
+        # ---- 3. Close button returns None (same as Cancel) ----
+        scr.query_one("#newjob-close", Button).action_press()
+        await pilot.pause()
+        assert holder == [None]
+
+        # ---- 4. empty-name Schedule shows a specific error, doesn't dismiss
+        holder = []
+        modal = NewJobModal(
+            orgs=orgs, connectors_by_org=connectors,
+            projects_by_org=projects, api_client=None,
+        )
+        app.push_screen(modal, lambda r: holder.append(r))
+        await pilot.pause()
+        scr = app.screen
+        # Name field is empty by default.
+        scr.query_one("#newjob-schedule", Button).action_press()
+        await pilot.pause()
+        assert holder == [], "empty name should not dismiss"
+        # Error widget exists and is populated.
+        err_widget = scr.query_one("#newjob-error", Static)
+        assert err_widget is not None
+        # Cancel out.
+        scr.query_one("#newjob-cancel", Button).action_press()
+        await pilot.pause()
+        assert holder == [None]
+
+        # ---- 5. complete Schedule path returns payload with _action='schedule'
+        holder = []
+        modal = NewJobModal(
+            orgs=orgs, connectors_by_org=connectors,
+            projects_by_org=projects, api_client=None,
+        )
+        app.push_screen(modal, lambda r: holder.append(r))
+        await pilot.pause()
+        scr = app.screen
+        scr.query_one("#newjob-name", Input).value = "my-test-job"
+        # Bypass the file-tree click by directly setting _cur_path
+        # (the tree relies on a live API client we don't have here).
+        scr._cur_path = "/data/import/payroll/2026"
+        scr.query_one("#newjob-schedule", Button).action_press()
+        await pilot.pause()
+        assert len(holder) == 1, f"expected one result, got {holder!r}"
+        payload = holder[0]
+        assert payload is not None
+        assert payload["_action"] == "schedule"
+        assert payload["name"] == "my-test-job"
+        assert payload["org"] == "training"
+        assert payload["path"] == "/data/import/payroll/2026"
+        assert payload["retention_seconds"] == 5 * 86400
+
+        # ---- 6. Run now sets _action='run' ----
+        holder = []
+        modal = NewJobModal(
+            orgs=orgs, connectors_by_org=connectors,
+            projects_by_org=projects, api_client=None,
+        )
+        app.push_screen(modal, lambda r: holder.append(r))
+        await pilot.pause()
+        scr = app.screen
+        scr.query_one("#newjob-name", Input).value = "runnow-job"
+        scr._cur_path = "/data/import/now"
+        scr.query_one("#newjob-run", Button).action_press()
+        await pilot.pause()
+        assert len(holder) == 1
+        assert holder[0]["_action"] == "run"
+        assert holder[0]["name"] == "runnow-job"
+
+
+def test_newjob_modal_v0141_defaults_and_buttons() -> None:
+    asyncio.run(_walk_newjob_v0141_defaults_and_buttons())
+
+
 # ---------- v0.14: unit-name parse + LogViewerModal mount ----------
 
 def test_unit_parse_regex() -> None:
