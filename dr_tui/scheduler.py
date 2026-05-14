@@ -100,6 +100,13 @@ class JobDefinition:
     retention_seconds: int = 7 * 24 * 3600   # default: 1 week
     created_at: str = ""            # ISO-8601; set by save_job
     description: str = ""
+    # v0.15 — optional recurring schedule. Empty string = one-shot
+    # (Run Now only). Otherwise a systemd OnCalendar= expression:
+    #   "daily"               — every day at midnight
+    #   "*-*-* 03,11,19:00:00" — every day at 03:00, 11:00, 19:00
+    #   "Mon..Fri *-*-* 09:00:00" — weekdays at 09:00
+    # See systemd.time(7) for the full grammar.
+    schedule: str = ""
 
     def slug(self) -> str:
         return slugify(self.name)
@@ -439,7 +446,130 @@ def cancel_retention_delete(*, job_slug: str, run_id: str) -> Optional[str]:
     return err
 
 
+# --- v0.15: recurring schedules ---------------------------------------------
+
+def _recur_unit_name(job_slug: str) -> str:
+    return f"dr-tools-recur-{job_slug}"
+
+
+# Friendly preset → systemd OnCalendar expression. Anything else is
+# treated as a raw OnCalendar string and passed through verbatim
+# (advanced users can compose their own).
+RECUR_PRESETS = {
+    "":         "",                          # one-shot (no schedule)
+    "hourly":   "hourly",
+    "daily":    "daily",
+    "weekly":   "weekly",
+    "monthly":  "monthly",
+    # 3×/day: 03:00, 11:00, 19:00 (covers shift-change windows for
+    # 24/7 labs without piling everything on midnight).
+    "3x-day":   "*-*-* 03,11,19:00:00",
+    # 4×/day: every 6 hours.
+    "4x-day":   "*-*-* 00,06,12,18:00:00",
+    "weekdays-9am": "Mon..Fri *-*-* 09:00:00",
+}
+
+
+def schedule_recurring_job(
+    *,
+    job_slug: str,
+    on_calendar: str,
+    job_name: str = "",
+) -> tuple[str, Optional[str]]:
+    """Write + enable a recurring systemd user timer for one saved job.
+
+    `on_calendar` is either a key in `RECUR_PRESETS` or a raw
+    OnCalendar= expression (see systemd.time(7)). The timer's
+    `.service` invokes `dr-job-run <slug>`. Unlike retention one-shots,
+    `Persistent=true` here ensures missed runs (e.g. host was off) fire
+    at the next opportunity.
+
+    Returns `(unit_base, error)`. unit_base lives at
+    `dr-tools-recur-<slug>.timer`. Idempotent — re-running with a new
+    schedule rewrites the unit and restarts the timer.
+    """
+    if not on_calendar:
+        return ("", "no schedule provided")
+    if not systemctl_user_available():
+        return ("", "systemctl --user not available on this host")
+    # Resolve preset → raw expression.
+    raw = RECUR_PRESETS.get(on_calendar, on_calendar)
+
+    unit_dir = _user_unit_dir()
+    unit_dir.mkdir(parents=True, exist_ok=True)
+    base = _recur_unit_name(job_slug)
+
+    service_body = f"""[Unit]
+Description=dr-tools recurring run for {job_name or job_slug}
+
+[Service]
+Type=oneshot
+ExecStart={_runtime_bin('dr-job-run')} {job_slug}
+"""
+    timer_body = f"""[Unit]
+Description=dr-tools recurring timer for {job_name or job_slug}
+
+[Timer]
+OnCalendar={raw}
+Persistent=true
+Unit={base}.service
+
+[Install]
+WantedBy=timers.target
+"""
+    (unit_dir / f"{base}.service").write_text(service_body)
+    (unit_dir / f"{base}.timer").write_text(timer_body)
+
+    try:
+        subprocess.run(
+            ["systemctl", "--user", "daemon-reload"],
+            check=True, capture_output=True, text=True, timeout=10,
+        )
+        subprocess.run(
+            ["systemctl", "--user", "enable", "--now", f"{base}.timer"],
+            check=True, capture_output=True, text=True, timeout=10,
+        )
+    except subprocess.CalledProcessError as e:
+        return (base, (e.stderr or e.stdout or "").strip()[:160])
+    except Exception as e:
+        return (base, repr(e)[:160])
+    return (base, None)
+
+
+def unschedule_recurring_job(*, job_slug: str) -> Optional[str]:
+    """Stop + disable + remove the recurring timer for a job. Idempotent."""
+    base = _recur_unit_name(job_slug)
+    unit_dir = _user_unit_dir()
+    err = None
+    for cmd in (
+        ["systemctl", "--user", "stop",    f"{base}.timer"],
+        ["systemctl", "--user", "disable", f"{base}.timer"],
+    ):
+        try:
+            subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        except Exception as e:
+            err = repr(e)[:160]
+    for suffix in (".service", ".timer"):
+        f = unit_dir / f"{base}{suffix}"
+        try:
+            if f.exists():
+                f.unlink()
+        except Exception as e:
+            err = err or repr(e)[:160]
+    try:
+        subprocess.run(
+            ["systemctl", "--user", "daemon-reload"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except Exception as e:
+        err = err or repr(e)[:160]
+    return err
+
+
 _TIMER_PREFIX = "dr-tools-retention-"
+# v0.15 — recurring schedules get their own prefix so they don't get
+# confused with retention one-shots in list_dr_timers().
+_RECUR_PREFIX = "dr-tools-recur-"
 
 # v0.14 — pull `<slug>` and `<run_id>` back out of a unit base name.
 # Slugs are kebab-case (a-z 0-9 -), run_ids are the 14-char UTC stamp
@@ -458,8 +588,9 @@ _LIST_TIMERS_RE = re.compile(
 def list_dr_timers() -> list[TimerInfo]:
     """Parse `systemctl --user list-timers --all` and return our entries.
 
-    Filters to units beginning with `dr-tools-retention-`. The output
-    format isn't strictly machine-readable, so we use a column split on
+    Filters to units beginning with `dr-tools-retention-` (one-shots)
+    or `dr-tools-recur-` (v0.15+ recurring schedules). Output format
+    isn't strictly machine-readable, so we use a column split on
     headerless lines with `--no-legend`. Whatever doesn't parse cleanly
     is silently dropped; the UI shows a hint when nothing comes back.
     """
@@ -475,7 +606,10 @@ def list_dr_timers() -> list[TimerInfo]:
     out: list[TimerInfo] = []
     for raw_line in (r.stdout or "").splitlines():
         line = raw_line.strip()
-        if not line or _TIMER_PREFIX not in line:
+        if not line:
+            continue
+        # v0.15 — accept both retention one-shots and recurring schedules.
+        if (_TIMER_PREFIX not in line) and (_RECUR_PREFIX not in line):
             continue
         # Best-effort column split — systemctl pads with two-or-more
         # spaces between columns. The fields we want: NEXT, LEFT, LAST,
@@ -483,8 +617,12 @@ def list_dr_timers() -> list[TimerInfo]:
         cols = [c.strip() for c in re.split(r"\s{2,}", line) if c.strip()]
         if len(cols) < 4:
             continue
-        unit = next((c for c in cols if c.startswith(_TIMER_PREFIX)
-                     and c.endswith(".timer")), "")
+        unit = next(
+            (c for c in cols
+             if (c.startswith(_TIMER_PREFIX) or c.startswith(_RECUR_PREFIX))
+             and c.endswith(".timer")),
+            "",
+        )
         if not unit:
             continue
         # Identify the activates column (last token; ends in .service).

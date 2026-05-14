@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.15.0](#v0150--2026-05-14) | 2026-05-14 | NewJobModal — manual path Input (drops file-tree) + recurring schedules via systemd user timers |
 | [v0.14.10](#v01410--2026-05-14) | 2026-05-14 | NewJobModal — pre-emptive org-admin warning + clearer Browse error translation |
 | [v0.14.9](#v0149--2026-05-14) | 2026-05-14 | explore_connector uses project_handle as contextHandle (PROJECT_NOT_ACTIVATED fix) |
 | [v0.14.8](#v0148--2026-05-14) | 2026-05-14 | NewJobModal file tree uses org-admin client; explore_connector re-raises APIError so PERMISSION_DENIED is visible |
@@ -39,6 +40,68 @@ feature-by-feature **expected behaviour** see
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ---
+
+## v0.15.0 — 2026-05-14
+
+### Changed: NewJobModal — manual path Input + recurring schedules
+
+Two changes that together turn the Job Scheduler from "works if your
+DR install grants exploreConnector permission" into "works regardless,
+matches the proven `locustfile_indexing.py` pattern, and supports
+cron-style recurrence".
+
+**1. Drop the file-tree browser.** v0.13 / v0.14 wrapped the modal
+around `connectorManager/exploreConnector` with a lazy-loading Tree
+widget. In DR 5.5.3.2 that endpoint is denied to both
+"IT Administrator" and the default "Organization Administrator" role
+(QA-14 + QA-16 findings). Replaced with a plain Path Input pre-filled
+with the connector's root path. User types or pastes the subpath
+they want indexed. Mirrors what `locustfile_indexing.py` does — same
+endpoint chain (`listConnectors → createDataArea →
+createCorpus → createRepresentation`), no browse step. Removed:
+`Tree`, `_action_browse`, `_action_count`, `_load_children_blocking`,
+`_apply_children`, `_count_blocking`, and the `Re-browse` / `Count
+files` buttons. Net code reduction: ~150 lines.
+
+**2. Recurring schedules via systemd user timers.** New
+`JobDefinition.schedule: str` field. NewJobModal gained a "Schedule
+(recurring)" Select with the presets:
+
+| Preset | OnCalendar expression |
+|---|---|
+| Run on demand only (default) | `""` (no timer) |
+| Hourly | `hourly` |
+| Daily (midnight) | `daily` |
+| 3× daily (03/11/19) | `*-*-* 03,11,19:00:00` |
+| 4× daily (00/06/12/18) | `*-*-* 00,06,12,18:00:00` |
+| Weekdays 09:00 | `Mon..Fri *-*-* 09:00:00` |
+| Weekly | `weekly` |
+| Monthly | `monthly` |
+
+Scheduler tab dispatch: on Schedule / Run Now, if `job.schedule != ""`
+the parent screen calls `drsch.schedule_recurring_job()` which writes
+`~/.config/systemd/user/dr-tools-recur-<slug>.{service,timer}` and
+`systemctl --user enable --now`s it. Unlike retention one-shots,
+these timers carry `Persistent=true` so missed fires (host was off)
+catch up at the next opportunity. Editing the saved template's
+schedule to "Run on demand only" calls
+`drsch.unschedule_recurring_job()` to remove the timer.
+
+`list_dr_timers()` now picks up both `dr-tools-retention-*` and
+`dr-tools-recur-*` timers so they all show in the Retention Timers
+sub-view. (FR candidate for v0.16: split that sub-view into
+"Recurring schedules" and "Retention timers" — they're conceptually
+different.)
+
+**Saved-templates table accessibility tweak.** `longterm`-substring
+match now renders with both `[yellow b]` bold AND a leading `* `
+asterisk marker (e.g. `* nightly-longterm-archive`) so the cue isn't
+colour-only — needed for colour-blind users. Beta-user persona for
+v0.15 release certification is colour-blind by design.
+
+**Tests:** updated `test_newjob_modal_v0141_defaults_and_buttons` and
+`test_longterm_substring_match` for the new widget id + asterisk
+marker. 19/19 pilot tests pass.
 
 ## v0.14.10 — 2026-05-14
 

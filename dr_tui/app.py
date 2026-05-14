@@ -1694,20 +1694,55 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                         classes="modal-hint",
                     )
 
-                with Vertical(id="newjob-tree-wrap"):
-                    yield Label("Folder to index — click a folder to expand")
-                    yield Tree("(loading…)", id="newjob-tree")
-                    yield Static(
-                        "[dim]Selected: —[/]",
-                        id="newjob-selected",
+                    yield Label("Schedule (recurring)")
+                    yield Select(
+                        [
+                            ("Run on demand only (no schedule)", ""),
+                            ("Hourly",                            "hourly"),
+                            ("Daily (midnight)",                  "daily"),
+                            ("3× daily (03/11/19)",               "3x-day"),
+                            ("4× daily (00/06/12/18)",            "4x-day"),
+                            ("Weekdays 09:00",                    "weekdays-9am"),
+                            ("Weekly",                            "weekly"),
+                            ("Monthly",                           "monthly"),
+                        ],
+                        id="newjob-schedule-preset",
+                        allow_blank=False,
+                        value=(self._existing.schedule if self._existing else ""),
                     )
-                    with Horizontal(id="newjob-tree-actions"):
-                        yield Button("Re-browse",
-                                     id="newjob-browse",
-                                     variant="default")
-                        yield Button("Count files (recursive)",
-                                     id="newjob-count")
-                    yield Static("", id="newjob-count-status")
+                    yield Static(
+                        "[dim]Recurring jobs fire `dr-job-run` via a "
+                        "systemd user timer. Requires "
+                        "`loginctl enable-linger $USER` to survive logout.[/]",
+                        classes="modal-hint",
+                    )
+
+                with Vertical(id="newjob-tree-wrap"):
+                    yield Label("Folder to index (path on the connector)")
+                    # v0.15: replaced the file-tree browser with a plain
+                    # path Input. exploreConnector is org-admin scoped
+                    # AND requires permissions DR doesn't grant by default
+                    # in 5.5.3.2 — we matched locustfile_indexing.py's
+                    # proven pattern: user supplies the path, we skip the
+                    # browse and go straight to createDataArea.
+                    yield Input(
+                        value=(
+                            self._existing.path if self._existing
+                            else self._connector_root_path_default()
+                        ),
+                        placeholder="e.g. /data/import/payroll/2026",
+                        id="newjob-path",
+                    )
+                    yield Static(
+                        "[dim]Tip: paste the path from the DR Web UI's "
+                        "connector browser, or use the connector's root "
+                        "path shown above.[/]",
+                        classes="modal-hint",
+                    )
+                    yield Static(
+                        f"[dim]Connector root: {self._connector_root_path_default() or '—'}[/]",
+                        id="newjob-conn-root",
+                    )
 
             yield Static("", id="newjob-error")
             # v0.14.1: four explicit actions per user spec.
@@ -1778,15 +1813,12 @@ class NewJobModal(ModalScreen[Optional[dict]]):
         # dropdowns already auto-picked an org + connector.
         self._refresh_project_status()
         # v0.14.10 — pre-emptive warning when the modal is operating
-        # without an org-admin client. Browse, Count and Save all hit
-        # org-admin-only endpoints, so they'll fail. Tell the user up
-        # front rather than letting them click Browse and hit a
-        # mystery PROJECT_NOT_ACTIVATED.
+        # without an org-admin client. Schedule + Run Now hit org-admin-
+        # only endpoints (createDataArea / createCorpus / createRepresentation)
+        # so they'll fail. Tell the user up front.
         self._warn_if_not_org_admin()
-        if self._cur_conn_handle:
-            self._action_browse()
-        # Focus the name field so the user can type a job name straight
-        # away — the tree drives itself in the background.
+        self._refresh_path_hint()
+        # Focus the name field so the user can type a job name straight away.
         try:
             self.query_one("#newjob-name", Input).focus()
         except Exception:
@@ -1831,41 +1863,42 @@ class NewJobModal(ModalScreen[Optional[dict]]):
             self._submit(action="schedule")
         elif bid == "newjob-run":
             self._submit(action="run")
-        elif bid == "newjob-browse":
-            self._action_browse()
-        elif bid == "newjob-count":
-            self._action_count()
 
     def on_select_changed(self, evt) -> None:
         sid = getattr(evt.select, "id", "")
         if sid == "newjob-org":
             org = evt.value if evt.value != Select.BLANK else ""
             self._cur_org = str(org)
-            # Re-populate the connector dropdown from the new org.
             try:
                 conn_opts = self._connector_options(self._cur_org)
                 self.query_one("#newjob-connector", Select).set_options(
                     conn_opts
                 )
-                # set_options resets to the first option; mirror that into
-                # `_cur_conn_handle` so Browse works immediately.
                 first = (self._connectors_by_org.get(self._cur_org) or [None])[0]
                 self._cur_conn_handle = (first.handle if first else "")
             except Exception:
                 pass
-            # New org → re-pick project + clear the tree until the new
-            # connector loads its root.
             self._cur_project_handle = self._auto_pick_project(self._cur_org)
             self._refresh_project_status()
-            if self._cur_conn_handle:
-                self._action_browse()
+            self._refresh_path_hint()
+            # v0.15 — repopulate the path Input with the new connector's
+            # root path so the user has a sensible starting point.
+            try:
+                self.query_one("#newjob-path", Input).value = (
+                    self._connector_root_path_default()
+                )
+            except Exception:
+                pass
         elif sid == "newjob-connector":
             self._cur_conn_handle = (str(evt.value)
                                      if evt.value != Select.BLANK else "")
-            # User picked a different connector — refresh the tree at
-            # the new root automatically.
-            if self._cur_conn_handle:
-                self._action_browse()
+            self._refresh_path_hint()
+            try:
+                self.query_one("#newjob-path", Input).value = (
+                    self._connector_root_path_default()
+                )
+            except Exception:
+                pass
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -1878,182 +1911,21 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                 return c
         return None
 
-    def _action_browse(self) -> None:
-        """Repopulate the tree with the connector root listing."""
+    def _connector_root_path_default(self) -> str:
+        """v0.15 helper — the connector's configured root path, used as
+        the pre-fill for the manual path Input."""
         conn = self._selected_connector()
-        if conn is None:
-            self.query_one("#newjob-error", Static).update(
-                "[red]Pick an org + connector first.[/]"
-            )
-            return
-        self.query_one("#newjob-error", Static).update("")
-        tree = self.query_one("#newjob-tree", Tree)
-        tree.reset(conn.path or conn.host or conn.name,
-                   data={"path": conn.path or "", "leaf": False,
-                         "loaded": False, "host": conn.host,
-                         "ctype": conn.type, "cname": conn.name})
-        # Fire the lazy-loader on the root.
-        self.run_worker(
-            lambda: self._load_children_blocking(tree.root),
-            thread=True, exclusive=False, group="newjob-tree",
-        )
+        return (conn.path if conn else "") or ""
 
-    def on_tree_node_selected(self, evt) -> None:
-        node = evt.node
-        data = node.data or {}
-        # Remember the current path for "Count Files" / "Save".
-        self._cur_path = str(data.get("path") or "")
-        self.query_one("#newjob-selected", Static).update(
-            f"[dim]Selected: {self._cur_path or '(connector root)'}[/]"
-        )
-        # Lazy-load children if this is a directory we haven't expanded yet.
-        if data.get("leaf"):
-            return
-        if data.get("loaded"):
-            return
-        self.run_worker(
-            lambda: self._load_children_blocking(node),
-            thread=True, exclusive=False, group="newjob-tree",
-        )
-
-    def _load_children_blocking(self, node) -> None:
-        data = node.data or {}
-        conn = self._selected_connector()
-        if conn is None or self._client is None:
-            self.app.call_from_thread(
-                self.query_one("#newjob-error", Static).update,
-                "[red]No connector or API client available — pick a "
-                "connector first.[/]",
-            )
-            return
+    def _refresh_path_hint(self) -> None:
+        """Update the 'Connector root' hint when the connector changes."""
         try:
-            entries = drdata.explore_connector(
-                self._client,
-                org_name=self._cur_org,
-                connector_name=conn.name,
-                connector_type=conn.type,
-                remote_host=conn.host,
-                remote_path=conn.path or "",
-                parent_path=data.get("path") or conn.path or "",
-                project_handle=self._cur_project_handle,
+            self.query_one("#newjob-conn-root", Static).update(
+                f"[dim]Connector root: "
+                f"{self._connector_root_path_default() or '—'}[/]"
             )
-        except APIError as e:
-            # v0.14.8 — most likely PERMISSION_DENIED because the modal
-            # got a DRSysAdmin client; the exploreConnector endpoint is
-            # org-admin-only. Surface a specific message instead of an
-            # empty tree.
-            # v0.14.10 — when DR's async SRI worker rejects the call
-            # (vs. the sync permission check), the error is the
-            # misleading "PROJECT_NOT_ACTIVATED Project 0 not
-            # activated". Translate it to the actionable root cause.
-            ec = str(e.error_code or "")
-            ext = (e.extended_status or "").strip()
-            if "PERMISSION_DENIED" in ec or "PROJECT_NOT_ACTIVATED" in ec:
-                msg = (
-                    f"[red]Browse failed: not enough permission to "
-                    f"browse this connector.[/]\n"
-                    f"[dim]({ec or 'FAILURE'}: {ext[:80]})[/]\n"
-                    f"[yellow]This DR install requires an "
-                    f"[b]org-admin login[/] (e.g. admin@{self._cur_org}) "
-                    f"for browsing. Log out and log back in as the org "
-                    f"admin, or ask an operator to run "
-                    f"[b]python playwright_fresh_init.py[/] if the "
-                    f"admin user doesn't exist yet.[/]"
-                )
-            else:
-                msg = (f"[red]Browse failed: {ec or e.status} "
-                       f"{ext[:120]}[/]")
-            self.app.call_from_thread(
-                self.query_one("#newjob-error", Static).update, msg,
-            )
-            entries = []
-        except Exception as e:
-            self.app.call_from_thread(
-                self.query_one("#newjob-error", Static).update,
-                f"[red]Browse failed: {e!r}[/]",
-            )
-            entries = []
-        self.app.call_from_thread(self._apply_children, node, entries)
-
-    def _apply_children(self, node, entries: list[drdata.PathEntry]) -> None:
-        node.remove_children()
-        parent_path = (node.data or {}).get("path") or ""
-        for e in entries:
-            child_path = (parent_path.rstrip("/") + "/" + e.name).lstrip("/")
-            label = (f"[dim]🗎[/] {e.name}" if e.leaf
-                     else f"[b]🗀[/] {e.name}")
-            child_data = {
-                "path": child_path,
-                "leaf": e.leaf,
-                "loaded": False,
-            }
-            if e.leaf:
-                node.add_leaf(label, data=child_data)
-            else:
-                node.add(label, data=child_data)
-        if node.data is not None:
-            node.data["loaded"] = True
-        node.expand()
-
-    # ---- count files -------------------------------------------------
-    def _action_count(self) -> None:
-        conn = self._selected_connector()
-        if conn is None:
-            self.query_one("#newjob-error", Static).update(
-                "[red]Pick a connector first.[/]"
-            )
-            return
-        if not self._cur_path:
-            self.query_one("#newjob-error", Static).update(
-                "[red]Select a directory in the tree first.[/]"
-            )
-            return
-        self.query_one("#newjob-count-status", Static).update(
-            "[yellow]counting…[/]"
-        )
-        self.run_worker(
-            self._count_blocking, thread=True, exclusive=True,
-            group="newjob-count",
-        )
-
-    def _count_blocking(self) -> None:
-        conn = self._selected_connector()
-        if conn is None: return
-
-        def _cb(files, dirs, current):
-            try:
-                self.app.call_from_thread(
-                    self.query_one("#newjob-count-status", Static).update,
-                    f"[yellow]counting… {files} files / {dirs} dirs  "
-                    f"current={current[:40]}[/]",
-                )
-            except Exception:
-                pass
-
-        try:
-            files, dirs = drdata.count_files_recursively(
-                self._client,
-                org_name=self._cur_org,
-                connector_name=conn.name,
-                connector_type=conn.type,
-                remote_host=conn.host,
-                remote_path=conn.path or "",
-                root_path=self._cur_path,
-                project_handle=self._cur_project_handle,
-                progress_cb=_cb,
-            )
-        except Exception as e:
-            self.app.call_from_thread(
-                self.query_one("#newjob-count-status", Static).update,
-                f"[red]count error: {e!r}[/]",
-            )
-            return
-        self.app.call_from_thread(
-            self.query_one("#newjob-count-status", Static).update,
-            f"[green]{files} files, {dirs} dirs under "
-            f"{self._cur_path}[/]  "
-            f"[dim](no byte total — DR API exposes no size)[/]",
-        )
+        except Exception:
+            pass
 
     # ---- submit ------------------------------------------------------
     def _submit(self, *, action: str) -> None:
@@ -2111,13 +1983,16 @@ class NewJobModal(ModalScreen[Optional[dict]]):
             )
             return
 
-        # Field 4: Folder
-        if not self._cur_path:
+        # Field 4: Folder path — read from the manual Input (v0.15+).
+        path_val = self.query_one("#newjob-path", Input).value.strip()
+        if not path_val:
             err.update(
-                "[red]Folder to index not selected. Click a folder in "
-                "the tree on the right, then try again.[/]"
+                "[red]Folder to index is empty. Enter the path on the "
+                "connector you want to index (e.g. "
+                "/data/import/payroll/2026).[/]"
             )
             return
+        self._cur_path = path_val
 
         # Field 5: Retention period
         ret_raw = self.query_one(
@@ -2145,6 +2020,14 @@ class NewJobModal(ModalScreen[Optional[dict]]):
             ret_mult = 1
         ret_seconds = ret_n * ret_mult
 
+        # v0.15 — recurring schedule (optional).
+        try:
+            schedule = str(self.query_one(
+                "#newjob-schedule-preset", Select,
+            ).value or "")
+        except Exception:
+            schedule = ""
+
         # All checks passed — clear the error line and dismiss.
         err.update("")
         conn = self._selected_connector()
@@ -2160,6 +2043,7 @@ class NewJobModal(ModalScreen[Optional[dict]]):
             "remote_path": (conn.path if conn else ""),
             "path": self._cur_path,
             "retention_seconds": ret_seconds,
+            "schedule": schedule,
             "description": self.query_one(
                 "#newjob-desc", Input,
             ).value.strip(),
@@ -2611,7 +2495,7 @@ class DashboardScreen(Screen):
             "Org", "Project", "Job", "State", "Started", "Duration", "User",
         )
         self.query_one("#sch-saved-table", DataTable).add_columns(
-            "Job Name", "Org", "Path", "Retention", "Description",
+            "Job Name", "Org", "Path", "Retention", "Schedule", "Description",
         )
         self.query_one("#sch-timers-table", DataTable).add_columns(
             "Unit", "Next fire", "Time left", "Activates",
@@ -3181,14 +3065,19 @@ class DashboardScreen(Screen):
         t.clear()
         self._sch_saved_rows = jobs
         for j in jobs:
-            # "longterm" anywhere in the name → yellow-bold highlight,
-            # per the user's request: visually flag long-retention jobs.
-            name_disp = (f"[yellow b]{j.name}[/]"
-                         if "longterm" in j.name.lower()
-                         else j.name)
+            # "longterm" substring → yellow-bold highlight + leading
+            # asterisk marker so the cue isn't colour-only (v0.15
+            # accessibility improvement, surfaced via the beta-user
+            # persona). Markup tells me the markup parser will still
+            # render bold for terminals without colour.
+            is_longterm = "longterm" in j.name.lower()
+            name_disp = (f"[yellow b]* {j.name}[/]"
+                         if is_longterm else j.name)
+            sched_disp = j.schedule or "[dim]on-demand[/]"
             t.add_row(
                 name_disp, j.org, j.path,
                 _fmt_retention(j.retention_seconds),
+                sched_disp,
                 j.description or "",
             )
         self._update_status_bar(extra=f"saved=[cyan]{len(jobs)}[/]")
@@ -3781,6 +3670,26 @@ class DashboardScreen(Screen):
         job = drsch.JobDefinition(**payload)
         drsch.save_job(job)
         self._post_status_ok(f"job saved: {job.name}")
+        # v0.15 — recurring schedule: write/refresh the systemd timer
+        # for this job. Empty `schedule` removes any existing timer
+        # (e.g. user edited the template to disable recurrence).
+        if job.schedule:
+            unit, err = drsch.schedule_recurring_job(
+                job_slug=job.slug(),
+                on_calendar=job.schedule,
+                job_name=job.name,
+            )
+            if err:
+                self._post_status(f"schedule timer: {err}")
+            else:
+                self._post_status_ok(
+                    f"recurring timer: {unit}.timer scheduled "
+                    f"({job.schedule})"
+                )
+        else:
+            # Make sure any prior recurring timer is removed when the
+            # user clears the schedule on an edit.
+            drsch.unschedule_recurring_job(job_slug=job.slug())
         # Refresh the Saved Templates view if we're on it.
         if self.selected_kind == "sch-saved":
             self._load_view("sch-saved", "")

@@ -298,9 +298,8 @@ async def _walk_newjob_v0141_defaults_and_buttons() -> None:
         await pilot.pause()
         scr = app.screen
         scr.query_one("#newjob-name", Input).value = "my-test-job"
-        # Bypass the file-tree click by directly setting _cur_path
-        # (the tree relies on a live API client we don't have here).
-        scr._cur_path = "/data/import/payroll/2026"
+        # v0.15: path is a manual Input widget — set it directly.
+        scr.query_one("#newjob-path", Input).value = "/data/import/payroll/2026"
         scr.query_one("#newjob-schedule", Button).action_press()
         await pilot.pause()
         assert len(holder) == 1, f"expected one result, got {holder!r}"
@@ -322,7 +321,7 @@ async def _walk_newjob_v0141_defaults_and_buttons() -> None:
         await pilot.pause()
         scr = app.screen
         scr.query_one("#newjob-name", Input).value = "runnow-job"
-        scr._cur_path = "/data/import/now"
+        scr.query_one("#newjob-path", Input).value = "/data/import/now"
         scr.query_one("#newjob-run", Button).action_press()
         await pilot.pause()
         assert len(holder) == 1
@@ -389,18 +388,22 @@ def test_log_viewer_modal_mount() -> None:
 # ---------- 'longterm' coloring rule ----------
 
 def test_longterm_substring_match() -> None:
-    """Saved-jobs renderer flags any job name containing 'longterm'."""
-    # This mirrors the markup logic in _apply_sch_saved without booting
-    # the full DashboardScreen (avoiding the login flow).
+    """Saved-jobs renderer flags any job name containing 'longterm'.
+
+    v0.15: cue is bold + leading asterisk so it's not colour-only
+    (covers colour-blind users — surfaced by the beta-user persona).
+    """
+    # Mirror the markup logic in _apply_sch_saved without booting the
+    # full DashboardScreen (avoiding the live login flow).
     def fmt(name: str) -> str:
-        return (f"[yellow b]{name}[/]"
+        return (f"[yellow b]* {name}[/]"
                 if "longterm" in name.lower() else name)
 
     assert fmt("Nightly Payroll") == "Nightly Payroll"
-    assert fmt("payroll-longterm") == "[yellow b]payroll-longterm[/]"
-    assert fmt("LongTermArchive") == "[yellow b]LongTermArchive[/]"
+    assert fmt("payroll-longterm") == "[yellow b]* payroll-longterm[/]"
+    assert fmt("LongTermArchive") == "[yellow b]* LongTermArchive[/]"
     # Substring, not whole word — that's intentional per the spec.
-    assert fmt("xLONGTERMy") == "[yellow b]xLONGTERMy[/]"
+    assert fmt("xLONGTERMy") == "[yellow b]* xLONGTERMy[/]"
 
 
 if __name__ == "__main__":
