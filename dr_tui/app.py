@@ -32,6 +32,7 @@ from textual.widgets import (
     TabbedContent, TabPane, TextArea, Tree,
 )
 from textual.worker import get_current_worker
+from rich.markup import escape as _rich_escape
 
 from config import Config, OrgUserConfig
 from helpers.api_client import APIError, EDiscoveryClient
@@ -4045,7 +4046,16 @@ class DashboardScreen(Screen):
                 "INFO":  "green",
             }.get(ll.level, "dim")
             tag = f"[{color}]{ll.level or '   '}[/]"
-            log.write(f"[cyan]{ll.file:>12s}[/] {tag} {ll.text}")
+            # Log text often contains literal '[…]' tokens — Java logger
+            # categories like '[com.foo.Bar]' or shell argv dumps like
+            # '[/bin/bash, …]' — which Rich's markup parser tries (and
+            # fails) to interpret as tags. Escape the user-controlled
+            # portions; our own `[cyan]` / `[color]` markers are pre-built
+            # from a fixed alphabet and don't need escaping.
+            log.write(
+                f"[cyan]{_rich_escape(f'{ll.file:>12s}')}[/] {tag} "
+                f"{_rich_escape(ll.text)}"
+            )
 
     def _dash_tick_procs(self) -> None:
         """Refresh the top-5 processes table."""

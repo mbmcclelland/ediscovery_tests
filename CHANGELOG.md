@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.13.2 — 2026-05-13
+
+### Fixed: dash-log RichLog crashed on log lines containing `[/...]` brackets
+
+The landing dashboard's log-stream pane crashed with
+`rich.errors.MarkupError: closing tag '[/bin/bash, ...]' at position
+N doesn't match any open tag` whenever the AHS log emitted a line
+with bracketed argv content — `updatevirusdefinitions.sh` was the
+specific trigger reported by the user.
+
+Cause: `_dash_tick_logs` was feeding raw log text into
+`RichLog.write()` without escaping, and the underlying
+`Text.from_markup()` interprets every `[…]` token as either an
+opening or closing markup tag. Java logger categories
+(`[com.foo.Bar]`) had been benign by luck (no `/` prefix), but argv
+dumps like `[/bin/bash, …, /path/with-dashes]` looked like an
+unbalanced closing tag and raised.
+
+Fix: escape the user-controlled portions of each log line with
+`rich.markup.escape()` before assembling the `[cyan]…[/] [green]…[/]
+text` payload. Our own colour markers are still parsed normally; only
+the file name + raw text are escaped.
+
+TaskLogModal's RichLog wasn't affected — it ships with `markup=False`
+because per-task AE log lines can contain arbitrary content. We could
+have made the dashboard log do the same, but we use the `[colour]`
+markers there intentionally to colour-code INFO/WARN/ERROR, so the
+escape-only approach keeps both behaviours.
+
 ## v0.13.1 — 2026-05-13
 
 ### Fixed: New Job wizard — Org → Connector → folder now actually flows
