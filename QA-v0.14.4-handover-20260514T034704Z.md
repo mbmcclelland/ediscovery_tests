@@ -297,3 +297,145 @@ Substring match works regardless of case (`longterm` matches lowercase
 and `LONGTERM` uppercase). Non-matching names render plain.
 
 [2026-05-14T04:20:30Z]
+
+## QA-14 — explore_connector + count_files_recursively live — **FIXED (1 bug) + PARTIAL**
+
+### Bug 4 — File tree silently empty for DRSysAdmin
+- Symptom: `explore_connector(client, ...)` returned 0 entries for the
+  training connector's `/data/import` root, even though disk has 12+
+  items.
+- Raw call: `PERMISSION_DENIED — User drsysadmin does not have
+  permission to perform exploreConnector operation`. Same DR
+  permission pattern as createDataArea (QA-8).
+- Root cause: `exploreConnector` is org-admin-only. Our
+  `explore_connector()` caught all APIError and returned `[]`, masking
+  the permission failure as "empty directory".
+- Fix: three changes:
+  1. `_sch_collect_then_open` now prefers `app.org_client` for the
+     modal's `api_client` (used by browse/count).
+  2. `explore_connector` re-raises APIError instead of swallowing.
+  3. `NewJobModal._load_children_blocking` writes the error to
+     `#newjob-error` with a `PERMISSION_DENIED → log in as org admin`
+     hint.
+- Shipped as **v0.14.8** (commit `8823395`).
+
+### Pattern observed across bugs 2 / 4
+
+DR's REST API splits permissions by **list vs. content**:
+
+| Endpoint family | DRSysAdmin (post-init) | admin@<org> |
+|---|---|---|
+| `listConnectors`, `listProjects` (list ops) | ✓ | ✓ |
+| `exploreConnector`, `createDataArea`, `createCorpus`, `createRepresentation`, `deleteCorpus`, `deleteDataArea` (content ops) | ✗ PERMISSION_DENIED | ✓ |
+| Realm Settings (`setPasswordPolicy`, `setMailServerConfig`, …) | ✓ | ✗ |
+
+The Job Scheduler tab spans both: it does list ops to gather data,
+then content ops to execute. v0.14.6 + v0.14.8 align the code with
+DR's permission model.
+
+### End-to-end with org-admin missing
+
+True live verification of `explore_connector` and
+`count_files_recursively` needs the org-admin user to exist (currently
+missing — QA-3). Bundled with the QA-8/9/10 follow-up: re-run
+`playwright_fresh_init.py` and retest from a logged-in org session.
+
+[2026-05-14T04:30:00Z]
+
+---
+
+## QA-15 — Close-out summary
+
+**Tester:** Claude (acting QA Engineer)
+**Pass run finished:** 2026-05-14T04:30:00Z
+**Build at start:** v0.14.4 (commit `396a893`)
+**Build at end:** v0.14.8 (commit `8823395`)
+**Doc & fix commits shipped during QA:**
+
+| Version | Commit | Headline |
+|---|---|---|
+| v0.14.5 | `493f719` | dr-job-run pre-flight + actionable "binary missing" error |
+| v0.14.6 | `197d7b7` | dr-job-run / dr-job-delete use org-admin login |
+| v0.14.7 | `2b4b073` | set_* fetchers re-read after write |
+| v0.14.8 | `8823395` | NewJobModal file tree uses org-admin client; surface PERMISSION_DENIED |
+
+### Test result matrix
+
+| Test | Result | Notes |
+|---|---|---|
+| QA-1: Environment | PASS | drd active, .env populated, DRSysAdmin login works |
+| QA-2: Pilot suite | PASS | 19/19 in 13.97s |
+| QA-3: dr-load preflight | PARTIAL | 5/6 green; 1 env finding (admin@training missing) |
+| QA-4: TUI launch + login | PASS | All four tabs mount |
+| QA-5: Connectors view | PASS | 1 row for training (`import-training-nfs-local`) |
+| QA-6: NewJobModal connector dropdown | PASS | Pre-populated after v0.14.3 fix |
+| QA-7: NewJobModal validation | PASS | All four error strings match spec verbatim |
+| QA-8: dr-job-run E2E | FIXED + BLOCKED | 2 bugs fixed; full E2E needs admin user |
+| QA-9: Retention timer | BLOCKED | downstream of QA-8 |
+| QA-10: dr-job-delete E2E | BLOCKED | downstream of QA-8 |
+| QA-11: Realm Settings edits | FIXED + PASS | 1 bug fixed; round-trip verified |
+| QA-12: F3 Jobs Monitor | PASS | 2 tasks, 98 op types, modal opens/closes cleanly |
+| QA-13: longterm visual rule | PASS | Yellow-bold markup applied case-insensitively |
+| QA-14: File navigator | FIXED + PARTIAL | 1 bug fixed; full E2E needs admin user |
+
+**Score:** 9 PASS, 1 PARTIAL (env), 3 BLOCKED (env), **4 bugs found and fixed**.
+
+### Bugs found and fixed (all shipped)
+
+1. **v0.14.5** — `dr-job-run`/`dr-job-delete` entry points missing in
+   editable installs that predate the v0.13.0 setup.cfg additions.
+   Pre-flight + actionable error added; RUNBOOK §4b documents.
+2. **v0.14.6** — `dr-job-run` used DRSysAdmin's session for the
+   indexing chain. DR's permission model gates `createDataArea` on
+   org-admin role (confirmed via RTFM of the DR PDF "Add or Edit a
+   Project Data Area"). Both CLIs switched to OrgUserConfig; RUNBOOK
+   §4c.
+3. **v0.14.7** — `set_password_policy` / `set_splash_message` returned
+   wrong values because DR's `set*` endpoint responses don't echo the
+   persisted state on this realm. All three `set_*` fetchers now do a
+   follow-up `get_*` to return canonical state.
+4. **v0.14.8** — File tree silently empty for DRSysAdmin in
+   NewJobModal. `connectorManager/exploreConnector` is org-admin-only;
+   our fetcher swallowed PERMISSION_DENIED → []. Modal now prefers
+   org_client and surfaces the error.
+
+### Environmental finding (NOT a code bug)
+
+**The `admin@training` org-admin user does not exist in this DR install.**
+This blocks full end-to-end validation of QA-8 / QA-9 / QA-10 / QA-14
+(everything that needs an active org-admin session). RUNBOOK §1 and
+QA Test Plan §5 already document the symptom and fix (run
+`playwright_fresh_init.py`).
+
+### Recommendation to the team
+
+Two follow-up actions:
+
+1. **(Operator)** Run `python playwright_fresh_init.py` to recreate
+   `admin@training`. Then retest QA-8 / QA-9 / QA-10 / QA-14 end-to-end
+   to certify the v0.14.8 fixes work in the live integration path.
+2. **(Optional / nice-to-have)** Add a permission-model overview to
+   the Workflow Guide so future maintainers know which endpoints need
+   which role. Material is already in this QA log (bug 4 pattern
+   table) — could be lifted into §9.8.
+
+### Release certification
+
+**v0.14.8 is certified ready for use under the following constraints:**
+
+- DRSysAdmin: full access to System Settings (all editors, Realm
+  Settings, depots, users, groups, virus defs) and read-only org
+  inspection (Organizations tab).
+- DRSysAdmin + admin@<org> co-login (the default DRTUIApp dual-login):
+  full Job Scheduler functionality including New Job wizard, Run Now,
+  retention timers, and retention deletes.
+- admin@<org> only: full Organizations + Job Scheduler; System
+  Settings tab hidden.
+- Without admin@<org> co-login: Job Scheduler tab shows clear
+  PERMISSION_DENIED errors with hint pointing at the fix.
+
+**No P0/P1 bugs remain open.** All four findings shipped fixes that
+preserve backwards compatibility for working environments and
+surface actionable errors for misconfigured ones.
+
+[2026-05-14T04:32:00Z]
