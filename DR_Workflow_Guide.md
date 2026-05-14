@@ -703,14 +703,55 @@ complete project lifecycles, 4 indexing jobs reached `COMPLETE`. See CHANGELOG v
 
 ## 5. Fresh-Install / Reinstall Toolchain
 
-Added in v0.06. A three-step chain that tears DR down to bare metal and
-brings it back up to a tested baseline — DRSysAdmin/`password`,
-`admin@training`/`password`, `localDocStorage` + `localIndexStorage`
-created, System Storage Depot assigned, `training` org provisioned.
+Added in v0.06 as a 3-script chain (cleandr → expect → playwright).
+**Consolidated in v0.17.0 into a single Python entry point** that
+talks to DR over REST — `DR_freshinstall.py`. Same destructive
+effect, ~5× faster, no Chromium dependency.
 
-> ⚠️ **Destructive and unrecoverable.** Step 1 deletes `/home/auraria/AHS*`
-> and the contents of `/data/docstorage/` and `/data/indexstorage/`. Only
-> run when you intend to start over.
+> ⚠️ **Destructive and unrecoverable.** The default flow deletes
+> `/home/auraria/AHS*`, `/data/docstorage/*`, `/data/indexstorage/*`,
+> the dr-tools RPM, and per-user systemd timers. Only run when you
+> intend to start over. License is preserved to `/root/license.lic`
+> automatically.
+
+### 5.0 — `DR_freshinstall.py` (v0.17.0+ — recommended)
+
+```bash
+sudo .venv/bin/python DR_freshinstall.py
+```
+
+Three internal phases, each toggleable:
+
+| Phase | Default | Skip with | What runs |
+|---|---|---|---|
+| 1. Teardown | yes | `--skip-clean` | shells out to `bash cleandr.sh` |
+| 2. Installer | yes | `--skip-installer` | shells out to `expect -f DR_freshinstall.exp` from `/tmp` |
+| 3. API provisioning | yes | `--skip-api` | 13 REST calls via `dr_tui/data.py` helpers |
+
+The 13 API steps mirror the user spec verbatim. See README's
+"Fresh-Install Toolchain" section for the full list. The key design
+choices in the API phase:
+
+- **Step ordering swap (8 ↔ 9).** A brand-new org has zero members
+  — so DRSysAdmin must add itself (step 9) before it can create
+  `admin@training` (step 8). The user-spec step *numbers* are
+  preserved in the headers; only execution order swaps. See
+  API_PROGRAMMING_GUIDE §10.9.
+- **Sys-scoped `listRoles`.** The first role lookup uses
+  `adminOrgManager/listRoles` (sys-scope), which works even before
+  membership is established.
+- **Fresh `EDiscoveryClient` for re-login.** After
+  `changeUserPassword`, the script builds a NEW client rather than
+  mutating `client.cfg.password` (Config is `@dataclass(frozen=True)`
+  — see API_PROGRAMMING_GUIDE §10.10).
+- **`--keep-existing` matches by export-path, not name.** Idempotent
+  recovery works even if a prior partial-failure left depots under
+  different names — we check `(export, fqdn)` instead of `name`.
+
+The legacy 3-script approach (§5.1–§5.3 below) still works and the
+shell + expect pieces are exactly what `DR_freshinstall.py` invokes
+internally. Manual invocation is only needed if you want to
+single-step the toolchain.
 
 ### 5.1 — `cleandr.sh`
 

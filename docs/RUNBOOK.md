@@ -6,7 +6,46 @@ actually seen during QA. Each entry has: **symptom**, **root cause**,
 
 For broader test plans see [`QA_TEST_PLAN.md`](QA_TEST_PLAN.md). For
 the API endpoint shapes see `endpoints_v0.05.md` / `endpoints_v0.06.md`
-/ `endpoints_v0.08.md`.
+/ `endpoints_v0.08.md` and the canonical reference
+[`API_PROGRAMMING_GUIDE.md`](API_PROGRAMMING_GUIDE.md).
+
+---
+
+## §0 — "Just give me a working DR from scratch"
+
+**v0.17.0+** — one command, single Python entry point, ~5× faster
+than the legacy Playwright path:
+
+```bash
+sudo .venv/bin/python DR_freshinstall.py
+```
+
+What it does (13 API-level steps mirroring the user's spec):
+DRSysAdmin login + forced-change → doc storage @ /data/docstorage →
+index storage @ /data/indexstorage → system depot → virus update →
+99-min inactivity → `training` org → DRSysAdmin into the org →
+`admin@training` → three connectors (RO import / RW export /
+RW archive) → PROJECT + EXPORT data areas.
+
+End state: DRSysAdmin / password, admin@training / password,
+fully-stocked training org ready for dr-tui or dr-load.
+
+Useful flags:
+
+| Flag | Use case |
+|---|---|
+| `--dry-run` | print every action without doing it |
+| `--skip-clean --skip-installer` | drd already up; just (re-)provision |
+| `--keep-existing` | idempotent recovery after a partial-failure run |
+| `--hostname HOST` | override the default `192.168.58.128` |
+
+The legacy three-script sequence (`cleandr.sh` → `expect -f
+DR_freshinstall.exp` → `python playwright_fresh_init.py`) still
+works and the shell + expect pieces are what `DR_freshinstall.py`
+invokes for phases 1+2 internally — but you almost never need to
+run them manually anymore.
+
+If anything goes wrong during the API phase, see §4g / §4h.
 
 ---
 
@@ -399,6 +438,87 @@ The TUI's `_sch_run_now` (v0.14.5+) pre-flights the binary path and
 posts a specific actionable error in the status bar. Earlier versions
 got a generic `FileNotFoundError` traceback into the worker, which
 quietly fell into "run error: …".
+
+---
+
+## §4g — `DR_freshinstall.py` step 8 fails with `PERMISSION_DENIED ... listRoles` (v0.17.0)
+
+### Symptom
+
+During a destructive fresh-install run, phase 3 completes steps 1–7
+but step 8 dies with:
+
+```
+✗  FATAL: API error: status=FAILURE, errorCode=PERMISSION_DENIED,
+         extendedStatus= User drsysadmin does not have permission to
+         perform listRoles operation.
+```
+
+The `--keep-existing` path silently sailed past this because the
+existing org already had DRSysAdmin as a member.
+
+### Root cause
+
+A brand-new org created via `realmManager/createOrganization` has
+**zero members** — not even DRSysAdmin who created it. The
+org-scoped `orgManager/listRoles` requires the caller to be a
+member, so step 8 (which looks up the Org Admin role handle) fails.
+
+See [API_PROGRAMMING_GUIDE.md §10.9](API_PROGRAMMING_GUIDE.md) for
+the full chicken-and-egg explanation.
+
+### Fix
+
+Two parts, both shipped in v0.17.0:
+
+1. `dr_tui/data.py::list_org_roles()` now accepts `sys_scope=True`
+   → uses `adminOrgManager/listRoles` (sys-scoped, works without
+   membership).
+2. `DR_freshinstall.py::phase_api()` reordered: step 9 (add
+   DRSysAdmin to the org) now runs **before** step 8 (create
+   admin@training). The user-spec step *numbers* are preserved in
+   the headers so the script's structure still matches the spec.
+
+To resume a partially-completed install:
+
+```bash
+sudo .venv/bin/python DR_freshinstall.py --skip-clean --skip-installer --keep-existing
+```
+
+---
+
+## §4h — `DR_freshinstall.py` step 1 dies with `FrozenInstanceError: cannot assign to field 'password'`
+
+### Symptom
+
+```
+✓  password changed → 'password'
+Traceback (most recent call last):
+  ...
+dataclasses.FrozenInstanceError: cannot assign to field 'password'
+```
+
+### Root cause
+
+`config.Config` is `@dataclass(frozen=True)` for safety. The pre-v0.17.0
+code mutated `client.cfg.password = new_password` after a successful
+`changeUserPassword` — that throws on a frozen dataclass.
+
+### Fix
+
+In v0.17.0 the driver builds a fresh `EDiscoveryClient` via the
+new `_make_cfg()` helper rather than mutating in place. Anywhere
+else you want to "switch users" on an existing client, do the same:
+
+```python
+client = EDiscoveryClient(Config(
+    base_url=client.cfg.base_url,
+    username=client.cfg.username,
+    password=new_password,
+    organization=client.cfg.organization,
+))
+client.login()
+```
 
 ---
 

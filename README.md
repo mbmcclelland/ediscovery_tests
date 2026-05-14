@@ -514,11 +514,59 @@ that preflight tries to parse as JSON.
 
 ---
 
-## Fresh-Install / Reinstall Toolchain (v0.06)
+## Fresh-Install / Reinstall Toolchain
 
-A three-step chain for tearing DR down and bringing it back to a tested
-baseline (DRSysAdmin/`password`, `admin@training`/`password`, depots
-created, system depot assigned, `training` org provisioned).
+### One-shot driver: `DR_freshinstall.py` (v0.17.0 — recommended)
+
+A single Python entry point replaces the legacy 3-script sequence
+(cleandr → expect → playwright). REST-based, no Chromium, ~5× faster.
+
+```bash
+sudo .venv/bin/python DR_freshinstall.py
+```
+
+What it does — 13 API-level steps in order:
+
+1. Login as DRSysAdmin (default `DRSysAdmin`) → change to `password`
+2. Doc storage @ `/data/docstorage`
+3. Index storage @ `/data/indexstorage`
+4. Assign index storage as the system storage depot
+5. Trigger virus-definitions update
+6. Inactivity timeout to 99 min (configurable via `--inactivity-minutes`)
+7. Create the `training` organization
+8. Create `admin@training` (Org Administrator, password `password`)
+9. Add DRSysAdmin to `training` as Organization Administrator
+   *(actually runs before step 8 — see RUNBOOK §4g for the chicken-and-egg
+   permission story)*
+10. Read-only IMPORT NFS connector @ `/data/import`
+11. Read-write NFS connector @ `/data/export`
+12. Read-write NFS connector @ `/data/archive`
+13. PROJECT data area on archive + EXPORT data area on export
+
+Flags:
+
+| Flag | Use case |
+|---|---|
+| `--dry-run` | print every action without doing it |
+| `--skip-clean --skip-installer` | drd already up; just (re-)provision |
+| `--keep-existing` | idempotent recovery — every step skips if target exists |
+| `--keeprpm` | passed through to `cleandr.sh` |
+| `--hostname HOST` | override default `192.168.58.128` |
+| `--inactivity-minutes N` | session timeout (default 99) |
+| `--initial-password PW` / `--final-password PW` | override the DRSysAdmin pw transition |
+
+End state: `DRSysAdmin` / `password`, `admin@training` / `password`,
+fully-stocked training org ready for `dr-tui` or `dr-load`.
+
+> ⚠️ **Destructive and unrecoverable** without `--skip-clean`. The default
+> teardown wipes `/home/auraria/AHS*`, `/data/docstorage/*`,
+> `/data/indexstorage/*`, the dr-tools RPM, and per-user systemd timers.
+> Run with `--dry-run` first if unsure.
+
+### Legacy 3-script chain (still works)
+
+Kept for auditability — `DR_freshinstall.py` actually invokes
+`cleandr.sh` + `DR_freshinstall.exp` internally for phases 1 + 2.
 
 > ⚠️ **Destructive and unrecoverable.** Step 1 wipes `/home/auraria/AHS*`,
 > `/data/docstorage/*`, `/data/indexstorage/*`, and the InstallAnywhere
@@ -856,3 +904,8 @@ the body + response shapes for every captured endpoint.
 
 **I'm a future Claude session continuing this work** → same as
 above. The API Programming Guide is the file to load first.
+
+**I need a working DR install from scratch** → at the repo root,
+run `sudo .venv/bin/python DR_freshinstall.py`. See the
+[Fresh-Install Toolchain](#fresh-install--reinstall-toolchain) section
+above and RUNBOOK §0 for the quick reference.

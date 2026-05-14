@@ -417,8 +417,17 @@ read back the canonical state if you care. The `set_*` fetchers in
 |---|---|---|
 | `realmManager/listOrganizations` | `{startIndex, count, filters, systemScope: true}` | DRSysAdmin only |
 | `realmManager/initializeOrganization` | `{organizationName, systemScope?}` | Context switch. Two-call pattern in Web UI: once plain, once with `systemScope: false`. Either works. |
+| `realmManager/createOrganization` | `{contextHandle: super_system_customer, name, description, systemScope: true}` | v0.17.0 — minimal create. The Web UI uses `realmManager/expressProvision` instead (org + storage + first user in one call); we use the simpler endpoint and add users separately. **A new org has ZERO members** — not even DRSysAdmin (see §10.9). |
+| `realmManager/deleteOrganization` | `{contextHandle: super_system_customer, handle, systemScope: true}` | Hard delete (use carefully) |
+| `adminOrgManager/addSystemUserToOrg` | `{contextHandle: super_system_customer, systemObjectName: <username>, orgNameRoleHandles: {<orgName>: <roleHandle>}, orgName: super_system_customer, systemScope: true}` | v0.17.0 — add a sys user to an org. `orgNameRoleHandles` is a **dict** (not array), keyed by org name. Multiple roles → comma-join: `{"training": "h1, h2"}`. |
+| `adminOrgManager/setSystemMemberToOrg` | (similar shape with `userNameHandles` + `groupNameHandles` dicts) | Replace memberships in bulk |
+| `adminOrgManager/removeSystemUsersFromOrganization` | `{contextHandle, userNames: […], organizationName}` | Inverse of `addSystemUserToOrg` |
 | `orgManager/listUsers` | `{contextHandle: <org>, organizationName: <org>}` | List users in an org |
-| `orgManager/createUser` | (see `qa_create_org_admin.py` for the full body) | DRSysAdmin can call this in some cases; org-admin role required generally. |
+| `orgManager/createUser` | v0.17.0 captured body: `{contextHandle: <org>, domainHandle: "local", local: true, roleHandles: [<role>], password, userName, email, firstName, lastName, mfa: false, conditionalOnIPAddress: false, allowedIPAddressRange: null, systemScope: false}` | The caller must be a member of the org already — bootstrap with `addSystemUserToOrg` first. |
+| `orgManager/listRoles` | `{contextHandle: <org>, objectType: "ALL", systemScope: false}` | Org-context role list. **Requires org membership** — DRSysAdmin gets `PERMISSION_DENIED` if not added yet. |
+| `adminOrgManager/listRoles` | `{contextHandle: <org>, organizationName: <org>, objectType: "ALL", systemScope: true}` | **Sys-scoped variant** — works for DRSysAdmin even on a brand-new empty org. Use this in bootstrap flows (see §8.8). |
+| `userManager/changeUserPassword` | `{contextHandle: <org or super_system_customer>, oldPassword, newPassword}` | The user changes their own password. Triggered by DR's forced-change flow on first login. |
+| `userManager/resetPassword` | `{contextHandle, userName, orgName, newPassword}` | Admin-side reset for another user. |
 | `realmManager/listSystemUsers` | `{systemScope: true}` | System users only |
 
 ### 7.4 Connectors
@@ -430,7 +439,7 @@ read back the canonical state if you care. The `set_*` fetchers in
 | `connectorManager/getConnector` | `{contextHandle: <conn-handle>}` | Note: contextHandle here is the connector handle (quirk) |
 | `connectorManager/exploreConnector` | `{contextHandle: <org name>, connectorType, connectorName, remoteHost, remotePath, organizationName, parentPath}` | **MUST NOT have `systemScope`.** **`contextHandle` MUST be the org name** — using a project handle on a non-activated session returns `PROJECT_NOT_ACTIVATED Project 0 not activated` (see §4.3). DRSysAdmin must call `initializeOrganization` first. |
 | `connectorManager/validateNFSConnector` | (capture v0.07) | Pre-create validation |
-| `orgManager/createNFSConnector` | (capture v0.07) | Create new NFS connector |
+| `orgManager/createNFSConnector` | v0.17.0 captured: `{contextHandle: <org>, mountedConnectorMode: "CLASSIC", name, readOnly, remoteHost, remotePath}` | `readOnly=true` → `mode=READ` (for IMPORT data areas); `readOnly=false` → `mode=READ_WRITE` (for EXPORT or PROJECT data areas). |
 | `adminOrgManager/deactivateConnectors` | `{contextHandle: <org>, handles: [<names>], systemScope: false}` | **Sends connector NAMES, not handles** (DR API quirk). Soft-delete. |
 | `orgManager/deleteConnector` | (capture v0.07) | Hard delete |
 
@@ -530,10 +539,11 @@ task_handle = rep["taskHandle"]
 | Endpoint | systemScope |
 |---|---|
 | `realmManager/listRemoteNFSStorageAreas` | `true` |
-| `realmManager/createRemoteNFSStorageArea` | `true` |
+| `realmManager/createRemoteNFSStorageArea` | `true` — body: `{contextHandle: super_system_customer, name, fqdn, export, facilityType: "NFS_NAS", storageAreaType: "DOC_STORAGE", storageUseType: "DOCUMENT_STORE"\|"INDEX_STORE", allocationSize, inUse: true}`. Both depot variants share `facilityType + storageAreaType`; only `storageUseType` distinguishes them. NFS probe can run past the default 30s — wrappers bump timeout to 120s. |
 | `realmManager/updateRemoteNFSStorageArea` | `true` |
 | `realmManager/deleteRemoteNFSStorageArea` | `true` |
-| `realmManager/getSystemStorageDepot` | `true` |
+| `realmManager/getSystemStorageDepot` | `true` — returns `{systemStorageDepotDto: {depotId, depotName, description, directoryPath, attributes}}` |
+| `realmManager/createSystemStorageDepot` | `true` — **v0.17.0**: assigns the realm's single system depot. Body: `{contextHandle: super_system_customer, ipAddress: <fqdn of storage>, storageFacilityId: <depot handle>, mountPoint: <export path>, systemScope: true}`. Only one system depot per realm; calling on a realm that already has one replaces the assignment. |
 | `realmManager/getVirusDefinitions` | `true` |
 
 ---
@@ -647,6 +657,82 @@ unit, err = drsch.schedule_recurring_job(
 # unit == "dr-tools-recur-nightly-payroll"
 # err == None means the timer is active
 ```
+
+### 8.8 Bootstrap a brand-new organization from scratch (v0.17.0)
+
+The full fresh-install flow that `DR_freshinstall.py` runs.
+**Ordering matters** — see §10.9 for why step 4 must run before step 5.
+
+```python
+import dr_tui.data as drdata
+from helpers.api_client import EDiscoveryClient
+from config import Config
+
+c = EDiscoveryClient(Config())          # DRSysAdmin
+c.login()
+
+# 1. Provision the realm-level storage (system depot).
+drdata.create_storage_depot(c,
+    name="localDocStorage", fqdn="192.168.58.128",
+    export="/data/docstorage", use_type="DOCUMENT_STORE",
+)
+idx = drdata.create_storage_depot(c,
+    name="localIndexStorage", fqdn="192.168.58.128",
+    export="/data/indexstorage", use_type="INDEX_STORE",
+)
+drdata.create_system_storage_depot(c,
+    ip_address="192.168.58.128",
+    storage_facility_id=idx["remoteStorageArea"]["handle"],
+    mount_point="/data/indexstorage",
+)
+
+# 2. Create the org. **Newly-created orgs have ZERO members — not
+#    even DRSysAdmin (§10.9).**
+drdata.create_organization(c, name="training", description="")
+
+# 3. Switch DRSysAdmin's session into the new org context.
+drdata.ensure_org_context(c, "training")
+
+# 4. Find the Org-Admin role via the SYS-SCOPED listRoles. The
+#    org-scoped `orgManager/listRoles` would 403 here because
+#    DRSysAdmin isn't a member yet.
+roles = drdata.list_org_roles(c, org_name="training", sys_scope=True)
+role_handle = next(h for n, h in roles if n == "Organization Administrator")
+
+# 5. Add DRSysAdmin to the org as Org Admin. AFTER this:
+#      * orgManager/listRoles works
+#      * orgManager/createUser accepts new users
+#      * exploreConnector works post-ensure_org_context (§5)
+drdata.add_system_user_to_org(c,
+    system_user_name="DRSysAdmin",
+    org_name="training",
+    role_handle=role_handle,
+)
+
+# 6. Now we can create the org's first regular user.
+drdata.create_org_user(c,
+    org_name="training",
+    user_name="admin",
+    password="Password123",
+    role_handles=[role_handle],
+)
+
+# 7. Connectors + data areas using the org-scoped endpoints.
+imp = drdata.create_nfs_connector(c,
+    org_name="training", name="import-training-nfs-local",
+    remote_host="192.168.58.128", remote_path="/data/import",
+    read_only=True,
+)
+drdata.create_data_area(c,
+    context_handle="training",
+    connector_handle=imp["connector"]["handle"],
+    name="import-area", mode="PROJECT",
+)
+```
+
+For a turnkey driver (including teardown + .bin installer), use
+`DR_freshinstall.py` at the repo root — same calls, plus
+`cleandr.sh` + expect orchestration.
 
 ---
 
@@ -783,6 +869,71 @@ If you replay a captured request body verbatim with the old captured
 Authorization header, you'll get `SESSION_EXPIRED`. The token in
 captures rotates every response; you can't reuse them. Always
 re-login when reproducing.
+
+### 10.9 Empty orgs and the chicken-and-egg permission trap (v0.17.0)
+
+**A brand-new organization created via `realmManager/createOrganization`
+has ZERO members — not even DRSysAdmin who created it.** (Confirmed
+live during v0.17.0: created `_probe_only` via that endpoint, then
+listed members → empty.) This breaks several "obvious" follow-up
+calls:
+
+| Call | Why it fails on a new org |
+|---|---|
+| `orgManager/listRoles` | needs the caller to be a member |
+| `orgManager/createUser` | needs Organization Administrator membership |
+| `orgManager/listUsers` | needs membership |
+| `connectorManager/exploreConnector` | needs org-context that membership provides |
+
+**Bootstrap order to escape the trap:**
+
+1. `realmManager/createOrganization` — make the org
+2. `realmManager/initializeOrganization` — set the org context on the
+   sys session
+3. **`adminOrgManager/listRoles`** with `systemScope: true` — the
+   sys-scoped variant works without membership; use this to find the
+   Org Admin role handle
+4. `adminOrgManager/addSystemUserToOrg` — add DRSysAdmin as Org Admin
+5. *NOW* `orgManager/listRoles`, `createUser`, etc. all work
+
+This is the reason the v0.17.0 fresh-install driver runs step 9
+(add DRSysAdmin) **before** step 8 (create admin@training), even
+though the user spec listed them in the other order.
+
+The Web UI's `realmManager/expressProvision` endpoint avoids the
+trap entirely by provisioning org + storage + first user in a single
+atomic call — but the body shape is more complex, and the
+step-by-step `createOrganization` approach is closer to what users
+intuitively expect from a CLI driver.
+
+### 10.10 `Config` is a frozen dataclass — re-instantiate, don't mutate
+
+```python
+# WRONG — raises FrozenInstanceError
+client.cfg.password = new_password
+client.login()
+
+# RIGHT — build a fresh Config and a new client.
+client = EDiscoveryClient(Config(
+    base_url=client.cfg.base_url,
+    username=client.cfg.username,
+    password=new_password,
+    organization=client.cfg.organization,
+))
+client.login()
+```
+
+This bit `DR_freshinstall.py` step 1 on the very first end-to-end
+run: after `userManager/changeUserPassword`, we wanted to re-login
+with the new password to refresh the session token, and the
+unthinking `client.cfg.password = new` blew up. The keep-existing
+"password already changed" path didn't exercise it, so the bug
+hid until the true fresh-install destructive run.
+
+Same pattern applies anywhere you want to "switch users" on an
+existing client — make a fresh client. See
+`DR_freshinstall.py::_make_cfg()` for the helper that does this
+cleanly.
 
 ---
 
@@ -1051,14 +1202,90 @@ SELECT * FROM ediscovery_workbasket ORDER BY date_started DESC LIMIT 10;
 The DB schema isn't documented but the table names are
 self-explanatory.
 
-### 13.5 Reading the JS bundle
+### 13.5 Reading the JS bundle — the endpoint-discovery technique (v0.17.0)
 
-DR's Angular bundle is at:
-```
-/home/auraria/AHS/jboss/standalone/tmp/vfs/temp/*/main.js
+**The canonical answer to "what's the right endpoint name + body shape?"** —
+beats probing live with garbage bodies, which DR returns `500` for, making
+"endpoint exists, body wrong" indistinguishable from "endpoint doesn't exist."
+
+Extract `main.js` from the deployed WAR:
+
+```bash
+unzip -p /home/auraria/AHS/jboss/standalone/deployments/auraria/ediscovery.war \
+  main.js > /tmp/dr_war_js/main.js
 ```
 
-13 MB minified-ish but `python3 -c "with open(p) as f: t=f.read(); print(t[i:j])"` works fine. Grep for endpoint names to find call sites.
+(13 MB minified; the unzipped temp copy at `…tmp/vfs/temp/*/main.js` works
+too but moves around between drd restarts — extracting from the WAR is
+stable.)
+
+**Step 1 — enumerate every endpoint the Web UI calls:**
+
+```bash
+grep -oE '"[a-zA-Z]+Manager/[a-zA-Z]+"' /tmp/dr_war_js/main.js | sort -u
+# 200+ endpoints across realmManager, orgManager, adminOrgManager,
+# userManager, projectManager, taskManager, …
+```
+
+Filter for what you need:
+
+```bash
+grep -oE '"adminOrgManager/[a-zA-Z]+"' /tmp/dr_war_js/main.js | sort -u
+# adminOrgManager/addSystemUserToOrg
+# adminOrgManager/createUser
+# adminOrgManager/setSystemMemberToOrg
+# …
+```
+
+**Step 2 — pull the exact body shape from the call site:**
+
+```python
+python3 -c "
+import re
+data = open('/tmp/dr_war_js/main.js').read()
+ep = 'addSystemUserToOrg'
+for m in re.finditer(re.escape(ep), data):
+    print(data[max(0,m.start()-300):m.end()+500])
+    break
+"
+```
+
+That dumps the JS context around the first reference — including the
+`restService.post(Endpoint.<…>, { <body fields> })` literal. From which
+you get this shape verbatim:
+
+```javascript
+this.restService.post(Endpoint.adminOrgManager_addSystemUserToOrg, {
+  systemObjectName: this.modalData?.userName?.userName,
+  orgNameRoleHandles: orgNameRoleHandles,
+  orgName: this.modalData?.userName?.customerName
+});
+```
+
+When a helper function is referenced (e.g. `createOrgNameRoleHandles`),
+grep for its definition:
+
+```python
+python3 -c "
+import re
+data = open('/tmp/dr_war_js/main.js').read()
+for m in re.finditer(r'function\s+createOrgNameRoleHandles', data):
+    print(data[m.start():m.end()+500])
+    break
+"
+# function createOrgNameRoleHandles(orgNames, roleHandles, …) {
+#   const orgNameRoleHandles = {};
+#   for (let i = 0; …) { orgNameRoleHandles[orgName] = roleHandle; }
+#   return orgNameRoleHandles;
+# }
+```
+
+Reveals `orgNameRoleHandles` is a `{orgName: roleHandleString}` dict
+(not an array), and multiple roles in the same org are comma-joined.
+
+**This technique unblocked 8 new endpoints in ~10 minutes during v0.17.0**
+work that would have taken hours via trial-and-error. See [[dr-endpoint-discovery]]
+memory for the cheat-sheet version.
 
 ### 13.6 Pilot suite as a regression net
 
