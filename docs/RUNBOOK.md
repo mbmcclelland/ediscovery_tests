@@ -193,6 +193,40 @@ cat ~/.dr-tools/runs/<slug>.jsonl | tail -1 | jq .
 
 ---
 
+## §4e — New Job → Browse fails with `PERMISSION_DENIED` on `listConnectors` or `exploreConnector`
+
+### Symptom
+
+After upgrading to v0.14.10+, the modal's pre-emptive warning fires:
+
+> ⚠ This modal is using a DRSysAdmin session. Browse / Count / Save
+> all require an org-admin login (e.g. admin@training).
+
+Or, if logged in as admin@training, the Browse button shows:
+
+> Browse failed: not enough permission to browse this connector.
+> (PERMISSION_DENIED: User admin does not have permission to perform
+> listConnectors operation)
+
+### Root cause
+
+DR 5.5.3.2's stock **Organization Administrator** role doesn't
+include the `CONNECTOR` permission. Neither does **IT Administrator**
+on the DRSysAdmin side. This is a server-side default, not a code
+bug — captures from older DR versions had these grants, the 5.5.3
+ship doesn't.
+
+### Fix
+
+Step-by-step Web UI walkthrough:
+**[`docs/DR_ROLE_SETUP.md`](DR_ROLE_SETUP.md)**
+
+Summary: copy "Organization Administrator" → add the
+`Connectors (CONNECTOR)` permission (View + Add/Edit + Delete) →
+reassign admin@training to the new role. Takes ~3 min.
+
+---
+
 ## §4d — New Job → Browse fails with "PROJECT_NOT_ACTIVATED Project 0 not activated"
 
 ### Symptom
