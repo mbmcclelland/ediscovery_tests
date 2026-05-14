@@ -144,16 +144,25 @@ def _render_logo(version: str) -> None:
         )
         console.print()
         return
+    # v0.17.5: regenerated logo (fivebyfive font, scale 0) is wider
+    # than the v0.17.4 micro-logo — ~106 cols. If the user's terminal
+    # is narrower than the logo, we let it spill rather than wrap
+    # (wrapping shatters the ASCII art mid-letter; the terminal will
+    # clip the overflow naturally). `no_wrap + crop=False +
+    # overflow="ignore"` is the Rich incantation that disables BOTH
+    # the wrap AND the soft-clip Rich would otherwise apply.
     console.print()
     for i, line in enumerate(lines):
         color = _LOGO_COLORS[min(i, len(_LOGO_COLORS) - 1)]
-        # markup=False/highlight=False so Rich treats the line as opaque
-        # text — the █▄▀ etc. block-drawing chars sometimes trigger
-        # Rich's auto-highlight rules and get colour-mangled.
-        console.print(line, style=color, markup=False, highlight=False)
+        console.print(
+            line, style=color,
+            markup=False, highlight=False,
+            no_wrap=True, crop=False, overflow="ignore",
+        )
     console.print(
-        f"[bold bright_yellow]    Digital Reef Fresh Installer "
-        f"version {version}[/]"
+        f"    Digital Reef Fresh Installer version {version}",
+        style="bold bright_yellow", highlight=False,
+        no_wrap=True, crop=False, overflow="ignore",
     )
     console.print()
 

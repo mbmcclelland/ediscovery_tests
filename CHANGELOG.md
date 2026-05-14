@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.17.5](#v0175--2026-05-14) | 2026-05-14 | Reef-a-TUI logo regenerated at fivebyfive scale 0 — readable as REEF-A-TUI, single-line render even on narrow terminals |
 | [v0.17.4](#v0174--2026-05-14) | 2026-05-14 | DR_freshinstall — Reef-a-TUI logo, ocean-depth gradient, bright-yellow subtitle, subprocess-streaming wrapper (bar stays pinned at the bottom while logs scroll above) |
 | [v0.17.3](#v0173--2026-05-14) | 2026-05-14 | DR_freshinstall — pause progress bar during cleandr + installer (no more spinner spam during shell-subprocess phases) |
 | [v0.17.2](#v0172--2026-05-14) | 2026-05-14 | DR_freshinstall — 4 QA-driven bug fixes: postgres-drop in cleandr, REST-readiness probe, virus-update timeout, error-log dedup |
@@ -47,6 +48,51 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.17.5 — 2026-05-14
+
+### Changed: regenerated Reef-a-TUI logo so the letters are actually legible
+
+**Symptom (user):** the v0.17.4 logo (built with `bit "Reef-a-TUI"`
+defaults — `-scale -1` 0.5×) packed every letter into a 3-column
+glyph; the text was unreadable.
+
+**Fix:** Regenerated with `bit -font fivebyfive -scale 0 "Reef-A-TUI"`.
+Same five-line vertical footprint as before (no extra screen real
+estate), but each letter is now ~10 columns wide and clearly
+distinguishable. Sample on a 110+ col terminal:
+
+```
+████████    ██████████  ██████████  ██████████            ██████            ██████████  ██      ██  ██████
+██      ██  ██          ██          ██                  ██      ██              ██      ██      ██    ██
+████████    ████████    ████████    ████████    ██████  ██████████  ██████      ██      ██      ██    ██
+██    ██    ██          ██          ██                  ██      ██              ██      ██      ██    ██
+██      ██  ██████████  ██████████  ██                  ██      ██              ██        ██████    ██████
+```
+
+→ R · E · E · F · - · A · - · T · U · I
+
+The ocean-depth blue→white→black gradient and bold-yellow product
+subtitle from v0.17.4 are unchanged. Logo file
+(`reef-a-tui-logo.txt`) plus its bit-Go reference (`reef-a-tui-logo.go`)
+both refreshed.
+
+**Side fix:** logo lines now use `no_wrap=True` + `crop=False` +
+`overflow="ignore"` so a terminal narrower than the logo lets the
+overflow clip naturally rather than wrapping each line into two
+visual rows (which had shattered the letters mid-glyph in narrow
+SSH sessions). On 80-col terminals the right edge clips
+cleanly; on 110+ cols the full logo shows.
+
+**Files:**
+
+- `reef-a-tui-logo.txt` — regenerated
+- `reef-a-tui-logo.go` — regenerated (bit reference)
+- `DR_freshinstall.py::_render_logo` — Rich print kwargs
+- `__version__.py` → 0.17.5
+- CHANGELOG.md (this entry).
 
 ---
 
