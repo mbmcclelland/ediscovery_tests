@@ -193,6 +193,50 @@ cat ~/.dr-tools/runs/<slug>.jsonl | tail -1 | jq .
 
 ---
 
+## §4c — `dr-job-run` / `dr-job-delete` fails with `permission to perform createDataArea`
+
+### Symptom
+
+```
+FAIL submit: HTTPError('500 Server Error: Internal Server Error for url:
+.../orgManager/createDataArea')
+```
+
+AHS server log:
+
+```
+ERROR [SecureObjectInterceptor] User drsysadmin does not have permission
+to perform createDataArea operation.
+```
+
+### Root cause
+
+Per DR's official documentation ("Add or Edit a Project Data Area",
+5.5.3.1):
+
+> **Requires Organization - Project Data Areas - Add/Edit Permissions**
+
+The indexing chain is gated by an **Organization-scoped** role, not a
+System-scoped one. DRSysAdmin's role doesn't grant it; the operation
+must be performed by an Org admin (e.g. `admin@training`).
+
+### Fix
+
+v0.14.6 changed `dr-job-run` and `dr-job-delete` to log in via
+`OrgUserConfig` (`DR_ORG_USERNAME` / `DR_ORG_PASSWORD` /
+`DR_ORG_ORGANIZATION` from `~/.env`) instead of `Config` (DRSysAdmin).
+If you're on an older build, upgrade.
+
+If you're on v0.14.6+ and still hit this:
+
+1. Verify `.env` has `DR_ORG_*` populated.
+2. Verify the org admin actually exists (this is the most common
+   cause — see §1 / "User admin not found in directory").
+3. The fix is `python playwright_fresh_init.py` to recreate the org
+   admin.
+
+---
+
 ## §4b — `dr-job-run` or `dr-job-delete` "not found"
 
 ### Symptom

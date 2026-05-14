@@ -17,7 +17,7 @@ import json
 import sys
 from pathlib import Path
 
-from config import Config
+from config import Config, OrgUserConfig
 from helpers.api_client import APIError, EDiscoveryClient
 
 from dr_tui import data as drdata
@@ -75,17 +75,26 @@ def main() -> int:
         print(f"already DELETED; nothing to do")
         return 0
 
-    # Log in. dr-job-delete has the same auth requirements as dr-job-run.
+    # Log in as the org admin. `deleteCorpus` / `deleteDataArea` are
+    # the inverse of the create chain that `dr-job-run` invokes — same
+    # org-scoped permission requirement, so we need an org-admin token
+    # too. (DR's official docs put data-area + corpus permissions under
+    # "Organization - ..." roles. DRSysAdmin gets denied with HTTP 500.)
+    import os
+    org_cfg = OrgUserConfig()
     try:
-        client = EDiscoveryClient(Config())
-        import os
-        client.login(password=(os.environ.get("DR_PASS") or ""))
+        client = EDiscoveryClient(org_cfg)
+        client.login(password=(
+            os.environ.get("DR_PASS") or org_cfg.password or ""
+        ))
     except APIError as e:
-        print(f"FAIL login: {e.error_code or e.status} "
-              f"{e.extended_status}", file=sys.stderr)
+        print(f"FAIL org-admin login: {e.error_code or e.status} "
+              f"{e.extended_status} — does the org-admin user "
+              f"({job.org}) exist? Run "
+              f"`python playwright_fresh_init.py`.", file=sys.stderr)
         return 1
     except Exception as e:
-        print(f"FAIL login: {e!r}", file=sys.stderr)
+        print(f"FAIL org-admin login: {e!r}", file=sys.stderr)
         return 1
 
     err_pieces = []

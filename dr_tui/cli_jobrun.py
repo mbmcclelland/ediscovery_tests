@@ -68,23 +68,35 @@ class _Tee:
             except Exception: pass
 
 
-def _login_drsysadmin() -> EDiscoveryClient:
-    """Prefer the DRSysAdmin Config so org-spanning jobs work.
+def _login_for_job(job_org: str) -> EDiscoveryClient:
+    """Log in as the **organization admin** for `job_org`.
 
-    Reads the same `~/.env` the TUI uses. Password comes from
-    `DR_PASS` in the env or `~/.env`; failure surfaces as a single-line
-    diagnostic and a non-zero exit.
+    DR's permission model (per the official 5.5.3.1 documentation:
+    "Add or Edit a Project Data Area" → "Requires Organization -
+    Project Data Areas - Add/Edit Permissions") puts the indexing
+    chain (`createDataArea` / `createCorpus` / `createRepresentation`)
+    behind an **org-scoped** role, NOT a system-scoped one. DRSysAdmin
+    is denied with HTTP 500 + "User drsysadmin does not have
+    permission to perform createDataArea operation" — matches the
+    locustfile_indexing pattern, which also runs the indexing chain
+    on an org token.
+
+    Reads `~/.env`'s `DR_ORG_*` keys; warns when the job's org doesn't
+    match the configured org-admin login.
     """
-    cfg = Config()
-    client = EDiscoveryClient(cfg)
-    pw = os.environ.get("DR_PASS") or ""
-    if not pw:
-        # OrgUserConfig is dotenv-aware; pull from there if DR_PASS
-        # wasn't already exported.
-        try:
-            pw = (OrgUserConfig().password or "")
-        except Exception:
-            pw = ""
+    org_cfg = OrgUserConfig()
+    if job_org and org_cfg.organization and job_org != org_cfg.organization:
+        # Not fatal — the caller may have legitimately set up a single
+        # org-admin account with cross-org permissions — but the user
+        # deserves a heads-up.
+        print(
+            f"WARN job org={job_org!r} differs from "
+            f"DR_ORG_ORGANIZATION={org_cfg.organization!r}; "
+            f"login will proceed against {org_cfg.organization!r}",
+            file=sys.stderr,
+        )
+    client = EDiscoveryClient(org_cfg)
+    pw = os.environ.get("DR_PASS") or org_cfg.password or ""
     client.login(password=pw)
     return client
 
@@ -112,13 +124,17 @@ def main() -> int:
           f"connector={job.connector_name} path={job.path}")
 
     try:
-        client = _login_drsysadmin()
+        client = _login_for_job(job.org)
     except APIError as e:
-        print(f"FAIL login: {e.error_code or e.status} "
-              f"{e.extended_status}", file=sys.stderr)
+        print(f"FAIL org-admin login: {e.error_code or e.status} "
+              f"{e.extended_status} — does the org-admin user "
+              f"({job.org}) exist? Run `python playwright_fresh_init.py` "
+              f"to (re)create it.", file=sys.stderr)
         return 1
     except Exception as e:
-        print(f"FAIL login: {e!r}", file=sys.stderr)
+        print(f"FAIL org-admin login: {e!r} — does the org-admin "
+              f"user ({job.org}) exist? Run "
+              f"`python playwright_fresh_init.py`.", file=sys.stderr)
         return 1
 
     dataset = f"{job.slug()}-{run_id}"

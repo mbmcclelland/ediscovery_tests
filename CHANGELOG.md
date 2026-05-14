@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.14.6](#v0146--2026-05-14) | 2026-05-14 | dr-job-run / dr-job-delete use org-admin login (DRSysAdmin denied by DR permission model) |
 | [v0.14.5](#v0145--2026-05-14) | 2026-05-14 | dr-job-run pre-flight + actionable "binary missing" error; RUNBOOK §4b |
 | [v0.14.4](#v0144--2026-05-13) | 2026-05-13 | Documentation overhaul — QA handover (README, Workflow Guide, new QA Test Plan + Runbook, Release index) |
 | [v0.14.3](#v0143--2026-05-13) | 2026-05-13 | NewJobModal connector dropdown — `initializeOrganization` per org |
@@ -34,6 +35,51 @@ feature-by-feature **expected behaviour** see
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ---
+
+## v0.14.6 — 2026-05-14
+
+### Fixed: dr-job-run / dr-job-delete now use the org-admin login
+
+**Found during QA-8** (second stopper in the v0.14.4 handover pass).
+After v0.14.5 unblocked the binary-not-found issue, the indexing
+chain failed with HTTP 500 on `orgManager/createDataArea`. AHS server
+log: `User drsysadmin does not have permission to perform
+createDataArea operation`.
+
+**Root cause confirmed via DR documentation.** The official 5.5.3.1
+PDF "Add or Edit a Project Data Area" states:
+
+> **Requires Organization - Project Data Areas - Add/Edit Permissions.**
+> Users in a role with the appropriate permissions can add a new
+> Project Data Area…
+
+The indexing chain (`createDataArea` / `createCorpus` /
+`createRepresentation`) is gated by an **Organization-scoped** role,
+not a System-scoped one. DRSysAdmin doesn't have it. The
+`locustfile_indexing.py` reference implementation already uses an org
+token for these calls — `dr-job-run` and `dr-job-delete` did not.
+
+**Code change:**
+
+- `dr_tui/cli_jobrun.py` — replaced `_login_drsysadmin()` with
+  `_login_for_job(job_org)`, which builds an `EDiscoveryClient` from
+  `OrgUserConfig()` (reads `DR_ORG_USERNAME` / `DR_ORG_PASSWORD` /
+  `DR_ORG_ORGANIZATION` from `~/.env`). Warns if the job's `org` doesn't
+  match the configured org admin's organization.
+- `dr_tui/cli_jobdel.py` — same swap; `deleteCorpus` / `deleteDataArea`
+  are the inverse of the create chain and share its permission
+  requirement.
+
+Both CLIs now surface a specific actionable error if the org-admin
+user doesn't exist:
+
+```
+FAIL org-admin login: 500 — does the org-admin user (training)
+exist? Run `python playwright_fresh_init.py` to (re)create it.
+```
+
+19/19 pilot tests still pass — the change only touches the CLI login
+path; the data layer + TUI are unchanged.
 
 ## v0.14.5 — 2026-05-14
 
