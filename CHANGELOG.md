@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.17.3](#v0173--2026-05-14) | 2026-05-14 | DR_freshinstall — pause progress bar during cleandr + installer (no more spinner spam during shell-subprocess phases) |
 | [v0.17.2](#v0172--2026-05-14) | 2026-05-14 | DR_freshinstall — 4 QA-driven bug fixes: postgres-drop in cleandr, REST-readiness probe, virus-update timeout, error-log dedup |
 | [v0.17.1](#v0171--2026-05-14) | 2026-05-14 | DR_freshinstall — Rich progress bar, file logging, help-by-default + destructive-op confirmation gate |
 | [v0.17.0](#v0170--2026-05-14) | 2026-05-14 | **`DR_freshinstall.py`** — one-shot REST-based fresh-install driver (replaces cleandr+expect+playwright sequence) |
@@ -45,6 +46,64 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.17.3 — 2026-05-14
+
+### Fixed: Rich progress bar redraws spammed the terminal during phases 1 + 2
+
+**Symptom** (reported by the beta user during their own destructive run):
+phases 1 (cleandr) and 2 (installer) produce hundreds of duplicate
+bar-lines in the terminal scroll-back / captured log. Each line is the
+same Rich progress bar, only the spinner glyph (`⠏ ⠦ ⠴ ⠼ ⠹ …`) and the
+elapsed time tick forward:
+
+```
+[===============================================================================
+Installing...
+-------------
+ [==================|==================|==================|==================]
+⠏ Phase 2 — DR installer (DR_freshinstall.exp) ━━━━━╺━━━━━...  2/15 • 0:02:51
+⠦ Phase 2 — DR installer (DR_freshinstall.exp) ━━━━━╺━━━━━...  2/15 • 0:02:51
+⠴ Phase 2 — DR installer (DR_freshinstall.exp) ━━━━━╺━━━━━...  2/15 • 0:02:52
+[…hundreds more…]
+```
+
+**Root cause:** Rich's `Progress` refreshes 8 times per second
+(`refresh_per_second=8`). The renderer normally overwrites the previous
+bar in-place via `\r`. But when a long subprocess (cleandr's `rm -rfv`
+flood, or the InstallAnywhere installer's `[========]` progress + drd's
+systemd debug-level output) is streaming its OWN stdout in parallel,
+every Rich refresh lands on a NEW last line — the subprocess output
+keeps pushing it down. 8 Hz × ~9-minute installer = ~4 000 duplicate
+bar-lines.
+
+**Fix:** Pause Rich's live renderer (`_progress.live.stop()`) before
+each subprocess call (`bash cleandr.sh`, `expect -f
+DR_freshinstall.exp`), resume it (`.live.start()`) after. The
+subprocess output now flows cleanly without competing for the last
+row, and the progress bar reappears for phase 3 (REST provisioning)
+where we own all the output. Wrapped in helpers
+`_pause_progress()` / `_resume_progress()` for clarity.
+
+**Files:**
+
+- `DR_freshinstall.py` — new `_pause_progress` / `_resume_progress`
+  helpers; `phase_clean()` and `phase_installer()` wrap their
+  `subprocess.run` calls in try/finally pause/resume blocks.
+- `__version__.py` → 0.17.3
+- CHANGELOG.md (this entry).
+
+### Test plan
+
+To verify when convenient (NOT during an active destructive run):
+- Phase 3 alone (`--skip-clean --skip-installer`) — bar should still
+  refresh smoothly at 8 Hz; one bar line per terminal row, no
+  duplication.
+- Full destructive run (`--force`) — terminal output during phase 2
+  should show ONLY the InstallAnywhere progress markers, no Rich
+  redraws. The bar reappears at "Phase 3 — API provisioning".
 
 ---
 

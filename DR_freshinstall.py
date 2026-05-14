@@ -272,6 +272,38 @@ def _advance_progress(description: str) -> None:
         _progress.update(_progress_task, advance=1, description=description)
 
 
+def _pause_progress() -> None:
+    """Pause the live progress renderer.
+
+    v0.17.3 fix for "spinner spam during phase 2": Rich's Progress
+    refreshes 8 Hz (every 125 ms). When a long subprocess (cleandr's
+    `rm -rfv` flood, or the InstallAnywhere installer's
+    `[========|========]` progress markers) emits its OWN stdout
+    while our Progress is live, every Rich refresh redraws the bar
+    on a NEW last line above the subprocess output — so the
+    terminal scroll-back (and any captured log) ends up with
+    hundreds of duplicate bar-lines.
+
+    Pausing the renderer during phases 1 + 2 lets the subprocess
+    output flow cleanly. The bar resumes for phase 3 (the REST
+    provisioning) where we own all the output anyway.
+    """
+    if _progress is not None:
+        try:
+            _progress.live.stop()
+        except Exception:
+            pass
+
+
+def _resume_progress() -> None:
+    """Resume the live progress renderer after a `_pause_progress()`."""
+    if _progress is not None:
+        try:
+            _progress.live.start()
+        except Exception:
+            pass
+
+
 def _set_progress_description(description: str) -> None:
     """Update the running label without advancing the bar (useful for
     sub-step status inside a long phase)."""
@@ -415,7 +447,13 @@ def phase_clean(args: argparse.Namespace) -> None:
         _info(f"DRY-RUN: would run: {' '.join(cmd)}")
         return
     _info(f"running: {' '.join(cmd)}")
-    rc = subprocess.run(cmd).returncode
+    # v0.17.3 — pause Rich's progress bar so cleandr's `rm -rfv`
+    # flood doesn't interleave with bar redraws.
+    _pause_progress()
+    try:
+        rc = subprocess.run(cmd).returncode
+    finally:
+        _resume_progress()
     if rc != 0:
         raise RuntimeError(f"cleandr.sh exited with {rc}")
     _ok("teardown complete")
@@ -446,7 +484,15 @@ def phase_installer(args: argparse.Namespace) -> None:
     # The expect script spawns `./5.5.3.2.bin -i console` from /tmp,
     # so we cd there first. cwd= isolates the change from the rest
     # of the driver.
-    rc = subprocess.run(cmd, cwd="/tmp").returncode
+    # v0.17.3 — pause Rich's progress bar so the InstallAnywhere
+    # `[==============]` markers + drd-restart systemd debug output
+    # don't get inter-leaved with bar redraws (8 Hz × ~9 min = ~4000
+    # duplicate bar-lines pre-fix).
+    _pause_progress()
+    try:
+        rc = subprocess.run(cmd, cwd="/tmp").returncode
+    finally:
+        _resume_progress()
     if rc != 0:
         raise RuntimeError(f"DR_freshinstall.exp exited with {rc}")
     _ok("installer finished")
