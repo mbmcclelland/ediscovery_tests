@@ -1777,6 +1777,12 @@ class NewJobModal(ModalScreen[Optional[dict]]):
         # click Re-browse to get anything to appear, even though the
         # dropdowns already auto-picked an org + connector.
         self._refresh_project_status()
+        # v0.14.10 — pre-emptive warning when the modal is operating
+        # without an org-admin client. Browse, Count and Save all hit
+        # org-admin-only endpoints, so they'll fail. Tell the user up
+        # front rather than letting them click Browse and hit a
+        # mystery PROJECT_NOT_ACTIVATED.
+        self._warn_if_not_org_admin()
         if self._cur_conn_handle:
             self._action_browse()
         # Focus the name field so the user can type a job name straight
@@ -1785,6 +1791,33 @@ class NewJobModal(ModalScreen[Optional[dict]]):
             self.query_one("#newjob-name", Input).focus()
         except Exception:
             pass
+
+    def _warn_if_not_org_admin(self) -> None:
+        """If `_client` is the DRSysAdmin session, warn early.
+
+        The Job Scheduler's content operations (exploreConnector,
+        createDataArea, …) all require an org-admin session. We can
+        detect this by checking the client's config — sys users have
+        `customerName=='super_system_customer'`; org users have
+        their org name.
+        """
+        try:
+            cfg = getattr(self._client, "cfg", None)
+            customer = (getattr(cfg, "organization", "") or "").strip()
+        except Exception:
+            customer = ""
+        if customer == "super_system_customer":
+            # We have only a sys-admin session in hand.
+            try:
+                self.query_one("#newjob-error", Static).update(
+                    "[yellow]⚠ This modal is using a DRSysAdmin "
+                    "session. Browse / Count / Save all require an "
+                    "org-admin login (e.g. admin@" + self._cur_org +
+                    "). Log out and log back in as the org admin "
+                    "before scheduling a job.[/]"
+                )
+            except Exception:
+                pass
 
     # ---- events ------------------------------------------------------
     def on_button_pressed(self, evt: Button.Pressed) -> None:
@@ -1909,11 +1942,27 @@ class NewJobModal(ModalScreen[Optional[dict]]):
             # got a DRSysAdmin client; the exploreConnector endpoint is
             # org-admin-only. Surface a specific message instead of an
             # empty tree.
-            msg = (f"[red]Browse failed: {e.error_code or e.status} "
-                   f"{(e.extended_status or '').strip()[:120]}[/]")
-            if "PERMISSION_DENIED" in str(e.error_code or ""):
-                msg += (" — log in as an org admin (admin@<org>) to "
-                        "browse connector folders.")
+            # v0.14.10 — when DR's async SRI worker rejects the call
+            # (vs. the sync permission check), the error is the
+            # misleading "PROJECT_NOT_ACTIVATED Project 0 not
+            # activated". Translate it to the actionable root cause.
+            ec = str(e.error_code or "")
+            ext = (e.extended_status or "").strip()
+            if "PERMISSION_DENIED" in ec or "PROJECT_NOT_ACTIVATED" in ec:
+                msg = (
+                    f"[red]Browse failed: not enough permission to "
+                    f"browse this connector.[/]\n"
+                    f"[dim]({ec or 'FAILURE'}: {ext[:80]})[/]\n"
+                    f"[yellow]This DR install requires an "
+                    f"[b]org-admin login[/] (e.g. admin@{self._cur_org}) "
+                    f"for browsing. Log out and log back in as the org "
+                    f"admin, or ask an operator to run "
+                    f"[b]python playwright_fresh_init.py[/] if the "
+                    f"admin user doesn't exist yet.[/]"
+                )
+            else:
+                msg = (f"[red]Browse failed: {ec or e.status} "
+                       f"{ext[:120]}[/]")
             self.app.call_from_thread(
                 self.query_one("#newjob-error", Static).update, msg,
             )

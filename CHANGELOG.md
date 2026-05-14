@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.14.10](#v01410--2026-05-14) | 2026-05-14 | NewJobModal — pre-emptive org-admin warning + clearer Browse error translation |
 | [v0.14.9](#v0149--2026-05-14) | 2026-05-14 | explore_connector uses project_handle as contextHandle (PROJECT_NOT_ACTIVATED fix) |
 | [v0.14.8](#v0148--2026-05-14) | 2026-05-14 | NewJobModal file tree uses org-admin client; explore_connector re-raises APIError so PERMISSION_DENIED is visible |
 | [v0.14.7](#v0147--2026-05-14) | 2026-05-14 | set_* fetchers re-read after write (set-endpoint responses don't echo persisted state) |
@@ -38,6 +39,58 @@ feature-by-feature **expected behaviour** see
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ---
+
+## v0.14.10 — 2026-05-14
+
+### Changed: NewJobModal — pre-emptive org-admin warning + clearer Browse error
+
+User-reported after v0.14.9: "you can't browse the directory, and the
+connection to the host seems to fail." Diagnosis:
+
+- The TUI session was DRSysAdmin only — `org_client` was None because
+  the `admin@training` user is missing in this DR install (the
+  ongoing environmental finding from QA-3).
+- The modal silently fell back to the sys client.
+- DRSysAdmin doesn't have permission for `connectorManager/exploreConnector`
+  (DR's permission rules tightened between v0.07 and v0.14 — the
+  current realm rejects DRSysAdmin's IT-Administrator role here,
+  even though the v0.07 capture worked with the same role).
+- DR's async SRI worker reports the failure as
+  `PROJECT_NOT_ACTIVATED Project 0 not activated` instead of
+  `PERMISSION_DENIED` (server-side quirk — depends on whether the
+  sync permission check or the async worker rejects first). The
+  user-visible error sounded like a connection / project-config
+  problem, not a permission one.
+
+Two UX improvements (no permission-model code change — that's a real
+DR server-side constraint we can't bypass):
+
+1. **`on_mount` pre-emptive warning.** New
+   `_warn_if_not_org_admin()` runs at modal open. If
+   `_client.cfg.organization == "super_system_customer"` (i.e. the
+   modal is using the DRSysAdmin session), it writes a yellow banner
+   into `#newjob-error` immediately:
+
+   > ⚠ This modal is using a DRSysAdmin session. Browse / Count /
+   > Save all require an org-admin login (e.g. admin@training). Log
+   > out and log back in as the org admin before scheduling a job.
+
+2. **Translated Browse error.** The PERMISSION_DENIED /
+   PROJECT_NOT_ACTIVATED branch in `_load_children_blocking` now
+   renders an actionable explanation pointing to org-admin login
+   and (if needed) `python playwright_fresh_init.py`, with the
+   original error code in dim parentheses for debugging:
+
+   ```
+   Browse failed: not enough permission to browse this connector.
+   (PROJECT_NOT_ACTIVATED:  Project 0 not activated)
+   This DR install requires an org-admin login (e.g. admin@training)
+   for browsing. Log out and log back in as the org admin, or ask
+   an operator to run python playwright_fresh_init.py if the admin
+   user doesn't exist yet.
+   ```
+
+19/19 pilot tests still pass.
 
 ## v0.14.9 — 2026-05-14
 
