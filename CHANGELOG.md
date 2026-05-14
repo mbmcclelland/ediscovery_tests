@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.14.2 — 2026-05-13
+
+### Fixed: Connectors view — silent empty state replaced with clear inline status
+
+User report: "Clicking on 'connectors' doesn't show anything." The
+panel switches in correctly, but if the org has no connectors (common
+on a fresh install) the table just renders column headers with no
+explanation, so it looks broken.
+
+Three improvements:
+
+1. **In-panel status line.** New `#connectors-status` Static sits
+   above the DataTable. Updates fire at every interesting moment:
+   - On tree-leaf click: `[yellow]Loading connectors for X…[/]`
+   - On empty success: `[yellow]No connectors found for X. Create
+     one in the DR Web UI under Org Admin → Connectors, then click
+     the leaf again to refresh.[/]`
+   - On non-empty success: `[green]N connector(s) for X.[/]`
+   - On no-session: `[red]No API session for X. Log in again or
+     pick a different org.[/]`
+   - On API error: the actual error code + extended status, inline.
+2. **Errors propagate inline.** `_fetch_view`'s outer except blocks
+   now also call `_post_connectors_status()` when the failing kind
+   is `org-connectors`, so the user doesn't have to glance down at
+   the status bar to see what went wrong.
+3. **No-session path no longer silently returns.** Previously if
+   `_client_for_org(org)` returned None (no client available), the
+   function just `return`ed with no UI feedback. Now it posts a
+   clear inline message naming the org.
+
+No new pilot test — the change is a UI-feedback path and the existing
+suite already verifies the panel structure mounts cleanly. 19 / 19
+pilot tests pass unchanged.
+
 ## v0.14.1 — 2026-05-13
 
 ### Changed: New Job dialog — readable layout + four explicit buttons + 5-day default

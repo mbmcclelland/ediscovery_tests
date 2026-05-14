@@ -2374,6 +2374,14 @@ class DashboardScreen(Screen):
                             with Horizontal(classes="action-bar"):
                                 yield Button("Deactivate", id="conn-deactivate",
                                              variant="warning")
+                            # v0.14.2: inline status so the user can see
+                            # 'Loading…' / row count / empty-state / errors
+                            # without having to glance at the bottom status
+                            # bar.
+                            yield Static(
+                                "[dim]Click an org's Connectors leaf to load.[/]",
+                                id="connectors-status",
+                            )
                             yield DataTable(id="connectors-table",
                                             zebra_stripes=True, cursor_type="row")
                         with Vertical(id="org-storage-view"):
@@ -2669,6 +2677,18 @@ class DashboardScreen(Screen):
             self.selected_org = org or self.app.target_org
             if org:
                 self.app.target_org = org
+            # v0.14.2 — show a 'Loading…' line inside the connectors
+            # view as soon as the user picks it, so they don't see an
+            # empty table during the fetch.
+            if kind == "org-connectors":
+                try:
+                    self.query_one("#connectors-status", Static).update(
+                        f"[yellow]Loading connectors for "
+                        f"{self.selected_org}…[/]"
+                    )
+                    self.query_one("#connectors-table", DataTable).clear()
+                except Exception:
+                    pass
             self._load_view(kind, self.selected_org)
             if self.help_visible:
                 self._refresh_help_pane()
@@ -2767,6 +2787,14 @@ class DashboardScreen(Screen):
             elif kind == "org-connectors":
                 c = self._client_for_org(org)
                 if c is None:
+                    # No usable API client — surface that inline so the
+                    # user knows it's not just an empty list.
+                    self._cb(
+                        worker, self._post_connectors_status,
+                        "[red]No API session for "
+                        f"[b]{org}[/]. Log in again or pick a "
+                        f"different org.[/]",
+                    )
                     return
                 connectors = drdata.list_connectors(c, org)
                 self._cb(worker, self._apply_connectors, connectors)
@@ -2801,9 +2829,16 @@ class DashboardScreen(Screen):
                 self._cb(worker, self._apply_sch_runs, all_runs)
 
         except APIError as e:
-            self._post_status(f"{kind}: {e.error_code or e.status}")
+            msg = f"{kind}: {e.error_code or e.status} {e.extended_status or ''}"
+            self._post_status(msg)
+            if kind == "org-connectors":
+                self._cb(worker, self._post_connectors_status,
+                         f"[red]{msg}[/]")
         except Exception as e:
             self._post_status(f"{kind} error: {e!r}")
+            if kind == "org-connectors":
+                self._cb(worker, self._post_connectors_status,
+                         f"[red]{kind} error: {e!r}[/]")
 
     def _list_projects(self) -> list[tuple[str, dict]]:
         if self.app.role == ROLE_SYS and self.app.sys_client is not None:
@@ -3006,6 +3041,17 @@ class DashboardScreen(Screen):
             ),
         )
 
+    def _post_connectors_status(self, msg: str) -> None:
+        """v0.14.2 — small helper used by _fetch_view error paths to write
+        a one-line message into the connectors panel's status Static.
+        Lives here (not at module level) so it can be called via
+        `call_from_thread` from a worker.
+        """
+        try:
+            self.query_one("#connectors-status", Static).update(msg)
+        except Exception:
+            pass
+
     def _apply_connectors(self, connectors: list[drdata.Connector]) -> None:
         t = self.query_one("#connectors-table", DataTable)
         t.clear()
@@ -3013,6 +3059,26 @@ class DashboardScreen(Screen):
             t.add_row(c.name, c.type, c.mode, c.host, c.path, c.status)
         # Cache row order so the Deactivate action can resolve cursor → connector.
         self._connectors_rows = list(connectors)
+        # v0.14.2 — inline empty-state / count so the user doesn't see
+        # just column headers and wonder if anything happened.
+        org = self.selected_org or self.app.target_org or "?"
+        try:
+            status = self.query_one("#connectors-status", Static)
+        except Exception:
+            status = None
+        if status is not None:
+            if not connectors:
+                status.update(
+                    f"[yellow]No connectors found for [b]{org}[/]. "
+                    f"Create one in the DR Web UI under "
+                    f"Org Admin → Connectors, then click the leaf "
+                    f"again to refresh.[/]"
+                )
+            else:
+                status.update(
+                    f"[green]{len(connectors)} connector(s) for "
+                    f"[b]{org}[/].[/]"
+                )
         self._update_status_bar(extra=f"connectors=[yellow]{len(connectors)}[/]")
 
     def _apply_org_storage(self, rows: list[drdata.OrgStorageRow]) -> None:
