@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.17.0](#v0170--2026-05-14) | 2026-05-14 | **`DR_freshinstall.py`** — one-shot REST-based fresh-install driver (replaces cleandr+expect+playwright sequence) |
 | [v0.16.0](#v0160--2026-05-14) | 2026-05-14 | NewJobModal — **connector tree-browser is back** (FR-8), works for both DRSysAdmin and admin@org |
 | [v0.15.3](#v0153--2026-05-14) | 2026-05-14 | Documentation overhaul + new **API Programming Guide** for future Claude sessions |
 | [v0.15.2](#v0152--2026-05-14) | 2026-05-14 | **api_client no longer auto-injects `systemScope: true`** — fixes the core PERMISSION_DENIED that blocked the whole Job Scheduler chain |
@@ -42,6 +43,97 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.17.0 — 2026-05-14
+
+### Added: `DR_freshinstall.py` — end-to-end REST-based fresh-install driver
+
+Replaces the three-script sequence
+
+    bash cleandr.sh
+    expect -f DR_freshinstall.exp
+    python playwright_fresh_init.py     # browser-driven, slow, needs Chromium
+
+with a single Python entry point that talks to DR over REST. The
+cleandr + installer steps are still done via the existing shell/expect
+scripts (kept for "what exactly does this delete?" auditability) but
+the post-install provisioning runs entirely through `dr_tui/data.py`
+helpers — no Playwright, no Chromium download, no mitmproxy capture.
+
+**What it does (13 steps, mirroring the user's spec verbatim):**
+
+1. Login as DRSysAdmin with default `DRSysAdmin`, change to `password`
+2. Create document storage at `/data/docstorage`
+3. Create index storage at `/data/indexstorage`
+4. Create the system storage depot pointing at the index storage
+5. Trigger virus-definitions update
+6. Set the logon inactivity timeout (default 99 minutes)
+7. Create the `training` organization
+8. Create `admin@training` as Organization Administrator (auto-clears
+   the forced-change flow by logging in once + changing pw to `password`)
+9. Add DRSysAdmin to `training` as Organization Administrator
+10. Create the read-only IMPORT NFS connector @ `/data/import`
+11. Create the read-write NFS connector @ `/data/export`
+12. Create the read-write NFS connector @ `/data/archive`
+13. Create PROJECT data area on the archive connector + EXPORT data
+    area on the export connector
+
+**Flags:**
+
+| Flag | Purpose |
+|---|---|
+| `--skip-clean` | don't run cleandr.sh |
+| `--skip-installer` | don't run the expect-driven `.bin` reinstall |
+| `--skip-api` | clean + install only |
+| `--keep-existing` | idempotent mode — every API step skips if target already exists |
+| `--keeprpm` | passed through to cleandr.sh |
+| `--dry-run` | print every action without doing it |
+| `--hostname HOST` | DR host (default 192.168.58.128) |
+| `--nfs-host HOST` | NFS server fqdn (default = `--hostname`) |
+| `--inactivity-minutes N` | session timeout (default 99) |
+| `--initial-password PW` | DRSysAdmin's first-install pw (default `DRSysAdmin`) |
+| `--final-password PW` | final pw after change (default `password`) |
+
+**Endpoint discovery technique:** the body shapes for the previously-
+unwrapped endpoints (`createSystemStorageDepot`, `createOrganization`,
+`addSystemUserToOrg`, etc.) came from grepping the deployed
+`ediscovery.war`'s `main.js` JS bundle for
+`[a-zA-Z]+Manager/[a-zA-Z]+` references, then inspecting the
+surrounding call site for the body shape. Documented in
+`docs/API_PROGRAMMING_GUIDE.md` §13.
+
+**New helpers in `dr_tui/data.py`:**
+
+| Function | Endpoint |
+|---|---|
+| `change_user_password()` | `userManager/changeUserPassword` |
+| `create_system_storage_depot()` | `realmManager/createSystemStorageDepot` |
+| `create_organization()` | `realmManager/createOrganization` |
+| `list_org_roles()` | `orgManager/listRoles` |
+| `create_org_user()` | `orgManager/createUser` |
+| `add_system_user_to_org()` | `adminOrgManager/addSystemUserToOrg` |
+| `create_nfs_connector()` | `orgManager/createNFSConnector` |
+| `create_data_area()` | `orgManager/createDataArea` |
+
+### Verified
+
+- `--dry-run` passes cleanly through all 13 steps.
+- `--keep-existing` against the live install correctly identifies
+  every pre-existing object by name OR by export path (so a
+  renamed storage depot is still recognised), and actually creates
+  the missing pieces (connectors + data areas) on the existing
+  `training` org.
+- Full fresh-install end-to-end run completed: cleandr → installer
+  → all 13 API steps succeed.
+
+### Files
+
+- **NEW** `DR_freshinstall.py` (~580 lines, self-contained driver)
+- `dr_tui/data.py` — 8 new fresh-install helpers (~250 lines)
+- `__version__.py` → 0.17.0
+- CHANGELOG.md (this entry + release-index row)
 
 ---
 

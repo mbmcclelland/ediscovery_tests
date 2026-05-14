@@ -1195,6 +1195,338 @@ def delete_storage_depot(client: EDiscoveryClient, *, handle: str) -> None:
     )
 
 
+# ----------------------------------------------------------------------------- v0.17.0 fresh-install helpers
+#
+# These functions are used by `DR_freshinstall.py` to drive a brand-new
+# DR install from a freshly-rebuilt drd through to a fully-provisioned
+# `training` org. They're kept in data.py (not the driver script) so
+# the TUI can reuse them later if we ever build a "Reset DR" feature.
+#
+# Endpoint discovery: most names came from grepping the deployed WAR's
+# `main.js` bundle (`/tmp/dr_war_js/main.js` after unzip) for
+# `[a-zA-Z]+Manager/[a-zA-Z]+` references. See
+# `docs/API_PROGRAMMING_GUIDE.md` §13 ("JS bundle spelunking") for the
+# technique.
+
+def change_user_password(
+    client: EDiscoveryClient,
+    *,
+    old_password: str,
+    new_password: str,
+    org_name: str = "super_system_customer",
+) -> dict:
+    """Change the calling user's own password (forced-change flow).
+
+    Maps to `userManager/changeUserPassword`. Captured shape (from
+    `/tmp/dr_proxy_capture.bak.json`):
+
+        {"requestHandle": null, "contextHandle": "training",
+         "oldPassword": "Password123", "newPassword": "password"}
+
+    For the very first DRSysAdmin login, `contextHandle` is
+    `super_system_customer` and DR refuses to do anything else until
+    this call succeeds (HTTP 200 + a fresh session token).
+    """
+    return client.post(
+        "userManager/changeUserPassword",
+        extra_body={
+            "contextHandle": org_name,
+            "oldPassword": old_password,
+            "newPassword": new_password,
+        },
+    )
+
+
+def create_system_storage_depot(
+    client: EDiscoveryClient,
+    *,
+    ip_address: str,
+    storage_facility_id: str,
+    mount_point: str,
+) -> dict:
+    """Designate one of the existing INDEX_STORE depots as THE system
+    storage depot for the realm.
+
+    Maps to `realmManager/createSystemStorageDepot`. Body shape from
+    the WAR JS bundle (`grep createSystemStorageDepot main.js`):
+
+        {"ipAddress": "<storage fqdn>",
+         "storageFacilityId": "<storage handle>",
+         "mountPoint": "<storage export path>",
+         "systemScope": true}
+
+    Only one system storage depot exists per realm — calling this on
+    a realm that already has one will replace the assignment.
+    """
+    return client.post(
+        "realmManager/createSystemStorageDepot",
+        extra_body={
+            "contextHandle": "super_system_customer",
+            "ipAddress": ip_address,
+            "storageFacilityId": storage_facility_id,
+            "mountPoint": mount_point,
+            "systemScope": True,
+        },
+        timeout=120,
+    )
+
+
+def create_organization(
+    client: EDiscoveryClient,
+    *,
+    name: str,
+    description: str = "",
+) -> dict:
+    """Create a new organization (DR's "customer") with default storage.
+
+    Maps to `realmManager/createOrganization`. The Web UI's
+    `New Organization` modal calls `realmManager/expressProvision`
+    instead — that endpoint provisions org + storage + the first user
+    in a single round-trip. We use the simpler `createOrganization`
+    because the v0.17.0 fresh-install driver creates each piece
+    separately for clarity (storage depots first, then orgs, then
+    users), and because that matches the user's spec verbatim.
+
+    The created org has NO users at all (not even DRSysAdmin) — you
+    must follow up with `add_system_user_to_org()` for at least one
+    sys user, then `create_org_user()` for the org-admin.
+    """
+    return client.post(
+        "realmManager/createOrganization",
+        extra_body={
+            "contextHandle": "super_system_customer",
+            "name": name,
+            "description": description,
+            "systemScope": True,
+        },
+    )
+
+
+def list_org_roles(
+    client: EDiscoveryClient, *, org_name: str,
+    sys_scope: bool = False,
+) -> list[tuple[str, str]]:
+    """Return [(role_name, role_handle), …] for the predefined org roles.
+
+    Two variants depending on who's asking:
+
+    * `sys_scope=False` (default) — `orgManager/listRoles` with
+      `contextHandle=<org>, objectType="ALL", systemScope=false`.
+      Used by org-members and DRSysAdmin AFTER it's been added to
+      the org.
+
+    * `sys_scope=True` — `adminOrgManager/listRoles` with
+      `contextHandle=<org>, organizationName=<org>, systemScope=true`.
+      This works for DRSysAdmin even **before** it's been added as
+      a member — needed by `DR_freshinstall.py` step 8 (look up the
+      Organization Administrator role on a brand-new empty org).
+    """
+    if sys_scope:
+        resp = client.post(
+            "adminOrgManager/listRoles",
+            extra_body={
+                "contextHandle": org_name,
+                "organizationName": org_name,
+                "objectType": "ALL",
+                "systemScope": True,
+            },
+        )
+    else:
+        resp = client.post(
+            "orgManager/listRoles",
+            extra_body={
+                "contextHandle": org_name,
+                "objectType": "ALL",
+                "systemScope": False,
+            },
+        )
+    out: list[tuple[str, str]] = []
+    for r in resp.get("roles") or []:
+        n = r.get("name") or ""
+        h = r.get("handle") or ""
+        if n and h:
+            out.append((n, h))
+    return out
+
+
+def create_org_user(
+    client: EDiscoveryClient,
+    *,
+    org_name: str,
+    user_name: str,
+    password: str,
+    role_handles: list[str],
+    email: str = "",
+    first_name: str = "",
+    last_name: str = "",
+) -> dict:
+    """Create a new user inside an organization (e.g. admin@training).
+
+    Maps to `orgManager/createUser`. Captured body
+    (`/tmp/dr_proxy_capture.bak.json` for admin@training):
+
+        {"contextHandle": "training", "domainHandle": "local",
+         "local": true, "roleHandles": ["<org-admin-handle>"],
+         "password": "Password123", "userName": "admin",
+         "email": "admin@localhost.com", "firstName": "Admin",
+         "lastName": "User", "mfa": false,
+         "conditionalOnIPAddress": false,
+         "allowedIPAddressRange": null, "systemScope": false}
+
+    The new user must change their password on first login — DR's
+    server-side `passwordChangeRequired` flag is set automatically.
+    Use `change_user_password()` after their first login to clear it.
+    """
+    return client.post(
+        "orgManager/createUser",
+        extra_body={
+            "contextHandle": org_name,
+            "domainHandle": "local",
+            "local": True,
+            "roleHandles": list(role_handles),
+            "password": password,
+            "userName": user_name,
+            "email": email or f"{user_name}@localhost.com",
+            "firstName": first_name or user_name.capitalize(),
+            "lastName": last_name or "User",
+            "mfa": False,
+            "conditionalOnIPAddress": False,
+            "allowedIPAddressRange": None,
+            "systemScope": False,
+        },
+    )
+
+
+def add_system_user_to_org(
+    client: EDiscoveryClient,
+    *,
+    system_user_name: str,
+    org_name: str,
+    role_handle: str,
+    current_customer: str = "super_system_customer",
+) -> dict:
+    """Add an existing system user (e.g. DRSysAdmin) to an organization
+    with the given org-level role.
+
+    Maps to `adminOrgManager/addSystemUserToOrg`. Body shape from the
+    WAR JS bundle (`grep -A 10 'addSystemUserToOrg' main.js`):
+
+        {"systemObjectName": "<sys-user-name>",
+         "orgNameRoleHandles": {"<orgName>": "<roleHandle>"},
+         "orgName": "<current customer of the caller>"}
+
+    `orgNameRoleHandles` is a dict keyed by org name → role-handle
+    string. The Web UI's `createOrgNameRoleHandles()` helper builds
+    this shape; we replicate it inline. To grant multiple roles in
+    the same org, comma-join the handles: `"training": "h1, h2"`.
+
+    `orgName` is the *caller's* current customer (typically
+    `super_system_customer` for DRSysAdmin), not the target org.
+    """
+    return client.post(
+        "adminOrgManager/addSystemUserToOrg",
+        extra_body={
+            "contextHandle": current_customer,
+            "systemObjectName": system_user_name,
+            "orgNameRoleHandles": {org_name: role_handle},
+            "orgName": current_customer,
+            "systemScope": True,
+        },
+    )
+
+
+def create_nfs_connector(
+    client: EDiscoveryClient,
+    *,
+    org_name: str,
+    name: str,
+    remote_host: str,
+    remote_path: str,
+    read_only: bool,
+    mounted_mode: str = "CLASSIC",
+) -> dict:
+    """Create an NFS connector inside an organization.
+
+    Maps to `orgManager/createNFSConnector`. Captured shape
+    (`/tmp/dr_proxy_capture.bak.json`):
+
+        {"requestHandle": null, "contextHandle": "training",
+         "mountedConnectorMode": "CLASSIC",
+         "name": "import-training-local-nfs",
+         "readOnly": true,
+         "remoteHost": "192.168.58.128",
+         "remotePath": "/data/import"}
+
+    `read_only=True` produces a `mode=READ` connector (suitable for
+    IMPORT data areas); `read_only=False` gives `mode=READ_WRITE` (for
+    EXPORT or PROJECT data areas). The DR convention is one connector
+    per mount-point; reuse is fine where the path semantics line up.
+
+    Returns the full create response — `connector.handle` is what the
+    follow-up `create_data_area()` calls need.
+    """
+    return client.post(
+        "orgManager/createNFSConnector",
+        extra_body={
+            "contextHandle": org_name,
+            "mountedConnectorMode": mounted_mode,
+            "name": name,
+            "readOnly": bool(read_only),
+            "remoteHost": remote_host,
+            "remotePath": remote_path,
+        },
+    )
+
+
+def create_data_area(
+    client: EDiscoveryClient,
+    *,
+    context_handle: str,
+    connector_handle: str,
+    name: str,
+    mode: str,
+    path: str = ".",
+    description: str = "",
+    skipped_directories: list[str] | None = None,
+    error_if_exists: bool = True,
+) -> dict:
+    """Create an EXPORT, PROJECT, or IMPORT data area.
+
+    Maps to `orgManager/createDataArea`. For org-scoped EXPORT /
+    PROJECT data areas, `context_handle` is the **org name**. For
+    project-scoped IMPORT data areas (used by `submit_indexing_job`),
+    it's the **project handle**.
+
+    `mode`:
+      * `"PROJECT"` — project data area, source for ECA case loads
+      * `"EXPORT"`  — destination for productions / downloads
+      * `"IMPORT"`  — corpus-creation source for the indexing chain
+
+    `path` defaults to `"."` (the connector's root). Captured shape
+    (`/tmp/dr_proxy_capture.bak.json` PROJECT data area):
+
+        {"contextHandle": "training",
+         "name": "pda-training-local-nfs",
+         "description": "", "mode": "PROJECT",
+         "connectorHandle": "<connector-handle>",
+         "path": ".", "errorIfExists": true,
+         "skippedDirectories": []}
+    """
+    return client.post(
+        "orgManager/createDataArea",
+        extra_body={
+            "contextHandle": context_handle,
+            "name": name,
+            "description": description,
+            "mode": mode,
+            "connectorHandle": connector_handle,
+            "path": path,
+            "errorIfExists": bool(error_if_exists),
+            "skippedDirectories": list(skipped_directories or []),
+        },
+    )
+
+
 # ----------------------------------------------------------------------------- system roles (D5 helper)
 def list_system_roles(client: EDiscoveryClient) -> list[tuple[str, str]]:
     """Return [(role_name, role_handle), …] for system-scoped roles.
