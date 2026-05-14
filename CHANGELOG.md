@@ -1,5 +1,52 @@
 # Changelog
 
+## v0.14.3 — 2026-05-13
+
+### Fixed: NewJobModal connector dropdown — initializeOrganization per org
+
+User report: 'Try to use the UI to create a job. Name the job
+testjob-001, and use the training organization. Then click connectors
+and see that no connectors appear. Click re-browse and it says no
+connector chosen.'
+
+Root cause confirmed against the live API: DRSysAdmin's session starts
+in `super_system_customer` context, where
+`adminOrgManager/listConnectors` returns an **empty list silently**
+(no error, just `connectors: []`). The org context has to be switched
+via `realmManager/initializeOrganization` before each per-org list
+call, mirroring the pattern in `_client_for_org()`.
+
+`_sch_collect_then_open()` — which gathers the org→connector map the
+NewJobModal renders — wasn't doing the context switch. So:
+
+  Org dropdown: training       ✓ (populated from listOrganizations)
+  Connector dropdown: (empty)  ✗ (listConnectors returned [])
+  Re-browse: "Pick an org + connector first" ✗
+  Count files: same ✗
+  Save: "Connector not selected" ✗
+
+Fix: in `_sch_collect_then_open`, when `role == ROLE_SYS`, call
+`drdata.ensure_org_context(client, org)` before each
+`list_connectors(client, org)`. Org-scoped users (admin@<org>) skip
+the switch since their session is already pinned.
+
+Verified end-to-end against the live `training` org:
+
+  orgs visible to DRSysAdmin: ['training']
+    training: 1 connector(s)
+      - name='import-training-nfs-local' type=NFS
+        handle=0000ecde48788120...
+  Modal Select option count: 1
+  _cur_conn_handle post-mount: 0000ecde4878812053604308ac25ef767566612e
+
+19/19 pilot tests pass.
+
+If you're still seeing the **Organizations tab → Connectors leaf** show
+zero rows after this update (a separate code path that already calls
+ensure_org_context via `_client_for_org`), the v0.14.2 inline status
+line should now tell you specifically why — either "Loading…" stuck,
+a row count, an empty-state hint, or the actual error.
+
 ## v0.14.2 — 2026-05-13
 
 ### Fixed: Connectors view — silent empty state replaced with clear inline status

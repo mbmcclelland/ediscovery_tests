@@ -1,6 +1,6 @@
 # eDiscovery API Test Suite
 
-**Version 0.14.2**
+**Version 0.14.3**
 
 Automated API tests, load tests, a Textual TUI for live monitoring, and a
 reinstall toolchain for the Digital Reef eDiscovery REST API. Includes:

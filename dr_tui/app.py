@@ -3647,8 +3647,18 @@ class DashboardScreen(Screen):
 
         connectors_by_org: dict[str, list[drdata.Connector]] = {}
         projects_by_org: dict[str, list[dict]] = {}
+        # v0.14.3 — DRSysAdmin's session starts in `super_system_customer`
+        # context, where `adminOrgManager/listConnectors` returns an empty
+        # list silently. `initializeOrganization` must be called per-org
+        # before each connector list. For org-scoped users the session
+        # is already pinned to their org, so we skip the switch.
+        sys_session = (
+            self.app.role == ROLE_SYS and self.app.sys_client is not None
+        )
         for org in org_names:
             try:
+                if sys_session:
+                    drdata.ensure_org_context(client, org)
                 connectors_by_org[org] = drdata.list_connectors(client, org)
             except Exception:
                 connectors_by_org[org] = []
