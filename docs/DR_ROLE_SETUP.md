@@ -1,10 +1,36 @@
 # DR Web UI walkthrough — grant Connectors permission to admin@training
 
-**When to use:** the dr-tui Job Scheduler's New Job wizard reports
-`PERMISSION_DENIED` (or `PROJECT_NOT_ACTIVATED Project 0 not
-activated`) on Browse / Count / Save. Confirmed during QA-16 against
-DR 5.5.3.2 — the stock "Organization Administrator" role doesn't
-include `Connectors` permissions, so even admin@training is denied.
+> ## ⚠ Historical — no longer required as of v0.15.2
+>
+> This walkthrough was written during QA-16 under the (incorrect)
+> theory that admin@training's role was missing connector
+> permissions in DR 5.5.3.2. **The v0.15.2 systemScope discovery
+> proved the actual root cause was on our side** — we were
+> auto-injecting `"systemScope": True` into every request, which made
+> DR check against super-system permissions rather than the org-context
+> role's permissions. The default Organization Administrator role
+> actually has full connector access.
+>
+> **You do NOT need to perform this role grant for default installs.**
+> The Job Scheduler tab and all of dr-tui's connector-aware features
+> work out of the box for both DRSysAdmin and admin@training.
+>
+> This document is preserved for the rare case where someone DOES
+> need to customize role permissions for a non-default DR setup
+> (e.g. tighter security policy, custom roles), and as a reference
+> for the DR Web UI's role-management workflow.
+
+---
+
+**When to use (now):** customising DR's role permissions for security
+hardening, non-default access patterns, or supplementary roles beyond
+the defaults. **NOT needed** to make dr-tools work.
+
+**When the doc thought you needed it (historical):** the dr-tui Job
+Scheduler's New Job wizard reports `PERMISSION_DENIED` (or
+`PROJECT_NOT_ACTIVATED Project 0 not activated`) on Browse / Count
+/ Save. *In v0.15.2+, the fix for that is `pip install -U dr-tools`
+or `dnf upgrade dr-tools` — not this walkthrough.*
 
 **What this does:** copies the default Organization Administrator
 role into a custom role, adds the missing `Connectors` permissions,

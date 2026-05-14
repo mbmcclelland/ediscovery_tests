@@ -37,6 +37,12 @@ dr-load preflight              # All-green = ready
 You can skip the fresh install if you trust the current state and just
 want to spot-check a feature.
 
+**Note for v0.15.2+:** the prerequisite "grant Connectors permission
+via DR_ROLE_SETUP.md" that earlier versions of this plan listed is
+**no longer required**. The v0.15.2 systemScope fix removed the need
+for any DR-side role customization. Both DRSysAdmin and the default
+admin@training Organization Administrator role work out of the box.
+
 ---
 
 ## 2. Smoke test (10 minutes)

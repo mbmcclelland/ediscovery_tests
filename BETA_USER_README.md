@@ -76,35 +76,16 @@ that only creates the admin user:
 python qa_create_org_admin.py
 ```
 
-### 4. Grant `admin@training` the connector permissions (one-time)
+### 4. *(SKIP unless you're on v0.15.1 or earlier)* Grant role permissions
 
-DR 5.5.3.2's default Organization Administrator role doesn't include
-the `Connectors` or `Project Data Areas` permissions that the
-indexing chain needs. **Follow the Web-UI walkthrough in
-[`docs/DR_ROLE_SETUP.md`](docs/DR_ROLE_SETUP.md)** to copy the role,
-add the permissions, and reassign `admin@training` to the new role.
-Time: ~3 min.
-
-Verify from a shell:
-
-```bash
-.venv/bin/python - <<'EOF'
-import os, sys, warnings; warnings.filterwarnings("ignore")
-sys.path.insert(0, ".")
-from config import OrgUserConfig
-from helpers.api_client import EDiscoveryClient
-from dr_tui import data as drdata
-client = EDiscoveryClient(OrgUserConfig())
-client.login()
-drdata.ensure_org_context(client, "training")
-conns = drdata.list_connectors(client, "training")
-print(f"OK: {len(conns)} connector(s) visible to admin@training")
-EOF
-```
-
-Until that prints `OK: 1 connector(s) visible to admin@training`,
-**Run Now / Schedule will fail with PERMISSION_DENIED**. The TUI
-will tell you so — read the inline error.
+> **As of v0.15.2 this step is no longer required.** The Job Scheduler
+> works out of the box for both DRSysAdmin and the default
+> `admin@training` Organization Administrator role. If you're on
+> v0.15.2+ (`rpm -q dr-tools` to check), skip to Step 5.
+>
+> The walkthrough at [`docs/DR_ROLE_SETUP.md`](docs/DR_ROLE_SETUP.md)
+> is preserved for reference but isn't part of the default install
+> path anymore.
 
 ### 5. Install the dr-tools RPM
 
@@ -318,21 +299,24 @@ and the troubleshooting guide in [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ---
 
-## Known issues at v0.15.0 ship
+## Known issues at v0.15.2 ship
 
-1. **Manual path Input instead of a file browser.** DR 5.5.3.2's
-   permission model denies `exploreConnector` to every role we
-   tested. We match the proven `locustfile_indexing.py` pattern
-   (user supplies the path; we skip browse). This may change once
-   DR exposes a less-privileged browse endpoint.
-2. **No "volumes over time" chart.** Filed as FR-1; see the Feature
-   Request log. Workaround: F3 Jobs Monitor + Landing Dashboard
-   metrics combined.
-3. **English-only UI.** Filed as FR-2; i18n landing in v0.16+.
-4. **Some state colour-only.** F3 row states (RUNNING / SUCCESS /
-   FAILURE / DELETED) currently use colour. Saved-templates
-   `longterm` cue gained an asterisk marker in v0.15.0; broader
-   colour-blind accessibility pass filed as FR-3.
+1. **Manual path Input instead of a file browser.** *(v0.15.0
+   compromise — partially obsolete.)* The file-tree browser was
+   dropped in v0.15 because we believed DR denied
+   `exploreConnector` for every role. The v0.15.2 systemScope
+   discovery proved that wrong — `exploreConnector` works fine for
+   DRSysAdmin and org-admin alike — but the manual-path input is now
+   the established UX. **FR-8: bring back the file-tree browser**
+   logged for v0.16, since the underlying API permission is no longer
+   a blocker.
+2. **No "volumes over time" chart.** Filed as FR-3. Workaround: F3
+   Jobs Monitor + Landing Dashboard metrics combined.
+3. **English-only UI.** Filed as FR-4; i18n landing in v0.17+.
+4. **F3 row state cues now glyph+colour.** v0.15.1 fix landed
+   `▶ ✓ ✗ ⊘ ‖` glyph prefixes on every status cell. Saved-templates
+   `longterm` cue uses bold + asterisk + colour. Broader pass folded
+   into FR-5 if anything else surfaces.
 
 ---
 

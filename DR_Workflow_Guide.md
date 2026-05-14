@@ -16,6 +16,7 @@
 7. The dr-tui Landing Dashboard
 8. Distribution / RPM Packaging
 9. Feature additions v0.08 → v0.14 (concise reference)
+10. The systemScope pitfall (v0.15.2) — and a reusable diagnostic recipe
 
 ---
 
@@ -1129,9 +1130,9 @@ section for full UX. Architecture notes:
 - **Visual rule.** Jobs whose name contains the substring `longterm`
   render yellow-bold in the Saved Templates table.
 
-### 9.6 — Three v0.13 follow-ups worth remembering
+### 9.6 — Four follow-ups worth remembering
 
-These three patches are the most likely places a fresh QA regression
+These patches are the most likely places a fresh QA regression
 will surface; each has a regression test, but the underlying mistake
 is easy to repeat.
 
@@ -1140,6 +1141,7 @@ is easy to repeat.
 | v0.13.1 | Textual's `Select(allow_blank=False)` auto-picks the first option but doesn't fire `on_select_changed` for that initial pick. Our `_cur_conn_handle` stayed empty → Browse failed. | Mirror the auto-pick into internal state in `__init__`. |
 | v0.13.2 | Raw log text fed into `RichLog.write()` runs through `Text.from_markup` — Java argv dumps like `[/bin/bash, …]` look like unbalanced closing tags. | `rich.markup.escape()` the user-controlled portions; or `markup=False` on read-only viewers. |
 | v0.14.3 | DRSysAdmin's session starts in `super_system_customer` context. `adminOrgManager/listConnectors` returns `[]` *silently* without a per-org `initializeOrganization` switch. | Call `drdata.ensure_org_context(client, org)` before every per-org list, in every code path that iterates orgs. |
+| **v0.15.2** | **`helpers/api_client.py` auto-injected `"systemScope": True` on every request, causing DR to check the call against super-system permissions instead of org-context permissions. Net effect: PERMISSION_DENIED on `exploreConnector`, `createDataArea`, the entire indexing chain — for both DRSysAdmin AND org users — even though the Web UI worked fine for the same user.** | **Removed the auto-inject. Endpoints that genuinely need `systemScope: true` (Realm Settings, listJobs, listRealmTasks, cancelTask, etc.) already pass it explicitly. 34 explicit call sites verified.** |
 
 ### 9.7 — Markup safety rule (dr-tui)
 
@@ -1154,4 +1156,113 @@ the pattern in `_dash_tick_logs`.
 
 ---
 
-*Last updated: 2026-05-13*
+## 10. The systemScope pitfall (v0.15.2)
+
+### 10.1 — What `systemScope` is
+
+`systemScope` is a boolean field DR's REST API accepts in (almost)
+every request body. The server-side `SecureObjectInterceptor` reads
+it before deciding which permission set to check the call against:
+
+- **`systemScope: true`** → super-system permissions (a narrow set
+  granted only to certain system-level roles)
+- **`systemScope: false` or absent** → the caller's role permissions
+  in the org context selected by `initializeOrganization`
+
+### 10.2 — The bug we lived with for three days
+
+Pre-v0.15.2, `helpers/api_client.py:post()` injected
+`"systemScope": True` into **every single request body**:
+
+```python
+body: dict[str, Any] = {
+    "contextHandle": self.cfg.organization,
+    "systemScope": True,     # ← was here from v0.06 onwards
+}
+```
+
+This was load-bearing for Realm Settings (which genuinely need it)
+but silently broke everything that didn't. The DR Web UI does NOT
+set `systemScope` for `connectorManager/exploreConnector`,
+`orgManager/createDataArea`, `createCorpus`,
+`corpusManager/createRepresentation` — i.e. the entire indexing
+chain. With `systemScope: true` set, DR rejected all of these for
+DRSysAdmin (and for the org admin) with `PERMISSION_DENIED`.
+
+We chased this for three days under multiple wrong theories: missing
+org-admin role permissions, role-config requirements, DR 5.5.3.2 vs
+5.5.3.1 differences. None of those were the real cause.
+
+### 10.3 — The diagnostic procedure that finally cracked it
+
+Reusable recipe for the next time a "Web UI works but our REST
+doesn't" mystery appears:
+
+**Step 1.** Start mitmproxy in reverse-proxy mode. No cert install
+needed in the browser (user accepts the one-time warning):
+
+```bash
+.venv/bin/mitmdump -s proxy_logger.py \
+  --mode reverse:https://192.168.58.128:8443 \
+  --listen-host 0.0.0.0 --listen-port 8091 \
+  --set ssl_insecure=true --set keep_host_header=true \
+  > /tmp/mitmdump.log 2>&1 &
+```
+
+**Step 2.** Have the user navigate to `https://<host>:8091/ediscovery/`
+and reproduce the working flow. Their requests land in
+`/tmp/dr_proxy_capture.json` (or whatever `proxy_logger.py`
+configures as `OUTPUT`).
+
+**Step 3.** Route the failing script through the same proxy
+(`DR_BASE_URL=https://localhost:8091/ediscovery/rest`) and trigger
+its call.
+
+**Step 4.** Byte-diff the two captured bodies. The first field that
+differs is your bug.
+
+This procedure works because mitmproxy terminates TLS with its own
+cert (acceptable to the browser with one click), so all traffic is
+plaintext-decryptable on disk. No cert installation, no kernel
+tcpdump, no JVM debugger. The technique scales to any future "but
+the Web UI works" mystery against DR.
+
+### 10.4 — Which endpoints DO need `systemScope: true`
+
+After v0.15.2 the auto-inject is gone. **Add it explicitly** in
+`extra_body` only for these endpoint families (verified by
+captures or by trial-and-error documented in CHANGELOG):
+
+| Family | Examples |
+|---|---|
+| Realm Settings | get/set Mail/Splash/PasswordPolicy/Inactivity |
+| Realm-wide reads | `listOrganizations`, `listJobs`, `listRealmTasks`, `listEmailIdsToNotify` |
+| Task control | `pauseTask`, `resumeTask`, `cancelTask` (NOT `updateJobPriority` — its captured shape omits it) |
+| Storage CRUD | `realmManager/listRemoteNFSStorageAreas`, `createRemoteNFSStorageArea`, etc. |
+| System Users/Groups | `listSystemUsers`, `createSystemUser`, etc. |
+
+**Do NOT add it** for:
+
+- The indexing chain (`createDataArea`, `createCorpus`,
+  `createRepresentation`, `addCorpus`)
+- Connector reads (`adminOrgManager/listConnectors`,
+  `connectorManager/getNFSConnector`, `exploreConnector`)
+- Org-scoped reads after `initializeOrganization`
+- Deactivate/delete connectors (`deactivateConnectors` sends
+  `systemScope: false` explicitly)
+
+### 10.5 — Pattern to follow when adding a new endpoint
+
+See `docs/API_PROGRAMMING_GUIDE.md` §11 for the full recipe. Short
+version:
+
+1. Capture the working Web UI flow via mitmproxy reverse-proxy.
+2. Read the captured `request_body`. If it has `systemScope` — copy
+   it verbatim. If it doesn't — omit it from your `extra_body`.
+3. Add the fetcher to `dr_tui/data.py` matching the captured shape
+   exactly.
+4. Pilot test offline; manual smoke test live.
+
+---
+
+*Last updated: 2026-05-14 (v0.15.2)*

@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.15.3](#v0153--2026-05-14) | 2026-05-14 | Documentation overhaul + new **API Programming Guide** for future Claude sessions |
 | [v0.15.2](#v0152--2026-05-14) | 2026-05-14 | **api_client no longer auto-injects `systemScope: true`** — fixes the core PERMISSION_DENIED that blocked the whole Job Scheduler chain |
 | [v0.15.1](#v0151--2026-05-14) | 2026-05-14 | Beta-tester fixes — glyph prefixes on status cells (accessibility) + actionable empty-project message |
 | [v0.15.0](#v0150--2026-05-14) | 2026-05-14 | NewJobModal — manual path Input (drops file-tree) + recurring schedules via systemd user timers |
@@ -42,6 +43,57 @@ feature-by-feature **expected behaviour** see
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ---
+
+## v0.15.3 — 2026-05-14
+
+### Changed: documentation overhaul after the v0.15.2 systemScope discovery
+
+No code changes. All documentation reflowed to account for v0.15.2's
+finding that the role-grant prerequisite was never actually needed.
+
+**New:**
+
+- **`docs/API_PROGRAMMING_GUIDE.md`** — comprehensive API doc
+  targeted at a future Claude session implementing a new feature.
+  Covers architecture, the EDiscoveryClient wrapper, authentication
+  lifecycle, `contextHandle` semantics, the systemScope pitfall (in
+  depth with the diagnostic procedure), DR's permission model, every
+  endpoint family with body shapes + examples, recipes for composing
+  features, async-task / SRI handling, quirks + anti-patterns, the
+  five-step recipe for adding a new endpoint, threading rules for
+  the TUI, debugging recipes, and a code map. ~14 sections, ~580
+  lines. Cross-linked from the README Documentation Map as the
+  "★ Read first when adding a new feature" entry.
+
+**Updated:**
+
+- `DR_Workflow_Guide.md` — added §10 "The systemScope pitfall
+  (v0.15.2) — and a reusable diagnostic recipe" with the mitmproxy
+  reverse-proxy / byte-diff technique. §9.6 "follow-ups worth
+  remembering" expanded from three to four entries (the fourth is
+  the systemScope auto-inject).
+- `docs/RUNBOOK.md` — new §4f covering the v0.15.2 systemScope root
+  cause + how to diagnose if it recurs after a regression. §4c
+  (`dr-job-run` PERMISSION_DENIED) and §4e (Connectors role grant)
+  flagged as **HISTORICAL** since they're no longer the right
+  diagnosis after v0.15.2.
+- `docs/DR_ROLE_SETUP.md` — deprecation banner at the top: not
+  required for default installs anymore. Kept for the rare case of
+  custom security-hardening roles.
+- `BETA_USER_README.md` — Step 4 ("Grant admin@training the
+  connector permissions") replaced with a "skip unless on v0.15.1
+  or earlier" note. Known-issues list updated to reflect v0.15.1/2
+  fixes.
+- `docs/QA_TEST_PLAN.md` — environment-setup section notes the
+  role-grant prereq is gone.
+- `README.md` — Documentation Map gets the API Programming Guide as
+  a ★ entry. Quick-links-by-role adds a "future Claude session"
+  entry pointing at the API guide. DR_ROLE_SETUP entry annotated
+  *(Historical)*.
+
+All eight markdown files cross-link cleanly (verified
+programmatically — no broken `.md` links). 19/19 pilot tests still
+pass.
 
 ## v0.15.2 — 2026-05-14
 

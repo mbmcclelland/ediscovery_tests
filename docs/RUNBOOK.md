@@ -193,9 +193,66 @@ cat ~/.dr-tools/runs/<slug>.jsonl | tail -1 | jq .
 
 ---
 
-## §4e — New Job → Browse fails with `PERMISSION_DENIED` on `listConnectors` or `exploreConnector`
+## §4f — PERMISSION_DENIED on exploreConnector / createDataArea / indexing chain (v0.15.2 root-cause fix)
 
 ### Symptom
+
+```
+APIError: status=FAILURE, errorCode=PERMISSION_DENIED,
+extendedStatus= User <whoever> does not have permission to perform
+<connectorManager/exploreConnector | orgManager/createDataArea |
+ corpusManager/createRepresentation> operation.
+```
+
+…even though the DR Web UI works fine for the same user against the
+same DR install. Or AHS server log shows
+`PROJECT_NOT_ACTIVATED  Project 0 not activated` for the async branch
+of the same call.
+
+### Root cause
+
+Pre-v0.15.2, `helpers/api_client.py:post()` auto-injected
+`"systemScope": True` into every request body. DR's
+`SecureObjectInterceptor` treats `systemScope: true` as a declaration
+that the caller is in super-system mode, which requires permissions
+the Connectors / Data-Area / Corpus operations don't grant. Removing
+the auto-inject (v0.15.2) makes DR fall back to the caller's
+org-context role, which works fine after `initializeOrganization`.
+
+### Fix
+
+Upgrade to v0.15.2 or later. If you're on master/HEAD past commit
+`e205909`, you have it.
+
+### If you see this AFTER v0.15.2
+
+Means one of three things, in order of likelihood:
+
+1. **You added a new endpoint call somewhere that explicitly sets
+   `systemScope: True` but shouldn't.** Check `data.py` for your new
+   `extra_body={...}` — if the endpoint is in the "Connector reads /
+   indexing chain" list (see DR_Workflow_Guide §10.4), drop the
+   `systemScope` field entirely.
+
+2. **You're logged in as an org user (admin@<org>) whose role
+   genuinely lacks the relevant permission in DR.** Rare in default
+   installs. Use `docs/DR_ROLE_SETUP.md` to copy and customise the
+   role.
+
+3. **You forgot `initializeOrganization` for a per-org call.** Sys
+   user's session starts in `super_system_customer` context;
+   per-org calls expect a context-switch first. Use
+   `drdata.ensure_org_context(client, "<org>")`.
+
+---
+
+## §4e — *(HISTORICAL — pre-v0.15.2)* Browse fails because of role-permission gaps
+
+> **This entry is kept for historical reference. v0.15.2 made the
+> role-permission walkthrough no longer required for the default
+> install.** Skip ahead to §4f for the current root cause.
+
+### Symptom (pre-v0.15.2)
 
 After upgrading to v0.14.10+, the modal's pre-emptive warning fires:
 
@@ -208,7 +265,7 @@ Or, if logged in as admin@training, the Browse button shows:
 > (PERMISSION_DENIED: User admin does not have permission to perform
 > listConnectors operation)
 
-### Root cause
+### Root cause (as understood pre-v0.15.2 — partial)
 
 DR 5.5.3.2's stock **Organization Administrator** role doesn't
 include the `CONNECTOR` permission. Neither does **IT Administrator**
@@ -261,7 +318,12 @@ or create a project in DR's Web UI first.
 
 ---
 
-## §4c — `dr-job-run` / `dr-job-delete` fails with `permission to perform createDataArea`
+## §4c — *(HISTORICAL — pre-v0.15.2)* `dr-job-run` / `dr-job-delete` fails with `permission to perform createDataArea`
+
+> **As of v0.15.2 this is fixed by the systemScope auto-inject
+> removal (see §4f).** The dr-job-run / dr-job-delete CLIs now
+> work for both DRSysAdmin and org-admin sessions. The historical
+> entry below is preserved for context.
 
 ### Symptom
 

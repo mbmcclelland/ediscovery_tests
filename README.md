@@ -1,6 +1,6 @@
 # eDiscovery API Test Suite
 
-**Version 0.15.2**
+**Version 0.15.3**
 
 Automated API tests, load tests, a Textual TUI for live monitoring, and a
 reinstall toolchain for the Digital Reef eDiscovery REST API. Includes:
@@ -827,7 +827,8 @@ Every markdown file in the repo, what it's for, and who should read it.
 | **[DR_Workflow_Guide.md](DR_Workflow_Guide.md)** | Feature-by-feature walkthrough of the TUI: each tab, each modal, the API chain it triggers, and the database tables affected. | New engineers, QA |
 | **[docs/QA_TEST_PLAN.md](docs/QA_TEST_PLAN.md)** | Structured handover for a QA Engineer: feature matrix, test scenarios with pass/fail criteria, smoke-test order, regression areas, environment setup. | **QA Engineer** |
 | **[docs/RUNBOOK.md](docs/RUNBOOK.md)** | Troubleshooting cookbook — common failure symptoms keyed to root cause + fix. ("Connectors empty?" → "Did you call initializeOrganization?") | QA, support, on-call |
-| **[docs/DR_ROLE_SETUP.md](docs/DR_ROLE_SETUP.md)** | Step-by-step Web UI walkthrough for granting Connectors permission to the org admin (one-time DR install setup needed by the Job Scheduler tab on DR 5.5.3.2). | DR admin, operator |
+| **[docs/API_PROGRAMMING_GUIDE.md](docs/API_PROGRAMMING_GUIDE.md)** | ★ How the DR REST API actually works — authentication, contextHandle semantics, the systemScope pitfall, permission model, endpoint reference, recipes for composing features, debugging playbook. **Read first when adding a new feature.** | Developers (including future Claude sessions) |
+| **[docs/DR_ROLE_SETUP.md](docs/DR_ROLE_SETUP.md)** | *(Historical — no longer required after v0.15.2)* Web UI walkthrough for granting Connectors permission. Kept for reference only. | (rarely needed) |
 | **[docs/endpoints_v0.05.md](docs/endpoints_v0.05.md)** | DR REST read-path endpoints used by the TUI. Body + response shapes captured live via mitmproxy. | API integration work |
 | **[docs/endpoints_v0.06.md](docs/endpoints_v0.06.md)** | Write-path endpoints — CRUD on depots / users / groups, job control (pause/resume/cancel/priority), listRealmTasks/listOperationTypes/getSRITaskLog. | API integration work |
 | **[docs/endpoints_v0.08.md](docs/endpoints_v0.08.md)** | System Settings (advanced) — Mail / Splash / Password Policy / Inactivity / Services / Templates / Reef Review. | API integration work |
@@ -847,6 +848,11 @@ known limitations.
 **Something broke and I need to debug it fast** →
 [`docs/RUNBOOK.md`](docs/RUNBOOK.md) maps symptoms to root causes.
 
-**I'm integrating against the DR REST API directly** →
-`docs/endpoints_v0.0{5,6,8}.md` have the body + response shapes for
-every endpoint dr-tools touches.
+**I'm integrating against the DR REST API directly** → start with
+[`docs/API_PROGRAMMING_GUIDE.md`](docs/API_PROGRAMMING_GUIDE.md) for
+the conceptual model (authentication, contextHandle, systemScope,
+permission model, recipes). Then `docs/endpoints_v0.0{5,6,8}.md` have
+the body + response shapes for every captured endpoint.
+
+**I'm a future Claude session continuing this work** → same as
+above. The API Programming Guide is the file to load first.
