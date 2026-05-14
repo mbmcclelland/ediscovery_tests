@@ -439,3 +439,72 @@ preserve backwards compatibility for working environments and
 surface actionable errors for misconfigured ones.
 
 [2026-05-14T04:32:00Z]
+
+## QA-16 — Recreate admin@training + permission deep-dive — **MAJOR FINDING**
+
+### What worked
+- Wrote `qa_create_org_admin.py` — a Playwright bypass that skips the
+  failing storage-create phase and only runs the org-user-create
+  flow. Successfully created `admin@training` with role "Organization
+  Administrator" and forced password to `password`.
+- `OrgUserConfig()` login now succeeds.
+
+### What didn't work — **server-side permission model**
+
+After `admin@training` was working, I drove `exploreConnector` live
+as the org admin and STILL got `PERMISSION_DENIED`. Worse:
+
+```
+APIError: ... PERMISSION_DENIED ... User admin does not have
+permission to perform listConnectors operation.
+```
+
+**`admin@training` (Organization Administrator role) lacks BOTH
+`listConnectors` AND `exploreConnector` permissions** in this DR
+install.
+
+### Implications
+
+This is a **DR 5.5.3.2 permission tightening**, not a code bug. The
+v0.07 / v0.10 captures we modelled the code after were taken against
+an older DR version with looser defaults.
+
+The Job Scheduler tab's New Job wizard cannot do its job in this
+install regardless of which user logs in:
+
+| Role available | Can list connectors? | Can browse folders? |
+|---|---|---|
+| DRSysAdmin / IT Administrator | ✗ PERMISSION_DENIED on exploreConnector | ✗ |
+| admin@training / Organization Administrator | ✗ PERMISSION_DENIED on listConnectors | ✗ |
+| ?? (no other roles available) | — | — |
+
+The dr-tui v0.14.10 pre-emptive warning + translated error
+correctly tells the user this is a permission issue, but the
+underlying remediation is at the DR server level, not the client.
+
+### Options for the team
+
+1. **Configure a custom role** in DR's role editor that grants the
+   "Connectors - View" and "Connectors - Add/Edit" permissions, then
+   assign that role to admin@training. (The DR PDF documentation
+   describes this — "Add, Edit, or Copy a Role".)
+2. **Roll back the DR install** to a 5.5.3.1 baseline that matches
+   the capture sessions.
+3. **Skip the file browse feature** in dr-tui — add a manual-path
+   text input so users can type the path they want to index without
+   browsing. The submit chain (createDataArea + createCorpus +
+   createRepresentation) might or might not work depending on
+   whether those endpoints share the same permission gate (likely
+   they do — we'd find out when the user clicks Run).
+4. **Accept the limitation** — dr-tui works fully for everything
+   EXCEPT the Job Scheduler's New Job wizard in this DR install.
+   All other features (Connectors view via Organizations tab — see
+   QA-5, F3 Jobs Monitor — QA-12, Realm Settings — QA-11, etc.) are
+   confirmed working.
+
+**Recommend option 3** as the in-tool fix — falls back gracefully to
+a manual path input when permission is denied. Option 1 is the
+"right" fix but requires a DR-admin-level role-config change which
+is outside the dr-tui scope.
+
+[2026-05-14T04:55:00Z]
