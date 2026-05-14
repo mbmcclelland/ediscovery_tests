@@ -372,6 +372,39 @@ WantedBy=timers.target
     return (base, None)
 
 
+def toggle_retention_timer(unit: str) -> tuple[str, Optional[str]]:
+    """v0.14 — flip a timer between enabled+active and disabled+inactive.
+
+    `unit` is the full `.timer` filename (e.g.
+    `dr-tools-retention-job-1-20260513T030000.timer`). Returns
+    `(new_state, error)` where `new_state` is "active" or "inactive"
+    on success and `error` is None; on failure `error` carries a short
+    one-line message for the UI.
+    """
+    if not systemctl_user_available():
+        return ("", "systemctl --user not available")
+    try:
+        r = subprocess.run(
+            ["systemctl", "--user", "is-active", unit],
+            capture_output=True, text=True, timeout=5,
+        )
+    except Exception as e:
+        return ("", repr(e)[:160])
+    state = (r.stdout or "").strip()
+    new_cmd = ["disable", "--now"] if state == "active" else ["enable", "--now"]
+    try:
+        subprocess.run(
+            ["systemctl", "--user"] + new_cmd + [unit],
+            check=True, capture_output=True, text=True, timeout=10,
+        )
+    except subprocess.CalledProcessError as e:
+        return ("", (e.stderr or e.stdout or "").strip()[:160])
+    return (
+        "inactive" if state == "active" else "active",
+        None,
+    )
+
+
 def cancel_retention_delete(*, job_slug: str, run_id: str) -> Optional[str]:
     """Stop + disable + remove the unit files for one retention timer.
 
@@ -407,6 +440,15 @@ def cancel_retention_delete(*, job_slug: str, run_id: str) -> Optional[str]:
 
 
 _TIMER_PREFIX = "dr-tools-retention-"
+
+# v0.14 — pull `<slug>` and `<run_id>` back out of a unit base name.
+# Slugs are kebab-case (a-z 0-9 -), run_ids are the 14-char UTC stamp
+# from cli_jobrun._stamp(): YYYYMMDDTHHMMSS.
+_UNIT_PARSE_RE = re.compile(
+    rf"^{re.escape(_TIMER_PREFIX)}"
+    r"(?P<slug>[a-z0-9-]+?)-"
+    r"(?P<run_id>\d{8}T\d{6})$"
+)
 _LIST_TIMERS_RE = re.compile(
     r"^(?P<next>\S+\s+\S+\s+\S+\s+\S+)\s+(?P<left>\S+\s+\S+)\s+\S+\s+\S+\s+"
     r"(?P<unit>\S+)\s+(?P<activates>\S+)\s*$"

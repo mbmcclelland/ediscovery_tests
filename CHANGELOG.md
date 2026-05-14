@@ -1,5 +1,68 @@
 # Changelog
 
+## v0.14.0 — 2026-05-13
+
+### Added: Job Scheduler — per-view actions, log viewer, timer toggle, linger banner
+
+Closes the four "known v0.13 gaps" the v0.13.0 changelog flagged.
+Each sub-view now has its own contextual action row inside it; the
+top-of-tab strip that previously conflated unrelated actions is gone.
+
+**Running Jobs** — Pause / Resume / Cancel / Priority / Refresh
+
+Wires the existing `pause_task` / `resume_task` / `cancel_task` /
+`set_job_priority` fetchers and reuses `ConfirmModal` / `PriorityModal`
+so the action paths match F3 Jobs Monitor exactly (including the
+mandatory `systemScope: true` for cancel that v0.10.1 captured).
+
+**Saved Templates** — New Job / Run / Edit / **View Log** / Delete / Refresh
+
+View Log finds the most recent `~/.dr-tools/logs/<slug>-*.log` for the
+selected template and pops `LogViewerModal`.
+
+**Retention Timers** — **Toggle** / **Cancel timer** / Refresh
+
+- Toggle flips a timer between `active` / `inactive` via
+  `systemctl --user enable/disable --now`. New helper
+  `scheduler.toggle_retention_timer(unit)` returns
+  `(new_state, error)`.
+- Cancel timer parses the unit name (`dr-tools-retention-<slug>-<run_id>.timer`)
+  via a new `_UNIT_PARSE_RE` and calls the existing
+  `cancel_retention_delete()` helper. Confirms via `ConfirmModal`
+  because the action is destructive (retention delete will no
+  longer fire automatically).
+
+**Run History** — **View Log** / Refresh
+
+View Log opens the log for the specific `run_id` (falls back to the
+newest log for that template if the exact stamp's file is missing —
+shouldn't happen, but defensive).
+
+**New modal: `LogViewerModal`**
+
+Read-only file tail. Renders into a `RichLog(markup=False)` so log
+lines containing literal `[...]` brackets (Java argv dumps,
+"Connection refused: 192.168.58.128:8443[NOT_LOCAL]", etc.) don't
+trip the markup parser. Same trap that bit v0.13.2 on the landing
+dashboard — `markup=False` is the simpler fix for this widget since
+nothing here needs colour-coding.
+
+**Lingering banner** — visible only when retention timers exist AND
+`loginctl enable-linger` is off AND `systemctl --user` is reachable.
+Renders one yellow-on-dark line at the top of the Job Scheduler tab
+telling the user to run `sudo loginctl enable-linger $USER`. Three
+layers of "off" mean no banner — the calmer default.
+
+**Pilot tests added:**
+
+- `test_unit_parse_regex` — verifies the systemd unit-name parser
+  recovers slug + run_id for both single- and multi-word slugs;
+  rejects malformed names.
+- `test_log_viewer_modal_mount` — writes a real temp log, mounts the
+  modal, asserts it appears and dismisses cleanly on Esc.
+
+18 / 18 pilot tests pass (was 16; +2 for v0.14).
+
 ## v0.13.2 — 2026-05-13
 
 ### Fixed: dash-log RichLog crashed on log lines containing `[/...]` brackets

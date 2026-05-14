@@ -612,14 +612,26 @@ NewJobModal {
     width: 1fr;
 }
 
-#scheduler-actions {
+/* v0.14: per-view action row inside each scheduler sub-view */
+.sch-actions-row {
     height: 3;
     padding: 0 1;
+    margin-bottom: 1;
 }
 
-#scheduler-actions Button {
+.sch-actions-row Button {
     margin-right: 1;
     min-width: 10;
+}
+
+/* v0.14 lingering hint banner — hidden by default; we toggle via
+   `display = True/False` in code once we know systemd state. */
+.sch-banner {
+    height: 1;
+    padding: 0 1;
+    color: $warning;
+    background: $panel-darken-2;
+    display: none;
 }
 
 /* ---------------------------------------------------------- v0.11 task log */

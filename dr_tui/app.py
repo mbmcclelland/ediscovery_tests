@@ -1205,6 +1205,66 @@ class TaskLogModal(ModalScreen[None]):
         )
 
 
+class LogViewerModal(ModalScreen[None]):
+    """v0.14 — read-only viewer for a `~/.dr-tools/logs/*.log` file.
+
+    Different from TaskLogModal (which tails AE log lines via the REST
+    API) — this one reads a local file produced by `dr-job-run`. Used
+    by the Saved Templates "View Log" button (latest log for the
+    template) and the Run History "View Log" button (log for a
+    specific run_id).
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Close"),
+        Binding("r",      "refresh", "Re-read"),
+    ]
+
+    def __init__(self, *, path, title: str = "") -> None:
+        super().__init__()
+        from pathlib import Path
+        self._path = Path(path)
+        self._title = title or self._path.name
+
+    def compose(self) -> ComposeResult:
+        with Container(id="tasklog-card"):
+            yield Static(f"Run Log — {self._title}", id="tasklog-title")
+            yield Static(
+                f"[dim]{self._path}[/]",
+                id="tasklog-status",
+            )
+            yield RichLog(id="tasklog-body",
+                          wrap=False, highlight=False, markup=False,
+                          max_lines=20000)
+            yield Static(
+                "[dim][r] re-read · [Esc] close[/]",
+                classes="modal-hint",
+            )
+
+    def on_mount(self) -> None:
+        self.action_refresh()
+
+    def action_dismiss(self, _result=None) -> None:
+        self.dismiss(None)
+
+    def action_refresh(self) -> None:
+        body = self.query_one("#tasklog-body", RichLog)
+        body.clear()
+        try:
+            text = self._path.read_text()
+        except FileNotFoundError:
+            body.write(f"[log file gone] {self._path}")
+            return
+        except Exception as e:
+            body.write(f"[read error] {e!r}")
+            return
+        for line in text.splitlines():
+            body.write(line)
+        self.query_one("#tasklog-status", Static).update(
+            f"[dim]{self._path}  ({len(text)} bytes)[/]"
+        )
+
+
 # === v0.12 Realm Settings edit modals ====================================== #
 
 class MailServerFormModal(ModalScreen[Optional[dict]]):
@@ -2247,42 +2307,85 @@ class DashboardScreen(Screen):
                     # F2 help side-pane — same pattern as the System Settings tab.
                     yield Markdown("", id="orgs-help-pane", classes="help-pane")
 
-            # ----------------------- Job Scheduler (v0.13) -----------------
+            # ----------------------- Job Scheduler (v0.13/v0.14) -----------
             with TabPane("Job Scheduler", id="tab-scheduler"):
                 with Vertical():
-                    with Horizontal(id="scheduler-actions"):
-                        yield Button("New Job", id="sch-new",
-                                     variant="success")
-                        yield Button("Run", id="sch-run", variant="primary")
-                        yield Button("Edit", id="sch-edit")
-                        yield Button("Delete", id="sch-delete",
-                                     variant="error")
-                        yield Button("Refresh", id="sch-refresh")
+                    # v0.14 lingering banner — only visible when systemd
+                    # user lingering is off AND retention timers exist.
+                    yield Static(
+                        "", id="sch-lingering-banner",
+                        classes="sch-banner",
+                    )
                     with Horizontal():
                         yield Tree("Scheduler", id="scheduler-tree")
                         with ContentSwitcher(id="scheduler-switcher",
-                                             initial="sch-running-view"):
+                                             initial="sch-saved-view"):
+                            # ---- Running Jobs sub-view ----
                             with Vertical(id="sch-running-view"):
                                 yield Static("Running Jobs",
                                              classes="panel-title")
+                                with Horizontal(classes="sch-actions-row"):
+                                    yield Button("Pause",
+                                                 id="sch-run-pause")
+                                    yield Button("Resume",
+                                                 id="sch-run-resume",
+                                                 variant="success")
+                                    yield Button("Cancel",
+                                                 id="sch-run-cancel",
+                                                 variant="error")
+                                    yield Button("Priority",
+                                                 id="sch-run-priority",
+                                                 variant="warning")
+                                    yield Button("Refresh",
+                                                 id="sch-run-refresh")
                                 yield DataTable(id="sch-running-table",
                                                 zebra_stripes=True,
                                                 cursor_type="row")
+                            # ---- Saved Templates sub-view ----
                             with Vertical(id="sch-saved-view"):
                                 yield Static("Saved Job Templates",
                                              classes="panel-title")
+                                with Horizontal(classes="sch-actions-row"):
+                                    yield Button("New Job", id="sch-new",
+                                                 variant="success")
+                                    yield Button("Run", id="sch-run",
+                                                 variant="primary")
+                                    yield Button("Edit", id="sch-edit")
+                                    yield Button("View Log",
+                                                 id="sch-saved-log")
+                                    yield Button("Delete", id="sch-delete",
+                                                 variant="error")
+                                    yield Button("Refresh",
+                                                 id="sch-refresh")
                                 yield DataTable(id="sch-saved-table",
                                                 zebra_stripes=True,
                                                 cursor_type="row")
+                            # ---- Retention Timers sub-view ----
                             with Vertical(id="sch-timers-view"):
                                 yield Static("Scheduled Retention Timers",
                                              classes="panel-title")
+                                with Horizontal(classes="sch-actions-row"):
+                                    yield Button("Toggle",
+                                                 id="sch-timers-toggle",
+                                                 variant="warning")
+                                    yield Button("Cancel timer",
+                                                 id="sch-timers-cancel",
+                                                 variant="error")
+                                    yield Button("Refresh",
+                                                 id="sch-timers-refresh")
                                 yield DataTable(id="sch-timers-table",
                                                 zebra_stripes=True,
                                                 cursor_type="row")
+                            # ---- Run History sub-view ----
                             with Vertical(id="sch-runs-view"):
                                 yield Static("Run History",
                                              classes="panel-title")
+                                with Horizontal(classes="sch-actions-row"):
+                                    yield Button("View Log",
+                                                 id="sch-runs-log",
+                                                 variant="primary")
+                                    yield Button("Refresh",
+                                                 id="sch-runs-refresh")
                                 yield DataTable(id="sch-runs-table",
                                                 zebra_stripes=True,
                                                 cursor_type="row")
@@ -2847,6 +2950,7 @@ class DashboardScreen(Screen):
     def _apply_sch_running(self, running: list["drdata.JobRow"]) -> None:
         t = self.query_one("#sch-running-table", DataTable)
         t.clear()
+        self._sch_running_rows = running
         for r in running:
             state_disp = (f"[green]{r.state}[/]" if r.state == "RUNNING"
                           else f"[dim]{r.state}[/]")
@@ -2876,15 +2980,20 @@ class DashboardScreen(Screen):
     def _apply_sch_timers(self, timers: list[drsch.TimerInfo]) -> None:
         t = self.query_one("#sch-timers-table", DataTable)
         t.clear()
+        self._sch_timers_rows = timers
         for ti in timers:
             t.add_row(ti.unit, ti.next_fire, ti.left, ti.activates or "—")
         self._update_status_bar(extra=f"timers=[yellow]{len(timers)}[/]")
+        # Now that we know how many timers exist, decide whether to show
+        # the lingering banner.
+        self._refresh_lingering_banner(len(timers))
 
     def _apply_sch_runs(
         self, all_runs: list[tuple[str, "drsch.RunRecord"]],
     ) -> None:
         t = self.query_one("#sch-runs-table", DataTable)
         t.clear()
+        self._sch_runs_rows = all_runs
         for job_name, r in all_runs:
             colour = {
                 "RUNNING": "yellow", "SUCCESS": "green",
@@ -2897,6 +3006,60 @@ class DashboardScreen(Screen):
                 r.task_handle[:16], r.finished_at or "—",
             )
         self._update_status_bar(extra=f"runs=[cyan]{len(all_runs)}[/]")
+
+    # ---- v0.14 row-selection helpers ----
+    def _sch_running_selected(self) -> Optional["drdata.JobRow"]:
+        rows = getattr(self, "_sch_running_rows", None) or []
+        try:
+            idx = self.query_one("#sch-running-table", DataTable).cursor_row
+        except Exception:
+            return None
+        if idx is None or idx < 0 or idx >= len(rows):
+            return None
+        return rows[idx]
+
+    def _sch_timer_selected(self) -> Optional["drsch.TimerInfo"]:
+        rows = getattr(self, "_sch_timers_rows", None) or []
+        try:
+            idx = self.query_one("#sch-timers-table", DataTable).cursor_row
+        except Exception:
+            return None
+        if idx is None or idx < 0 or idx >= len(rows):
+            return None
+        return rows[idx]
+
+    def _sch_run_selected(self) -> Optional[tuple[str, "drsch.RunRecord"]]:
+        rows = getattr(self, "_sch_runs_rows", None) or []
+        try:
+            idx = self.query_one("#sch-runs-table", DataTable).cursor_row
+        except Exception:
+            return None
+        if idx is None or idx < 0 or idx >= len(rows):
+            return None
+        return rows[idx]
+
+    def _refresh_lingering_banner(self, timer_count: int = 0) -> None:
+        """v0.14 — show a banner when retention timers exist but
+        loginctl lingering is off (so they'd die at logout).
+        """
+        try:
+            banner = self.query_one("#sch-lingering-banner", Static)
+        except Exception:
+            return
+        # Show only when: at least one dr-tools timer exists AND lingering
+        # is disabled AND systemd-user is reachable. Three layers of "off"
+        # mean no banner, which is the calmer default.
+        show = (timer_count > 0
+                and drsch.systemctl_user_available()
+                and not drsch.lingering_enabled())
+        banner.display = bool(show)
+        if show:
+            import os
+            user = os.environ.get("USER") or "$USER"
+            banner.update(
+                f"⚠ Retention timers will stop when you log out. "
+                f"Run [b]sudo loginctl enable-linger {user}[/] to fix."
+            )
 
     def _sch_saved_selected(self) -> Optional["drsch.JobDefinition"]:
         rows = getattr(self, "_sch_saved_rows", None) or []
@@ -3008,6 +3171,53 @@ class DashboardScreen(Screen):
             self._sch_run_now(j); return
         if bid == "sch-refresh":
             self._load_view(self.selected_kind or "sch-saved", ""); return
+
+        # ----- v0.14 Running Jobs sub-view actions -----
+        if bid in ("sch-run-pause", "sch-run-resume",
+                   "sch-run-cancel", "sch-run-priority"):
+            job = self._sch_running_selected()
+            if job is None:
+                self._post_status("select a running job row first")
+                return
+            action = bid.replace("sch-run-", "")  # pause / resume / cancel / priority
+            self._sch_running_action(job, action); return
+        if bid == "sch-run-refresh":
+            self._load_view("sch-running", ""); return
+
+        # ----- v0.14 Saved Templates: View Log -----
+        if bid == "sch-saved-log":
+            j = self._sch_saved_selected()
+            if j is None:
+                self._post_status("select a saved job first")
+                return
+            self._sch_open_latest_log(j); return
+
+        # ----- v0.14 Retention Timers actions -----
+        if bid == "sch-timers-toggle":
+            ti = self._sch_timer_selected()
+            if ti is None:
+                self._post_status("select a timer row first")
+                return
+            self._sch_timer_toggle(ti); return
+        if bid == "sch-timers-cancel":
+            ti = self._sch_timer_selected()
+            if ti is None:
+                self._post_status("select a timer row first")
+                return
+            self._sch_timer_cancel(ti); return
+        if bid == "sch-timers-refresh":
+            self._load_view("sch-timers", ""); return
+
+        # ----- v0.14 Run History: View Log -----
+        if bid == "sch-runs-log":
+            sel = self._sch_run_selected()
+            if sel is None:
+                self._post_status("select a run row first")
+                return
+            job_name, rec = sel
+            self._sch_open_run_log(job_name, rec); return
+        if bid == "sch-runs-refresh":
+            self._load_view("sch-runs", ""); return
 
         # ----- dashboard log filters -----
         if bid == "dash-flt-info":
@@ -3398,6 +3608,216 @@ class DashboardScreen(Screen):
                     self._load_view, self.selected_kind, "",
                 )
         self.run_worker(_run, thread=True, exclusive=False, group="sch-run")
+
+    # ---- v0.14 Running-Jobs action handlers ----
+    def _sch_running_action(
+        self, job: "drdata.JobRow", action: str,
+    ) -> None:
+        """Pause / Resume / Cancel / Priority on a row from sch-running-table.
+
+        Mirrors JobsMonitorModal's action dispatch — we reuse the
+        existing data fetchers (`pause_task`, `resume_task`,
+        `cancel_task`, `set_job_priority`) plus the ConfirmModal /
+        PriorityModal screens so behaviour matches F3 exactly.
+        """
+        full_handle = (job.raw or {}).get("handle", job.task_handle)
+        if action == "pause":
+            self.run_worker(
+                lambda: self._sch_running_blocking(job, full_handle, "pause"),
+                thread=True, exclusive=False, group="sch-run-action",
+            )
+            return
+        if action == "resume":
+            self.run_worker(
+                lambda: self._sch_running_blocking(job, full_handle, "resume"),
+                thread=True, exclusive=False, group="sch-run-action",
+            )
+            return
+        if action == "cancel":
+            self.app.push_screen(
+                ConfirmModal(
+                    title="Cancel job?",
+                    message=(
+                        f"Cancel running job [b]{job.job}[/] in project "
+                        f"[b]{job.project}[/]?\n\nState becomes "
+                        "CANCELLED. This cannot be undone."
+                    ),
+                    confirm_label="Cancel Job",
+                ),
+                lambda ok: self._sch_running_after_cancel(
+                    ok, job, full_handle,
+                ),
+            )
+            return
+        if action == "priority":
+            current = ""
+            for sec in (job.raw or {}).get("currentStatus") or []:
+                for kv in sec.get("data") or []:
+                    if (kv.get("name") or "").strip().lower() == "priority":
+                        current = str(kv.get("value") or "")
+                        break
+            self.app.push_screen(
+                PriorityModal(job_label=job.job, current=current),
+                lambda new_pri: self._sch_running_after_priority(
+                    new_pri, job, full_handle,
+                ),
+            )
+            return
+
+    def _sch_running_after_cancel(self, ok, job, full_handle):
+        if not ok:
+            return
+        self.run_worker(
+            lambda: self._sch_running_blocking(job, full_handle, "cancel"),
+            thread=True, exclusive=False, group="sch-run-action",
+        )
+
+    def _sch_running_after_priority(self, new_pri, job, full_handle):
+        if not new_pri:
+            return
+        self.run_worker(
+            lambda: self._sch_running_priority_blocking(
+                job, full_handle, new_pri,
+            ),
+            thread=True, exclusive=False, group="sch-run-action",
+        )
+
+    def _sch_running_blocking(self, job, full_handle: str, action: str) -> None:
+        client = self.app.sys_client or self.app.org_client
+        if client is None:
+            self._post_status("scheduler: no API session"); return
+        try:
+            if action == "pause":
+                ok = drdata.pause_task(client, task_handle=full_handle)
+                msg = (f"paused: {job.job}" if ok
+                       else f"could not pause {job.job}")
+            elif action == "resume":
+                ok = drdata.resume_task(client, task_handle=full_handle)
+                msg = (f"resumed: {job.job}" if ok
+                       else f"could not resume {job.job}")
+            elif action == "cancel":
+                drdata.cancel_task(client, task_handle=full_handle)
+                msg = f"cancelled: {job.job}"
+            else:
+                msg = f"unknown action: {action}"
+        except APIError as e:
+            msg = f"{action}: {e.error_code or e.status} {e.extended_status[:60]}"
+        except Exception as e:
+            msg = f"{action} error: {e!r}"
+        self.app.call_from_thread(self._post_status, msg)
+        self.app.call_from_thread(self._load_view, "sch-running", "")
+
+    def _sch_running_priority_blocking(self, job, full_handle, priority):
+        client = self.app.sys_client or self.app.org_client
+        if client is None:
+            self._post_status("scheduler: no API session"); return
+        try:
+            drdata.set_job_priority(
+                client, task_handle=full_handle, priority=priority,
+            )
+            msg = f"priority {priority}: {job.job}"
+        except APIError as e:
+            msg = (f"priority {priority}: {e.error_code or e.status} "
+                   f"{e.extended_status[:60]}")
+        except Exception as e:
+            msg = f"priority error: {e!r}"
+        self.app.call_from_thread(self._post_status, msg)
+        self.app.call_from_thread(self._load_view, "sch-running", "")
+
+    # ---- v0.14 timer actions ----
+    def _sch_timer_toggle(self, ti: "drsch.TimerInfo") -> None:
+        self.run_worker(
+            lambda: self._sch_timer_toggle_blocking(ti.unit),
+            thread=True, exclusive=False, group="sch-timer-write",
+        )
+
+    def _sch_timer_toggle_blocking(self, unit: str) -> None:
+        new_state, err = drsch.toggle_retention_timer(unit)
+        if err:
+            self.app.call_from_thread(
+                self._post_status, f"timer toggle: {err}",
+            )
+            return
+        self.app.call_from_thread(
+            self._post_status, f"timer {unit} now {new_state}",
+        )
+        self.app.call_from_thread(self._load_view, "sch-timers", "")
+
+    def _sch_timer_cancel(self, ti: "drsch.TimerInfo") -> None:
+        # Pull slug + run_id back out of the unit name:
+        # dr-tools-retention-<slug>-<run_id>.timer
+        unit = ti.unit
+        if unit.endswith(".timer"):
+            unit = unit[:-len(".timer")]
+        m = drsch._UNIT_PARSE_RE.match(unit)
+        if not m:
+            self._post_status(f"timer name unparseable: {ti.unit}")
+            return
+        slug, run_id = m.group("slug"), m.group("run_id")
+        self.app.push_screen(
+            ConfirmModal(
+                title="Cancel retention timer?",
+                message=(
+                    f"Stop + remove the systemd timer [b]{ti.unit}[/]?\n\n"
+                    "The retention delete for this run will no longer "
+                    "fire automatically. The indexed data stays in DR "
+                    "until you delete it manually."
+                ),
+                confirm_label="Cancel timer",
+            ),
+            lambda ok: self._sch_timer_cancel_after(ok, slug, run_id),
+        )
+
+    def _sch_timer_cancel_after(self, ok: bool, slug: str, run_id: str) -> None:
+        if not ok:
+            return
+        self.run_worker(
+            lambda: self._sch_timer_cancel_blocking(slug, run_id),
+            thread=True, exclusive=False, group="sch-timer-write",
+        )
+
+    def _sch_timer_cancel_blocking(self, slug: str, run_id: str) -> None:
+        err = drsch.cancel_retention_delete(job_slug=slug, run_id=run_id)
+        if err:
+            self.app.call_from_thread(
+                self._post_status, f"timer cancel: {err}",
+            )
+        else:
+            self.app.call_from_thread(
+                self._post_status, f"timer removed: {slug} {run_id}",
+            )
+        self.app.call_from_thread(self._load_view, "sch-timers", "")
+
+    # ---- v0.14 log viewers ----
+    def _sch_open_latest_log(self, job: "drsch.JobDefinition") -> None:
+        """Find the most recent log file for *job* and open the viewer."""
+        from pathlib import Path
+        logs = sorted(drsch.LOGS_DIR.glob(f"{job.slug()}-*.log"))
+        if not logs:
+            self._post_status(f"no logs yet for {job.name}")
+            return
+        self.app.push_screen(LogViewerModal(path=logs[-1], title=job.name))
+
+    def _sch_open_run_log(
+        self, job_name: str, rec: "drsch.RunRecord",
+    ) -> None:
+        # Run-history rows know the run_id; combine with job slug to
+        # find the matching log. The Saved Templates Run button stamps
+        # the slug into the log filename in cli_jobrun.
+        slug = drsch.slugify(job_name)
+        from pathlib import Path
+        # Log filenames are slug-<run_id>.log when run_id is dr-job-run's
+        # UTC stamp. Fall back to the newest matching file for that slug.
+        target = drsch.LOGS_DIR / f"{slug}-{rec.run_id}.log"
+        if not target.exists():
+            cands = sorted(drsch.LOGS_DIR.glob(f"{slug}-*.log"))
+            if not cands:
+                self._post_status(f"no logs for {job_name} {rec.run_id}")
+                return
+            target = cands[-1]
+        self.app.push_screen(
+            LogViewerModal(path=target, title=f"{job_name} {rec.run_id}"),
+        )
 
     def _sys_user_open_new(self) -> None:
         # Need roles loaded before the modal renders.

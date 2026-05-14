@@ -215,6 +215,58 @@ def test_newjob_modal_auto_picks_org_connector_project() -> None:
     asyncio.run(_walk_newjob_autoflow())
 
 
+# ---------- v0.14: unit-name parse + LogViewerModal mount ----------
+
+def test_unit_parse_regex() -> None:
+    """`_UNIT_PARSE_RE` round-trips a real systemd unit basename."""
+    import dr_tui.scheduler as sch
+    importlib.reload(sch)
+    m = sch._UNIT_PARSE_RE.match(
+        "dr-tools-retention-nightly-payroll-20260513T030000"
+    )
+    assert m is not None
+    assert m.group("slug") == "nightly-payroll"
+    assert m.group("run_id") == "20260513T030000"
+    # Single-word slugs work too.
+    m = sch._UNIT_PARSE_RE.match(
+        "dr-tools-retention-archive-20260514T120000"
+    )
+    assert m and m.group("slug") == "archive"
+    # Anything that doesn't match the run-id stamp format is rejected.
+    assert sch._UNIT_PARSE_RE.match(
+        "dr-tools-retention-bad-runid"
+    ) is None
+
+
+async def _walk_log_viewer() -> None:
+    """LogViewerModal mounts on a real file; Esc closes."""
+    from dr_tui.app import LogViewerModal
+    import tempfile
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".log", delete=False,
+    ) as f:
+        f.write("=== smoke log ===\nline 2\nline 3\n")
+        path = f.name
+    app = _Harness()
+    async with app.run_test() as pilot:
+        app.push_screen(LogViewerModal(path=path, title="smoke"))
+        await pilot.pause()
+        # Iterate until the read worker has run.
+        for _ in range(10):
+            await pilot.pause()
+        scr = app.screen
+        assert type(scr).__name__ == "LogViewerModal"
+        # Esc closes.
+        await pilot.press("escape")
+        await pilot.pause()
+        assert type(app.screen).__name__ != "LogViewerModal"
+    import os; os.unlink(path)
+
+
+def test_log_viewer_modal_mount() -> None:
+    asyncio.run(_walk_log_viewer())
+
+
 # ---------- 'longterm' coloring rule ----------
 
 def test_longterm_substring_match() -> None:
