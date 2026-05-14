@@ -1660,28 +1660,32 @@ def explore_connector(
     to `remote_path` (the connector's root). Use "" for the connector
     root itself. The captured response uses `name` for the path
     component; the DR Web UI builds a breadcrumb by concatenating these.
+
+    v0.14.8: this endpoint is **org-admin scoped** — DRSysAdmin raises
+    `PERMISSION_DENIED`. Callers must pass an org-admin EDiscoveryClient.
+    We re-raise APIError unchanged so the UI can surface a specific
+    message rather than rendering an empty tree silently. (Earlier
+    versions swallowed all APIError → [], which made permission
+    failures look like empty directories.)
     """
     pp_name = parent_path or remote_path
-    try:
-        resp = client.post(
-            "connectorManager/exploreConnector",
-            extra_body={
-                "contextHandle": org_name,
-                "connectorType": connector_type,
-                "connectorName": connector_name,
-                "remoteHost": remote_host,
-                "remotePath": remote_path,
-                "organizationName": org_name,
-                "parentPath": {
-                    "name": pp_name,
-                    "handle": "",
-                    "leaf": False,
-                    "type": None,
-                },
+    resp = client.post(
+        "connectorManager/exploreConnector",
+        extra_body={
+            "contextHandle": org_name,
+            "connectorType": connector_type,
+            "connectorName": connector_name,
+            "remoteHost": remote_host,
+            "remotePath": remote_path,
+            "organizationName": org_name,
+            "parentPath": {
+                "name": pp_name,
+                "handle": "",
+                "leaf": False,
+                "type": None,
             },
-        )
-    except APIError:
-        return []
+        },
+    )
     out: list[PathEntry] = []
     for p in resp.get("paths") or []:
         # The server emits "." as a self-reference in some captures —

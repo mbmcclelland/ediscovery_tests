@@ -1887,6 +1887,11 @@ class NewJobModal(ModalScreen[Optional[dict]]):
         data = node.data or {}
         conn = self._selected_connector()
         if conn is None or self._client is None:
+            self.app.call_from_thread(
+                self.query_one("#newjob-error", Static).update,
+                "[red]No connector or API client available — pick a "
+                "connector first.[/]",
+            )
             return
         try:
             entries = drdata.explore_connector(
@@ -1898,7 +1903,25 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                 remote_path=conn.path or "",
                 parent_path=data.get("path") or conn.path or "",
             )
-        except Exception:
+        except APIError as e:
+            # v0.14.8 — most likely PERMISSION_DENIED because the modal
+            # got a DRSysAdmin client; the exploreConnector endpoint is
+            # org-admin-only. Surface a specific message instead of an
+            # empty tree.
+            msg = (f"[red]Browse failed: {e.error_code or e.status} "
+                   f"{(e.extended_status or '').strip()[:120]}[/]")
+            if "PERMISSION_DENIED" in str(e.error_code or ""):
+                msg += (" — log in as an org admin (admin@<org>) to "
+                        "browse connector folders.")
+            self.app.call_from_thread(
+                self.query_one("#newjob-error", Static).update, msg,
+            )
+            entries = []
+        except Exception as e:
+            self.app.call_from_thread(
+                self.query_one("#newjob-error", Static).update,
+                f"[red]Browse failed: {e!r}[/]",
+            )
             entries = []
         self.app.call_from_thread(self._apply_children, node, entries)
 
@@ -3668,9 +3691,18 @@ class DashboardScreen(Screen):
         except Exception:
             pass
 
+        # v0.14.8 — `connectorManager/exploreConnector` is org-admin-only
+        # (DRSysAdmin gets PERMISSION_DENIED — QA-14 finding). The file
+        # tree + recursive count inside NewJobModal need the org client.
+        # Same applies to `submit_indexing_job` later, but that runs from
+        # dr-job-run with its own login. Prefer org_client when present;
+        # if the only session is the sys client, the modal will surface
+        # a specific error on first browse attempt.
+        modal_client = self.app.org_client or client
         self.app.call_from_thread(
             self._sch_push_modal,
-            org_names, connectors_by_org, projects_by_org, client, existing,
+            org_names, connectors_by_org, projects_by_org,
+            modal_client, existing,
         )
 
     def _sch_push_modal(

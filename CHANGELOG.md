@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.14.8](#v0148--2026-05-14) | 2026-05-14 | NewJobModal file tree uses org-admin client; explore_connector re-raises APIError so PERMISSION_DENIED is visible |
 | [v0.14.7](#v0147--2026-05-14) | 2026-05-14 | set_* fetchers re-read after write (set-endpoint responses don't echo persisted state) |
 | [v0.14.6](#v0146--2026-05-14) | 2026-05-14 | dr-job-run / dr-job-delete use org-admin login (DRSysAdmin denied by DR permission model) |
 | [v0.14.5](#v0145--2026-05-14) | 2026-05-14 | dr-job-run pre-flight + actionable "binary missing" error; RUNBOOK §4b |
@@ -36,6 +37,54 @@ feature-by-feature **expected behaviour** see
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ---
+
+## v0.14.8 — 2026-05-14
+
+### Fixed: NewJobModal file tree silently empty for DRSysAdmin
+
+**Found during QA-14** (third bug found in the v0.14.4 handover pass).
+The NewJobModal connector dropdown populated correctly (v0.14.3 fix)
+but clicking on the file tree to expand a folder did nothing — no
+entries, no error.
+
+**Root cause confirmed live.** `connectorManager/exploreConnector` is
+**org-admin scoped**, just like the indexing chain (QA-8 / v0.14.6).
+DRSysAdmin raises `PERMISSION_DENIED`. Our `explore_connector()`
+fetcher caught all `APIError` and returned `[]`, so the permission
+failure looked identical to "this directory is empty".
+
+**Code changes:**
+
+- `dr_tui/app.py` — `_sch_collect_then_open()` now prefers
+  `self.app.org_client` when present (set during DRSysAdmin login by
+  the existing dual-login path) and passes that to `NewJobModal` as
+  `api_client`. Org data gathering (list_orgs, list_connectors,
+  list_projects) still uses the broader sys client since those
+  endpoints accept DRSysAdmin after `initializeOrganization`.
+- `dr_tui/data.py` — `explore_connector()` no longer swallows
+  `APIError`; it re-raises. Caller (the modal) catches and surfaces
+  the specific error.
+- `NewJobModal._load_children_blocking()` — on `APIError`, writes the
+  error code + extended status into the `#newjob-error` line, and on
+  `PERMISSION_DENIED` specifically appends "log in as an org admin
+  (admin@<org>) to browse connector folders."
+
+**Why this matters even when org_client is present.** DR's permission
+model is: list operations (listConnectors, listProjects) are open to
+DRSysAdmin after `initializeOrganization`; *content* operations
+(exploreConnector, createDataArea, createCorpus, createRepresentation,
+deleteCorpus, deleteDataArea) are org-admin-only. The Job Scheduler
+tab's New Job + Run + Retention Delete flows ALL hit content
+endpoints — so a working Job Scheduler session requires either:
+
+- Logging in as `admin@<org>` directly (org_client only); OR
+- Logging in as DRSysAdmin AND the implicit org-admin co-login at
+  startup succeeded (`app.org_client is not None`).
+
+If neither works, the modal now tells the user exactly why and what
+to do.
+
+19/19 pilot tests still pass.
 
 ## v0.14.7 — 2026-05-14
 

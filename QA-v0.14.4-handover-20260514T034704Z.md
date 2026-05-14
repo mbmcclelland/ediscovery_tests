@@ -220,3 +220,80 @@ to run `python playwright_fresh_init.py` to recreate the user, or to
 defer those scenarios for a follow-up pass.**
 
 [2026-05-14T04:05:00Z]
+
+## QA-11 — Realm Settings edit modals — **FIXED (1 bug) + PASS**
+
+Pilot suite `test_settings_modal_paths` already green; this scenario
+covers the live round-trip.
+
+### Bug 3 — `set_*` fetchers return non-persisted state
+- Symptom: `set_password_policy(policy=PasswordPolicy(enforce_strong=True,
+  min_length=12, ...))` returned `PasswordPolicy(enforce_strong=False,
+  min_length=0, ...)`. Same pattern with `set_splash_message`.
+- Root cause: DR's `setPasswordPolicy` / `setSplashMessage` responses
+  include the field keys but the values are zeros/false regardless of
+  what was written. Confirmed: a follow-up `getPasswordPolicy` shows
+  the actual persisted state matches what was sent.
+- Fix: all three `set_*` fetchers (`set_mail_server_config`,
+  `set_splash_message`, `set_password_policy`) now do a follow-up
+  `get_*` and return the canonical state. `set_inactivity_timeout`
+  was already correct (returns 204, we already returned the input
+  value verbatim).
+- Shipped as **v0.14.7** (commit `2b4b073`).
+
+### Live verification after fix
+
+| Operation | Sent | Returned by set_* (after fix) |
+|---|---|---|
+| set_password_policy | enforce_strong=True, min_length=12, min_upper=2 | enforce_strong=True, min_length=12, min_upper=2 ✓ |
+| set_splash_message | enabled=True, message="QA verify" | enabled=True, message='QA verify' ✓ |
+| set_mail_server_config | host='qa-smtp.example.com', port=2525 | host='qa-smtp.example.com', port=2525 ✓ |
+
+Baseline restored after every test.
+
+### Impact
+
+The TUI was unaffected — `_settings_write_blocking` calls `_load_view`
+which re-fetches via the get endpoints. The bug mainly affected
+programmatic users of `dr_tui.data.set_*` and would have caused
+confusion for anyone reading the return value directly. Now fixed.
+
+[2026-05-14T04:15:00Z]
+
+## QA-12 — F3 Jobs Monitor data path — **PASS**
+
+Live API calls:
+- `list_realm_tasks(client)` → 2 rows (totalCount=2):
+  - `training/test1` "Creating representation Analytic Index for
+    Digital…" state=CANCELLED duration=00:02:11
+  - `training/test1` "Creating representation Analytic Index for
+    drmanua…" state=SUCCESS duration=00:00:23
+- `list_operation_types(client)` → 98 entries (BASELINE_IMAGE_IMPORT,
+  BATCH_GENERATE, …, plus the "Any type" sentinel in the dropdown
+  = 99 options).
+- `list_realm_jobs(client)` → 0 active jobs, totalCores=8.
+
+Drove the live TUI via Pilot harness:
+1. Login as DRSysAdmin → DashboardScreen.
+2. `pilot.press("f3")` → JobsMonitorModal opens within ~1s.
+3. `#jobs-table` has 8 columns, 2 rows (matching the realm task list).
+4. `#jobs-type-select` has 99 options (98 enum values + "Any type").
+5. Esc closes cleanly.
+
+[2026-05-14T04:18:30Z]
+
+## QA-13 — `longterm` visual rule — **PASS**
+
+Saved three JobDefinitions in a QA-only state dir, drove the live TUI
+to the Saved Templates view, read the raw cell markup from the table:
+
+| Row | Job name | Rendered markup |
+|---|---|---|
+| 0 | Production-LONGTERM-mail | `[yellow b]Production-LONGTERM-mail[/]` |
+| 1 | qa-longterm-archive | `[yellow b]qa-longterm-archive[/]` |
+| 2 | qa-shortish | `qa-shortish` (no markup) |
+
+Substring match works regardless of case (`longterm` matches lowercase
+and `LONGTERM` uppercase). Non-matching names render plain.
+
+[2026-05-14T04:20:30Z]
