@@ -1,5 +1,120 @@
 # Changelog
 
+## Release index
+
+| Version | Date | Headline |
+|---|---|---|
+| [v0.14.4](#v0144--2026-05-13) | 2026-05-13 | Documentation overhaul — QA handover (README, Workflow Guide, new QA Test Plan + Runbook, Release index) |
+| [v0.14.3](#v0143--2026-05-13) | 2026-05-13 | NewJobModal connector dropdown — `initializeOrganization` per org |
+| [v0.14.2](#v0142--2026-05-13) | 2026-05-13 | Connectors view — visible empty state + error messages |
+| [v0.14.1](#v0141--2026-05-13) | 2026-05-13 | NewJobModal UX rework — 5-day default, 4 explicit buttons, plain labels |
+| [v0.14.0](#v0140--2026-05-13) | 2026-05-13 | Job Scheduler per-view actions + log viewer + timer toggle + lingering banner |
+| [v0.13.2](#v0132--2026-05-13) | 2026-05-13 | Dashboard log — escape user-controlled text before `RichLog.write` |
+| [v0.13.1](#v0131--2026-05-13) | 2026-05-13 | NewJobModal — fix Org→Connector→folder auto-flow |
+| [v0.13.0](#v0130--2026-05-13) | 2026-05-13 | Job Scheduler tab + `dr-job-run` / `dr-job-delete` + systemd retention timers |
+| [v0.12.0](#v0120--2026-05-13) | 2026-05-13 | Realm Settings edit modals (mail / splash / pwpolicy / inactivity) |
+| [v0.11.0](#v0110--2026-05-12) | 2026-05-12 | Jobs Monitor v2 — single-call `listRealmTasks` + type filter + live AE log |
+| [v0.10.2](#v0102--2026-05-12) | 2026-05-12 | dr-tui terminal compatibility — PuTTY + legacy SSH clients |
+| [v0.10.1](#v0101--2026-05-12) | 2026-05-12 | Jobs Monitor — Pause / Resume / Cancel / Set Priority wired live |
+| v0.10.0 | (rolled into v0.10.1) | F3 Jobs Monitor modal — realm-wide jobs + history |
+| v0.09 | — | F2 documentation side-pane — DR PDFs as built-in TUI help |
+| v0.08.1 | — | Realm Settings sub-tree (read-only) |
+| v0.08 | — | System Settings (advanced) endpoint capture + reference doc |
+| v0.07.1 | — | Connector capture + Deactivate button |
+| v0.07 | — | RPM packaging + `install.sh` for self-contained distribution |
+| v0.06 | — | TUI tabbed layout + CRUD modals (depots, users, groups, virus) |
+| v0.05 | — | Initial TUI hierarchical tree views |
+| v0.04 and earlier | — | dr-load CLI + Locust load tests + pytest functional suite |
+
+Click a version to jump to its entry. Each entry names the endpoints
+touched, files changed, and pilot test added (if any). For
+feature-by-feature **expected behaviour** see
+[`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
+fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.14.4 — 2026-05-13
+
+### Changed: documentation overhaul for QA Engineer handover
+
+No code changes; documentation only. Targeted at a QA engineer taking
+ownership of the test plan, but the same docs are useful for any
+developer onboarding to the codebase.
+
+**README.md**
+
+- Refreshed the TUI overview section: now describes all four tabs
+  (Landing, System Settings, Organizations, Job Scheduler) with the
+  current state of each, instead of stopping at v0.06.
+- Documented the F3 Jobs Monitor modal's v0.11 behaviours (single-call
+  `listRealmTasks`, operation-type filter, per-task `L` log viewer).
+- Rewrote the **Job Scheduler tab** section to reflect v0.14.1 UX
+  (5-day default, four buttons, plain-English labels) and the v0.14.3
+  connector-dropdown fix.
+- Refreshed **Project Structure** to include `scheduler.py`,
+  `cli_jobrun.py`, `cli_jobdel.py`, `help_content/`, the new
+  `endpoints_v0.08.md`, and the three TUI pilot test files.
+- Added a **Documentation Map** section at the bottom listing every
+  markdown file in the repo with role-based "quick links" (QA → here,
+  on-call → there).
+- Added a **TUI pilot tests** subsection under the pytest section —
+  these run in ~12 seconds and catch most regressions, so they should
+  be in every release-candidate workflow.
+
+**CHANGELOG.md**
+
+- Added a **Release index** table at the top listing every version
+  with a one-line headline and a clickable anchor. Lets QA scan the
+  release history without reading every entry.
+
+**DR_Workflow_Guide.md**
+
+- Added §9 "Feature additions v0.08 → v0.14 (concise reference)"
+  covering Realm Settings (read v0.08 / edit v0.12), the F2 doc
+  pane, F3 Jobs Monitor v2, Connector capture + Deactivate, and the
+  Job Scheduler tab + companion CLIs.
+- §9.6 captures three "mistakes worth remembering" (v0.13.1
+  Select-auto-pick, v0.13.2 markup escape, v0.14.3
+  initializeOrganization) — the patterns most likely to be repeated
+  by a regression.
+- §9.7 documents the **markup safety rule** for `RichLog` /
+  markup-enabled `Static` widgets.
+
+**docs/QA_TEST_PLAN.md (new)**
+
+Structured handover for QA. Covers:
+
+1. Environment — base URL, test users, persistent state, log
+   locations.
+2. **10-minute smoke test** with 10 explicit pass/fail steps.
+3. **Feature matrix** — every shipped feature mapped to surface,
+   pilot test, and changelog entry.
+4. Detailed test scenarios for: storage depots, realm settings edit
+   modals, F3 Jobs Monitor actions, **NewJobModal end-to-end**,
+   retention timers, connectors view, dr-load functional + indexing.
+5. Known limitations (API-side gaps and workarounds).
+6. Regression areas — ordered by how often each is touched.
+7. Filesystem map.
+8. Bug report template.
+
+**docs/RUNBOOK.md (new)**
+
+Symptom-driven troubleshooting cookbook. Eight sections:
+
+- §1 `dr-load preflight` failures
+- §2 `dr-tui` won't launch / crashes
+- §3 Connectors view empty — the v0.14.3 root cause with a live
+  reproduction script
+- §4 Retention timer didn't fire — full diagnostic chain
+- §5 Pilot tests failing
+- §6 Where to look when something is "off"
+- §7 Quick-reference commands
+- §8 Escalation procedure
+
+All five updated markdown files cross-link cleanly (verified
+programmatically — no broken `.md` links).
+
 ## v0.14.3 — 2026-05-13
 
 ### Fixed: NewJobModal connector dropdown — initializeOrganization per org

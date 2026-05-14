@@ -15,6 +15,7 @@
 6. Endpoint Capture Methodology (proxy + Playwright)
 7. The dr-tui Landing Dashboard
 8. Distribution / RPM Packaging
+9. Feature additions v0.08 → v0.14 (concise reference)
 
 ---
 
@@ -1023,4 +1024,134 @@ extensions and both have manylinux aarch64 wheels on PyPI.
 
 ---
 
-*Last updated: 2026-05-12*
+## 9. Feature additions v0.08 → v0.14 (concise reference)
+
+The TUI grew several features after the v0.07 RPM packaging milestone.
+This section is a one-paragraph-per-feature map; for full
+**expected behaviour** see [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md),
+and for **symptom → fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+### 9.1 — Realm Settings (v0.08 read / v0.12 edit)
+
+System Settings → Realm Settings sub-tree adds four leaves: **Mail
+Server**, **Splash Message**, **Password Policy**, **Inactivity
+Timeout**. Each one reads via a `realmManager/get*` endpoint and (since
+v0.12) edits via the corresponding `realmManager/set*` (or
+`createMailServerConfig` upsert) endpoint. The Edit button on each
+panel — or F4 with the leaf selected — pops a small form modal with
+inline validation (port ranges, password-policy composition guard,
+non-negative seconds).
+
+Endpoint shapes in [`docs/endpoints_v0.08.md`](docs/endpoints_v0.08.md).
+
+### 9.2 — F2 Documentation side-pane (v0.09)
+
+F2 toggles a Markdown side-pane on the current tab. Content is sourced
+from `/data/import/Digital Reef PDFs/5.5.3.1 complete/` (extracted via
+`tools/extract_help.py` once at build time, results checked into
+`dr_tui/help_content/`). 18 topic files map 1-1 to TUI views. The
+side-pane is hidden by default to keep the dashboard breathing room
+for `admin@training`.
+
+### 9.3 — F3 Jobs Monitor modal (v0.10 / v0.11)
+
+Full-screen modal listing every task realm-wide. Three notable
+behaviours:
+
+1. **Single-call data source.** Prior to v0.11 the modal fanned out
+   `projectManager/listTasks` once per project. v0.11 replaced that
+   with a single `realmManager/listRealmTasks` call. The response is
+   already flat (orgName, owner, projectName, dateStarted,
+   dateCompleted, secondsElapsed, operationState, operationType) so
+   the modal builds rows directly without descending into
+   `currentStatus[]`.
+2. **Server-side type filter.** The Select widget is populated from
+   `realmManager/listOperationTypes`. Picking one adds an
+   `OPERATION_TYPE EQUALS <value>` filter to `listRealmTasks`, so
+   filtering doesn't fetch-and-discard.
+3. **Per-task AE log.** `L` shortcut opens `TaskLogModal`. The
+   `taskSri` (AE worker's "Instance ID") isn't exposed in
+   `listRealmTasks` — it has to be pulled from
+   `currentStatus → "Service Node Debug State" → "Instance ID"` via
+   `taskManager/getTasks(includeDrDebug=true)`. Once the SRI is
+   known, `taskManager/getSRITaskLog` returns log lines straight from
+   the AE.
+
+Action buttons (Pause / Resume / Cancel / Priority) reuse the existing
+fetchers from v0.10.1. Cancel is mandatory-`systemScope:true`; we
+discovered this the hard way (every probe without it returned HTTP 500
+with a server-side NullPointerException). Set Priority uses an
+unusually minimal body shape — no contextHandle, no systemScope, just
+`{requestHandle, priority, taskHandle}`. See
+[`docs/endpoints_v0.06.md`](docs/endpoints_v0.06.md) §"Job control".
+
+### 9.4 — Connector capture & Deactivate (v0.07.1)
+
+Organizations → org → Connectors panel got a **Deactivate** button.
+Maps to `adminOrgManager/deactivateConnectors`. The body sends
+connector *names* in a `handles` array (not handles — quirky API
+choice but that's the captured shape). The row stays visible after
+deactivation with `status: DEACTIVATED`; for true removal use
+`orgManager/deleteConnector` (no UI exposure yet — used only from the
+F8 Delete path).
+
+### 9.5 — Job Scheduler tab (v0.13 → v0.14.3)
+
+A new top-level tab + two companion CLIs that turn the indexing
+workflow into a reusable template. See README's "Job Scheduler tab"
+section for full UX. Architecture notes:
+
+- **JobDefinition** dataclass persisted as `~/.dr-tools/jobs/<slug>.json`.
+  Field set: name, org, project_handle (auto-picked), connector_*,
+  remote_host, remote_path, path (subfolder), retention_seconds,
+  description.
+- **Run lifecycle.** "Run" button shells out to `dr-job-run <slug>`.
+  Same CLI is invokable from cron / systemd, so behaviour is identical
+  in interactive and unattended runs. The CLI:
+  1. Logs in via `Config()` (DR_PASS env or `OrgUserConfig().password`).
+  2. Calls `submit_indexing_job()` — wraps the full createDataArea →
+     getCorpusSetByName → createCorpus → addCorpus →
+     createRepresentation chain (body shapes pinned from
+     `locustfile_indexing.py`).
+  3. Appends a `RunRecord` to `~/.dr-tools/runs/<slug>.jsonl`.
+  4. If `retention_seconds > 0`, schedules a one-shot **systemd user
+     timer** at
+     `~/.config/systemd/user/dr-tools-retention-<slug>-<run_id>.timer`.
+     The timer's `OnCalendar=` is an absolute UTC time;
+     `RemainAfterElapse=false` means the unit GCs itself after firing.
+- **Retention deletion.** The timer's `.service` invokes
+  `dr-job-delete <slug> <run-id>`, which reads the RunRecord, looks up
+  the `corpus_handle` + `data_area_handle` it stored, and deletes both
+  via `orgManager/deleteCorpus` + `orgManager/deleteDataArea`.
+- **Linger.** systemd-user units die at logout. The TUI surfaces a
+  yellow banner when retention timers exist and `loginctl
+  enable-linger` is off.
+- **Visual rule.** Jobs whose name contains the substring `longterm`
+  render yellow-bold in the Saved Templates table.
+
+### 9.6 — Three v0.13 follow-ups worth remembering
+
+These three patches are the most likely places a fresh QA regression
+will surface; each has a regression test, but the underlying mistake
+is easy to repeat.
+
+| Patch | Mistake | Fix |
+|---|---|---|
+| v0.13.1 | Textual's `Select(allow_blank=False)` auto-picks the first option but doesn't fire `on_select_changed` for that initial pick. Our `_cur_conn_handle` stayed empty → Browse failed. | Mirror the auto-pick into internal state in `__init__`. |
+| v0.13.2 | Raw log text fed into `RichLog.write()` runs through `Text.from_markup` — Java argv dumps like `[/bin/bash, …]` look like unbalanced closing tags. | `rich.markup.escape()` the user-controlled portions; or `markup=False` on read-only viewers. |
+| v0.14.3 | DRSysAdmin's session starts in `super_system_customer` context. `adminOrgManager/listConnectors` returns `[]` *silently* without a per-org `initializeOrganization` switch. | Call `drdata.ensure_org_context(client, org)` before every per-org list, in every code path that iterates orgs. |
+
+### 9.7 — Markup safety rule (dr-tui)
+
+Anywhere user-controlled text flows into a Textual `RichLog` or
+`Static` that has `markup=True` (the default), it must be wrapped in
+`rich.markup.escape()` first. Log lines, error messages from the
+server, file paths — all can carry `[/...]` patterns that crash the
+parser. Read-only log viewers default to `markup=False` (see
+`TaskLogModal`, `LogViewerModal`). The dashboard's log pane uses
+`markup=True` for colour-coding levels but escapes the payload — see
+the pattern in `_dash_tick_logs`.
+
+---
+
+*Last updated: 2026-05-13*

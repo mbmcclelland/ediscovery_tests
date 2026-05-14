@@ -1,6 +1,6 @@
 # eDiscovery API Test Suite
 
-**Version 0.14.3**
+**Version 0.14.4**
 
 Automated API tests, load tests, a Textual TUI for live monitoring, and a
 reinstall toolchain for the Digital Reef eDiscovery REST API. Includes:
@@ -128,51 +128,94 @@ dr-tui            # or: python -m dr_tui
 **Login screen** — pick `DRSysAdmin` or `admin@training`, type the password
 (defaults to `password` for the lab), press Enter.
 
-**Dashboard (v0.06)** — `TabbedContent` with two tabs. Each tab is a
+**Dashboard** — `TabbedContent` with up to four tabs. Each tab is a
 `Horizontal(Tree, ContentSwitcher)`: hierarchical Tree on the left, detail
-pane on the right that switches view per selected leaf. System Settings
-leaves carry **action bars** with CRUD buttons that drive modal dialogs.
+pane on the right that switches per selected leaf. Action rows carry CRUD
+buttons that drive modal dialogs.
 
 ```
- ┌─[ System Settings ]── Organizations ─────────────────────────────┐
- │ ▼ Storage                ┃  Connectors                            │
- │   • Document Storage     ┃ ┌────────────────────────────────────┐ │
- │   • Index Storage        ┃ │ Name   Type   Host   Path   Status │ │
- │   System Storage Depot   ┃ │ nfs1   NFS    …                    │ │
- │   Virus Detection        ┃ └────────────────────────────────────┘ │
+ ┌─[ Landing ]── System Settings ── Organizations ── Job Scheduler ─┐
+ │ ▼ Realm Settings         ┃  Password Policy                       │
+ │   Mail Server            ┃ ┌────────────────────────────────────┐ │
+ │   Splash Message         ┃ │ [Edit]                             │ │
+ │  ▶ Password Policy       ┃ │ Enforce strong:     yes            │ │
+ │   Inactivity Timeout     ┃ │ Minimum length:     8              │ │
+ │ ▼ Storage                ┃ │ Minimum uppercase:  1              │ │
+ │   • Document Storage     ┃ │ Minimum numbers:    1              │ │
+ │   • Index Storage        ┃ │ Password expiration: 90 days       │ │
+ │   System Storage Depot   ┃ └────────────────────────────────────┘ │
+ │   Virus Detection        ┃                                        │
  │   System Users           ┃                                        │
  │   System Groups          ┃                                        │
  └────────────────────────────────────────────────────────────────────┘
- DRSysAdmin · org=training · view=org-connectors · connectors=2
- [q] quit  [r] refresh  [l] logout
+ DRSysAdmin · view=sys-pwpolicy · 19/19 tests · v0.14.3
+ [F1] help  [F2] docs  [F3] jobs  [F10] quit
 ```
 
-- **Dashboard tab** (DRSysAdmin only — hidden for `admin@training`):
-  the landing page. Shows License details, Realm Node status (matching
-  Monitoring → Node Status), live system metrics (CPU / Memory / Net /
-  Disk IOPS with sparklines + peak / avg over a rolling 60-sample
-  window), a streaming `tail -f /home/auraria/AHS/output/*.log` view
-  with INFO / WARN / ERROR filter toggles, and the top 5 CPU processes
-  from `ps aux`. Refresh cadence: metrics 2 s, logs 1 s, processes 3 s,
-  license + node 30 s.
-- **System Settings tab** (DRSysAdmin only — hidden for `admin@training`):
-  Storage > Document/Index Storage Depots (full CRUD), System Storage
-  Depot (read), Virus Detection (read + "Update Now"), System Users
-  (full CRUD + reset-password), System Groups (full CRUD).
-- **Organizations tab** (both roles): one branch per org with 8 leaves —
-  Users, Admins, Groups, Projects, Running Jobs, Completed Jobs,
-  Connectors, Storage. Read-only for v0.06.
+The four tabs:
 
-**v0.06 CRUD modals**: depot create / edit / delete; user create / edit /
-delete / reset-password; group create / edit / delete; virus-defs
-"Update Now". All operations run on worker threads, the status bar
-flashes green on success, and the visible leaf auto-refreshes once the
-write returns. Modal validation guards empty fields, password mismatch,
-etc.
+- **Landing Dashboard** (DRSysAdmin only): License details, Realm Node
+  Status, live system metrics (CPU / Memory / Net / Disk IOPS with
+  sparklines + peak/avg over a rolling 60-sample window), a streaming
+  `tail -f /home/auraria/AHS/output/*.log` view with INFO/WARN/ERROR
+  filter toggles, and the top 5 CPU processes. Cadence: metrics 2 s,
+  logs 1 s, processes 3 s, license + node 30 s. **Log lines are
+  markup-escaped** (v0.13.2) so log text containing literal `[…]`
+  brackets (Java argv dumps etc.) doesn't crash the renderer.
+
+- **System Settings** (DRSysAdmin only): full CRUD on Storage Depots
+  (document + index), System Storage Depot (read), Virus Detection
+  (read + "Update Now"), System Users (CRUD + reset-password), System
+  Groups (CRUD). **Realm Settings sub-tree** (v0.08/v0.12): Mail Server,
+  Splash Message, Password Policy, Inactivity Timeout — all **read +
+  edit** via an inline "Edit" button on each panel or **F4**.
+
+- **Organizations** (both roles): one branch per org with 8 leaves —
+  Users, Admins, Groups, Projects, Running Jobs, Completed Jobs,
+  Connectors (with **Deactivate** action — v0.07), Storage. The
+  Connectors panel includes an **inline status line** (v0.14.2) that
+  reports "Loading…" / count / empty-state / error so you never see
+  just empty column headers.
+
+- **Job Scheduler** (v0.13+, both roles): see the dedicated section
+  further down. Four sub-views (Running Jobs, Saved Templates,
+  Retention Timers, Run History), each with its own action row.
+
+**CRUD modals** include depot, user, group, virus-defs "Update Now",
+plus Realm Settings editors and the Job Scheduler's New Job wizard.
+All operations run on worker threads, the status bar flashes green on
+success, and the visible leaf auto-refreshes once the write returns.
+Modal validation guards empty fields, password mismatch, port ranges,
+password-policy composition (so the user can't accidentally set
+`min_length=4` with `min_upper+min_numbers=6`), etc.
 
 Auto-refresh ticks every 5 s but only re-fetches the currently-visible
 leaf (no API hammering). DRSysAdmin drill-down into a non-default org
-transparently calls `realmManager/initializeOrganization` first.
+transparently calls `realmManager/initializeOrganization` first; this
+matters because `adminOrgManager/listConnectors` returns an empty list
+*silently* without that context switch (v0.14.3 fix).
+
+### F3 Jobs Monitor modal (v0.10 / v0.11)
+
+A full-screen modal that pops over any tab. Replaces the per-project
+`listTasks` fan-out with one `realmManager/listRealmTasks` call (much
+faster and gives the proper `operationState` enum). Features:
+
+- Master DataTable showing every running + completed task realm-wide,
+  with state / dateStarted / dateCompleted / secondsElapsed columns
+  already pre-flat from the response.
+- Filter buttons (All / Running / Completed / Deleted), a search box,
+  and an **operation-type Select** populated from
+  `realmManager/listOperationTypes` (100 entries — DOCUMENT_ADD_FROM_FILE_LIST,
+  PREPARE_FOR_ANALYTICS, …). Selection adds an
+  `OPERATION_TYPE EQUALS <value>` filter server-side.
+- Action buttons: **Pause / Resume / Cancel / Set Priority / Log**.
+  Cancel is confirm-gated. Priority opens a modal with H/N/L hotkeys.
+  Log (`L` shortcut) opens `TaskLogModal` — a 2-step lookup that finds
+  the AE's per-task `taskSri` ("Instance ID") inside
+  `currentStatus → "Service Node Debug State"` and then tails the live
+  log via `taskManager/getSRITaskLog`. `r` re-fetches, `n` cycles 1000
+  → 2000 → 3000 lines.
 
 ### Keyboard navigation (Midnight Commander-style)
 
@@ -246,60 +289,117 @@ apps natively with zero config.
 
 ---
 
-### Job Scheduler tab (v0.13+)
+### Job Scheduler tab (v0.13+, refined through v0.14.3)
 
-The Job Scheduler tab lets you define **indexing job templates** and
-run them on demand or via a saved CLI. Each template captures the
-org, project, connector, target path, retention window, and a
-description; the same template can be re-run any number of times.
+The Job Scheduler tab lets you define **indexing job templates** and run
+them on demand or via the same wrapped CLI that systemd timers would.
+Each template captures the org, project (auto-picked), connector, target
+folder, retention window, and a free-text description. Templates are
+persistent and re-runnable.
 
-- **New Job** opens a wizard that lets you pick org → project →
-  connector, then browse the connector's filesystem in a lazy-loading
-  tree (folders are `🗀`, files `🗎`). Select a directory and click
-  **Count files** for a recursive count (DR's REST API exposes no
-  folder size endpoint, so v0.13 reports file/dir counts only).
-- **Retention period** is set in seconds / minutes / hours / days /
-  weeks. Default is **1 week**; `0` means keep forever. When a job
-  runs and retention is non-zero, dr-tui writes a one-shot **systemd
-  user timer** at `~/.config/systemd/user/dr-tools-retention-<slug>-<run_id>.timer`
-  that fires `dr-job-delete <slug> <run_id>` at the retention horizon.
-- **Run Now** shells out to `dr-job-run <slug>` — the same code path
-  cron / systemd would use, so behaviour is identical in interactive
-  and unattended runs.
-- Jobs whose name contains the substring **`longterm`** render
-  yellow-bold in the Saved Templates table, as a visual cue for
-  long-retention archives.
+**Four sub-views** (left tree → right content-switcher):
 
-State layout under `~/.dr-tools/`:
+| Sub-view | What it shows | Action row |
+|---|---|---|
+| **Running Jobs** | Tasks across the realm with `operationState=RUNNING` | Pause / Resume / Cancel / Priority / Refresh |
+| **Saved Templates** | Persisted JobDefinitions; `longterm` substring renders yellow-bold | New Job / Run / Edit / View Log / Delete / Refresh |
+| **Retention Timers** | Active `dr-tools-retention-*` systemd user timers (next fire + time left) | Toggle / Cancel timer / Refresh |
+| **Run History** | One row per `dr-job-run` execution, colour-coded by status | View Log / Refresh |
+
+A **lingering banner** (v0.14.0) appears at the top of the tab when
+retention timers exist *and* `loginctl enable-linger` is off — without
+linger the timers die at logout (see below).
+
+#### New Job wizard (v0.14.1 — redesigned)
+
+Three fields and a file tree, in plain English. No "Step N" prefixes,
+no project picker (auto-picked from the chosen org).
+
+Field-by-field validation; the error line names the specific field
+that's wrong. For example:
+
+> "Connector not selected. Pick one from the Connector dropdown for organization 'training'."
+
+Field defaults:
+
+- **Name** — empty (required)
+- **Description** — empty (optional)
+- **Organization** — first org visible to the logged-in user
+- **Connector** — first connector for the org (after a per-org
+  `initializeOrganization` switch — v0.14.3 fix)
+- **Folder to index** — selected from the lazy-loading file tree;
+  click a folder to expand, click again to select. `🗀` = directory,
+  `🗎` = file
+- **Keep indexed data for** — **5 days** (per user spec). Units:
+  seconds / minutes / hours / days / weeks. `0` = keep forever
+
+**Action buttons:**
+
+- **Cancel** — discard, return None
+- **Schedule** — save the JobDefinition as a reusable template
+- **Run now** — save *and* immediately invoke `dr-job-run`
+- **Close** — same as Cancel (both labels for habit-compatibility)
+
+**Folder navigator extras:**
+
+- **Re-browse** reloads the connector root.
+- **Count files (recursive)** walks the subtree via repeated
+  `connectorManager/exploreConnector` calls; reports `N files, M dirs`
+  under the selected folder. DR's REST API exposes no folder-size
+  endpoint, so byte totals aren't available — file/dir counts only.
+
+#### State layout
 
 ```
-jobs/<slug>.json       saved JobDefinition (template)
-runs/<slug>.jsonl      append-only run history (one JSON per line)
-logs/<slug>-<ts>.log   tee'd stdout/stderr of one dr-job-run
+~/.dr-tools/
+  jobs/<slug>.json       saved JobDefinition (template)
+  runs/<slug>.jsonl      append-only run history (one JSON per line)
+  logs/<slug>-<ts>.log   tee'd stdout/stderr of one dr-job-run
 ```
 
-Override the state root via `DR_TOOLS_STATE_DIR=<path>` (tests use
-this; you can use it to relocate state to e.g. `/var/lib/dr-tools`).
+Override the state root via `DR_TOOLS_STATE_DIR=<path>` (tests use this;
+you can use it to relocate state to e.g. `/var/lib/dr-tools`).
 
-**systemd user timers + linger.** A user-scope systemd timer dies the
-moment that user logs out unless lingering is enabled. To keep
-retention deletes running across logouts:
+#### systemd user timers + linger
+
+When a Run Now or Scheduled job fires, dr-tools writes a **one-shot
+systemd user timer** at:
+
+```
+~/.config/systemd/user/dr-tools-retention-<slug>-<run_id>.{service,timer}
+```
+
+The timer fires `dr-job-delete <slug> <run_id>` at the retention
+horizon (an absolute UTC `OnCalendar=` time, `RemainAfterElapse=false`
+so the unit GCs itself after firing).
+
+A user-scope systemd timer **dies the moment that user logs out**
+unless lingering is enabled. To keep retention deletes running across
+logouts:
 
 ```bash
 sudo loginctl enable-linger $USER
 ```
 
-Check the current state with `loginctl show-user $USER --property=Linger`.
-The TUI surfaces a hint when lingering is off but the user has scheduled
-retention timers.
+Verify with:
 
-The two CLIs ship as console-script entry points:
+```bash
+loginctl show-user $USER --property=Linger    # Linger=yes / Linger=no
+```
 
-- `dr-job-run <name-or-slug>` — run one job manually (also wired to
-  the **Run Now** button).
-- `dr-job-delete <slug> <run-id>` — retention cleanup; invoked by the
-  systemd `.service` automatically, but can be run manually to expire
-  a single run early.
+The TUI surfaces a yellow banner at the top of the Job Scheduler tab
+when there are retention timers active *and* lingering is off.
+
+#### Companion CLIs
+
+| Command | Purpose | Invoked by |
+|---|---|---|
+| `dr-job-run <slug-or-name>` | Run one saved job: log in → submit indexing chain → append RunRecord → schedule retention timer | The TUI's Run / Run Now buttons; also runnable from a shell |
+| `dr-job-delete <slug> <run-id>` | Retention cleanup: delete corpus + data area created by one run | The retention `.service` unit fires this; runnable manually to expire a run early |
+
+Both CLIs read `~/.env` for credentials (same as `dr-tui` / `dr-load`),
+respect `DR_TOOLS_STATE_DIR`, and tee stdout/stderr to a per-run log
+file under `~/.dr-tools/logs/`.
 
 ---
 
@@ -486,22 +586,22 @@ mismatches in the bash bracketed-paste sequences and switch
 
 ---
 
-## Project Structure
+## Project Structure (v0.14.3)
 
 ```
 ediscovery_tests/
 ├── .env.example              # Environment config template
 ├── .env                      # Your local config (git-ignored)
 ├── __version__.py            # Version string
-├── CHANGELOG.md              # Release notes
+├── CHANGELOG.md              # Per-release notes (Release index at top)
 ├── README.md                 # This file
 ├── PLAN.md                   # Active task plan
-├── DR_Workflow_Guide.md      # API + database walkthrough
-├── config.py                 # Config loader (reads .env)
+├── DR_Workflow_Guide.md      # API + database walkthrough by feature
+├── config.py                 # Config / OrgUserConfig loaders (read .env)
 ├── conftest.py               # Shared pytest fixtures (auth, clients, helpers)
 ├── pytest.ini                # Pytest settings and markers
 ├── requirements.txt          # Python dependencies
-├── setup.cfg                 # Package config + dr-load + dr-tui entry points
+├── setup.cfg                 # Package config + dr-{load,tui,job-run,job-delete}
 ├── setup.py                  # setuptools shim for editable install
 │
 ├── cli.py                    # dr-load CLI entry point (typer)
@@ -510,27 +610,36 @@ ediscovery_tests/
 │
 ├── cleandr.sh                # Destructive uninstall (preserves license)
 ├── DR_freshinstall.exp       # Expect: drives InstallAnywhere console installer
-├── playwright_fresh_install.py # Full Playwright fresh-install + lifecycle workflow
-├── playwright_fresh_init.py    # Focused post-install setup (just enough for tests)
+├── playwright_fresh_install.py # Full Playwright fresh-install + lifecycle
+├── playwright_fresh_init.py    # Focused post-install setup
 ├── proxy_logger.py           # mitmproxy addon — records DR REST traffic to /tmp
 │
-├── dr_tui/                   # Textual TUI (v0.05+ tabbed hierarchical views)
+├── dr_tui/                   # Textual TUI
 │   ├── __init__.py / __main__.py
-│   ├── app.py                # DRTUIApp / LoginScreen / DashboardScreen
-│   ├── data.py               # Sync API fetchers per leaf
+│   ├── app.py                # DRTUIApp + every screen / modal
+│   ├── data.py               # Synchronous API fetchers per feature
+│   ├── help.py               # Loader for the F2 documentation side-pane
+│   ├── metrics.py            # CPU / mem / IOPS / log-tail helpers
+│   ├── scheduler.py          # v0.13+ JobDefinition / RunRecord + systemd timers
+│   ├── cli_jobrun.py         # `dr-job-run <slug>` entry point
+│   ├── cli_jobdel.py         # `dr-job-delete <slug> <run-id>` entry point
+│   ├── help_content/         # PDF-extracted help markdown (one per view)
 │   └── app.tcss              # Textual stylesheet
 │
 ├── helpers/
 │   ├── __init__.py
-│   ├── api_client.py         # EDiscoveryClient wrapper (v0.06: handles 204)
+│   ├── api_client.py         # EDiscoveryClient wrapper (handles 204 / bare bool)
 │   ├── preflight.py          # Preflight checks + orphan sweep
 │   └── monitor.py            # LogWatcher + JobPoller background threads
 │
-├── docs/
-│   ├── endpoints_v0.05.md    # Read-path endpoint reference (dr-tui views)
-│   └── endpoints_v0.06.md    # Write-path endpoint reference (CRUD work)
+├── docs/                     # Reference documentation
+│   ├── endpoints_v0.05.md    # Read-path endpoint reference
+│   ├── endpoints_v0.06.md    # Write-path endpoint reference (CRUD + jobs)
+│   ├── endpoints_v0.08.md    # System Settings (advanced) endpoints
+│   ├── QA_TEST_PLAN.md       # ← v0.14.4: structured handover for QA Engineer
+│   └── RUNBOOK.md            # ← v0.14.4: troubleshooting + symptom lookup
 │
-├── tests/                    # pytest functional suite (10 modules, 87 tests)
+├── tests/                    # pytest functional + TUI pilot suites
 │   ├── test_auth.py
 │   ├── test_ocr_report.py
 │   ├── test_status.py
@@ -540,10 +649,12 @@ ediscovery_tests/
 │   ├── test_billing.py
 │   ├── test_workflows.py
 │   ├── test_org_user.py
-│   └── test_indexing_workflow.py
+│   ├── test_indexing_workflow.py
+│   ├── test_dr_tui_dashboard_layout.py   # TUI: dashboard, F-keys, modals
+│   ├── test_dr_tui_depot_modal.py        # TUI: depot/user/group/priority/settings
+│   └── test_dr_tui_scheduler.py          # TUI: scheduler + NewJobModal + LogViewer
 │
-└── misc/                     # Historical recordings, old debug scripts,
-                              # stale Locust CSVs, foreign-language files
+└── misc/                     # Historical recordings, old debug scripts
 ```
 
 ---
@@ -574,6 +685,19 @@ pytest -n 4                  # Run on 4 parallel workers
 ```bash
 pytest -v --log-cli-level=DEBUG
 ```
+
+### TUI pilot tests (Textual harness, no live API needed)
+
+```bash
+pytest tests/test_dr_tui_dashboard_layout.py \
+       tests/test_dr_tui_depot_modal.py \
+       tests/test_dr_tui_scheduler.py
+```
+
+These mount the actual TUI screens in Textual's `Pilot` harness and
+walk happy-path / cancel / validation flows without hitting the DR
+API. **Always run them before tagging a release** — they catch most
+modal regressions in seconds. Current count: **19 tests, all passing**.
 
 ---
 
@@ -689,3 +813,39 @@ The Edge recorder JSON captures UI clicks. Here's how they translate:
     pip install -r requirements.txt
     pytest -m smoke --html=report.html --self-contained-html
 ```
+
+---
+
+## Documentation Map
+
+Every markdown file in the repo, what it's for, and who should read it.
+
+| File | Purpose | Audience |
+|---|---|---|
+| **[README.md](README.md)** | This file. Install, quick start, feature inventory, command reference. | Everyone |
+| **[CHANGELOG.md](CHANGELOG.md)** | Per-release notes with a Release index at the top. Every shipped feature has an entry naming the endpoints / files touched. | Developers, QA |
+| **[DR_Workflow_Guide.md](DR_Workflow_Guide.md)** | Feature-by-feature walkthrough of the TUI: each tab, each modal, the API chain it triggers, and the database tables affected. | New engineers, QA |
+| **[docs/QA_TEST_PLAN.md](docs/QA_TEST_PLAN.md)** | Structured handover for a QA Engineer: feature matrix, test scenarios with pass/fail criteria, smoke-test order, regression areas, environment setup. | **QA Engineer** |
+| **[docs/RUNBOOK.md](docs/RUNBOOK.md)** | Troubleshooting cookbook — common failure symptoms keyed to root cause + fix. ("Connectors empty?" → "Did you call initializeOrganization?") | QA, support, on-call |
+| **[docs/endpoints_v0.05.md](docs/endpoints_v0.05.md)** | DR REST read-path endpoints used by the TUI. Body + response shapes captured live via mitmproxy. | API integration work |
+| **[docs/endpoints_v0.06.md](docs/endpoints_v0.06.md)** | Write-path endpoints — CRUD on depots / users / groups, job control (pause/resume/cancel/priority), listRealmTasks/listOperationTypes/getSRITaskLog. | API integration work |
+| **[docs/endpoints_v0.08.md](docs/endpoints_v0.08.md)** | System Settings (advanced) — Mail / Splash / Password Policy / Inactivity / Services / Templates / Reef Review. | API integration work |
+| **[PLAN.md](PLAN.md)** | Active task plan — what's next. | Project owner |
+| **[packaging/README.md](packaging/README.md)** | RPM build instructions for `dr-tools` (self-contained venv, offline-installable). | Release engineers |
+
+### Quick links by role
+
+**I just want to use dr-tui** → start with the [TUI Usage](#tui-usage-dr-tui)
+section above. F1 inside the app gives you a keybinding card.
+
+**I'm doing QA on a release** → start with
+[`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). It has a 10-minute
+smoke-test ordering, feature matrix with expected behaviour, and
+known limitations.
+
+**Something broke and I need to debug it fast** →
+[`docs/RUNBOOK.md`](docs/RUNBOOK.md) maps symptoms to root causes.
+
+**I'm integrating against the DR REST API directly** →
+`docs/endpoints_v0.0{5,6,8}.md` have the body + response shapes for
+every endpoint dr-tools touches.
