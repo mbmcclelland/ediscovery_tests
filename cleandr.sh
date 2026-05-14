@@ -1,12 +1,107 @@
 #! /usr/bin/bash
-SYSTEMD_LOG_LEVEL=debug systemctl stop drd
-# License goes to /root/ — DR_freshinstall.exp's final step expects it there.
-\cp -v /home/auraria/AHS/conf/license.lic /root/license.lic 2>/dev/null || \
-  \cp -v license.lic /root/license.lic
+#
+# cleandr.sh — destructive teardown of a DR install.
+#
+# Usage:
+#   bash cleandr.sh              # remove DR + dr-tools RPM + user state
+#   bash cleandr.sh --keeprpm    # leave the dr-tools RPM installed
+#
+# Removes (in order):
+#   1. drd service stopped
+#   2. license.lic preserved to /root/license.lic
+#   3. /home/auraria/AHS*, /data/{doc,index}storage/*, scratch dirs
+#   4. dr-tools RPM (unless --keeprpm) — see §dr-tools-removal below
+#   5. ~/.dr-tools/ user state for $SUDO_USER (and root if owned)
+#   6. ~/.config/systemd/user/dr-tools-{retention,recur}-*.{service,timer}
+#      + systemctl --user daemon-reload
+#
+# Run as root (or via sudo). The script is destructive and unrecoverable
+# for items 1-3; items 4-6 are recoverable by reinstalling the RPM and
+# re-creating saved jobs.
+set -euo pipefail
+
+KEEPRPM=false
+for arg in "$@"; do
+    case "$arg" in
+        --keeprpm) KEEPRPM=true ;;
+        -h|--help)
+            sed -n '2,21p' "$0"; exit 0 ;;
+        *) echo "[cleandr] unknown arg: $arg" >&2; exit 2 ;;
+    esac
+done
+
+# ---- 1. Stop drd --------------------------------------------------------
+SYSTEMD_LOG_LEVEL=debug systemctl stop drd 2>/dev/null || true
+
+# ---- 2. License preservation (DR_freshinstall.exp expects it here) ------
+\cp -v /home/auraria/AHS/conf/license.lic /root/license.lic 2>/dev/null \
+  || \cp -v license.lic /root/license.lic 2>/dev/null \
+  || echo "[cleandr] warning: no license.lic found to preserve"
+
+# ---- 3. Remove DR install + scratch dirs --------------------------------
 rm -rfv /home/auraria/AHS*
 rm -rfv /var/.com.zerog.registry.xml
 rm -rfv /tmp/cbe* cpuinfo.txt artemis* install.dir.*
 rm -rfv /data/docstorage/*
 rm -rfv /data/indexstorage/*
 
+# ---- 4. dr-tools RPM (v0.15+) -------------------------------------------
+# §dr-tools-removal
+if [ "$KEEPRPM" = "true" ]; then
+    echo "[cleandr] --keeprpm: leaving dr-tools RPM installed"
+else
+    if rpm -q dr-tools >/dev/null 2>&1; then
+        echo "[cleandr] removing dr-tools RPM"
+        dnf -y remove dr-tools 2>&1 | tail -5
+    else
+        echo "[cleandr] dr-tools RPM not installed; skipping"
+    fi
+fi
 
+# ---- 5. Per-user dr-tools state (jobs, runs, logs) ----------------------
+# When run via sudo, $SUDO_USER is the invoker. When run as root directly,
+# remove root's own state. Either way, only touch state that belongs to a
+# real user account.
+TARGET_HOMES=()
+if [ -n "${SUDO_USER:-}" ]; then
+    sudo_home="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+    [ -n "$sudo_home" ] && TARGET_HOMES+=("$sudo_home")
+fi
+[ "${EUID:-1}" = "0" ] && TARGET_HOMES+=("/root")
+# De-dup
+declare -A SEEN
+for h in "${TARGET_HOMES[@]}"; do
+    [ -n "$h" ] && SEEN["$h"]=1
+done
+for home in "${!SEEN[@]}"; do
+    if [ -d "$home/.dr-tools" ]; then
+        echo "[cleandr] removing $home/.dr-tools"
+        rm -rf "$home/.dr-tools"
+    fi
+    # Per-user systemd timers we installed.
+    units_dir="$home/.config/systemd/user"
+    if [ -d "$units_dir" ]; then
+        echo "[cleandr] removing dr-tools-* timers under $units_dir"
+        rm -fv "$units_dir"/dr-tools-retention-*.service \
+               "$units_dir"/dr-tools-retention-*.timer \
+               "$units_dir"/dr-tools-recur-*.service \
+               "$units_dir"/dr-tools-recur-*.timer 2>/dev/null || true
+        # daemon-reload the user manager if one exists.
+        if [ -n "${SUDO_USER:-}" ]; then
+            sudo -u "$SUDO_USER" systemctl --user daemon-reload 2>/dev/null || true
+        else
+            systemctl --user daemon-reload 2>/dev/null || true
+        fi
+    fi
+done
+
+echo
+echo "[cleandr] done. To rebuild DR:"
+echo "    expect -f DR_freshinstall.exp"
+echo "    python playwright_fresh_init.py"
+echo "    python qa_create_org_admin.py    # if admin@training got dropped"
+if [ "$KEEPRPM" = "true" ]; then
+    echo "    (dr-tools RPM left installed)"
+else
+    echo "    sudo dnf install ./packaging/rpmbuild/RPMS/x86_64/dr-tools-*.rpm"
+fi

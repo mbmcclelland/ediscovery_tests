@@ -508,3 +508,46 @@ a manual path input when permission is denied. Option 1 is the
 is outside the dr-tui scope.
 
 [2026-05-14T04:55:00Z]
+
+---
+
+## v0.15.0 release cycle — autonomous run
+
+User went on vacation; running unattended. Multi-persona pass:
+Dev/QA → Deployment → Beta User.
+
+## QA-17 — v0.15 scheduler features (Dev/QA) — **PASS (offline)**
+
+### v0.15 deliveries
+- Replaced file-tree browser with a manual Path Input (matches
+  `locustfile_indexing.py`'s proven pattern). NewJobModal no longer
+  calls `exploreConnector` at all → permission issues bypassed.
+- Added `JobDefinition.schedule` + a Schedule Select with 8 presets
+  (hourly/daily/3×day/4×day/weekdays-9am/weekly/monthly).
+- `schedule_recurring_job()` writes `dr-tools-recur-<slug>.{service,timer}`
+  with `Persistent=true` so missed fires catch up.
+- `unschedule_recurring_job()` removes the timer when user clears the
+  schedule on an edit.
+- `list_dr_timers()` picks up both prefixes (retention one-shots +
+  recurring schedules).
+- Saved-templates table cell for `longterm` substring now adds a
+  leading `* ` marker so the cue is bold-text + asterisk + colour,
+  not colour-only (accessibility — v0.15 beta-user is colour-blind).
+
+### Offline verification
+- 19/19 pilot tests green after the changes.
+- Smoke test of unit-file generation: `schedule_recurring_job` against
+  preset `3x-day` produces an `OnCalendar=*-*-* 03,11,19:00:00` timer
+  with the right ExecStart pointing at /opt/dr-tools/venv/bin/dr-job-run.
+
+### Live verification (deferred)
+Full live verification of Schedule + Run Now still needs the
+`admin@training` user to have the **Connectors** + **Project Data
+Areas** + **Corpora** permissions, which requires a one-time DR Web
+UI role grant (documented in `docs/DR_ROLE_SETUP.md`). With the v0.15
+modal pivot the wizard ITSELF is unblocked, but the indexing-chain
+endpoints invoked by `dr-job-run` still need the org-admin role to
+have those permissions. Beta user will perform the role grant per
+the doc.
+
+[2026-05-14T05:30:00Z]

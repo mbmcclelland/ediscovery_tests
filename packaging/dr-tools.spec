@@ -106,7 +106,19 @@ cat > %{buildroot}/usr/bin/dr-load <<'EOF'
 #!/bin/sh
 exec /opt/dr-tools/venv/bin/dr-load "$@"
 EOF
-chmod 0755 %{buildroot}/usr/bin/dr-tui %{buildroot}/usr/bin/dr-load
+# v0.15 — also ship the Job Scheduler CLIs (added in v0.13).
+cat > %{buildroot}/usr/bin/dr-job-run <<'EOF'
+#!/bin/sh
+exec /opt/dr-tools/venv/bin/dr-job-run "$@"
+EOF
+cat > %{buildroot}/usr/bin/dr-job-delete <<'EOF'
+#!/bin/sh
+exec /opt/dr-tools/venv/bin/dr-job-delete "$@"
+EOF
+chmod 0755 %{buildroot}/usr/bin/dr-tui \
+            %{buildroot}/usr/bin/dr-load \
+            %{buildroot}/usr/bin/dr-job-run \
+            %{buildroot}/usr/bin/dr-job-delete
 
 # Drop a sample .env so a fresh install has something to copy from.
 mkdir -p %{buildroot}%{drroot}/share
@@ -114,16 +126,22 @@ install -m 0644 .env.example %{buildroot}%{drroot}/share/env.example
 
 %files
 %defattr(-,root,root,-)
-%doc README.md CHANGELOG.md DR_Workflow_Guide.md docs/endpoints_v0.05.md docs/endpoints_v0.06.md
+%doc README.md CHANGELOG.md DR_Workflow_Guide.md docs/endpoints_v0.05.md docs/endpoints_v0.06.md docs/QA_TEST_PLAN.md docs/RUNBOOK.md docs/DR_ROLE_SETUP.md BETA_USER_README.md
 %license __version__.py
+# v0.15: own the /opt/dr-tools and share/ directories so `dnf remove`
+# cleans them up too (rather than leaving an empty share/ behind).
+%dir %{drroot}
+%dir %{drroot}/share
 %{drroot}/venv
 %{drroot}/share/env.example
 /usr/bin/dr-tui
 /usr/bin/dr-load
+/usr/bin/dr-job-run
+/usr/bin/dr-job-delete
 
 %post
 echo "dr-tools installed to %{drroot}/venv"
-echo "  dr-tui and dr-load are now on PATH"
+echo "  dr-tui, dr-load, dr-job-run, dr-job-delete are now on PATH"
 echo "  copy %{drroot}/share/env.example → ~/.env (or /etc/dr-tools/.env)"
 echo "  and edit the DR_HOST / DR_USER / DR_PASS values."
 
