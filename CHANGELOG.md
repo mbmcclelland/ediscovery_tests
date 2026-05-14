@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.17.2](#v0172--2026-05-14) | 2026-05-14 | DR_freshinstall — 4 QA-driven bug fixes: postgres-drop in cleandr, REST-readiness probe, virus-update timeout, error-log dedup |
 | [v0.17.1](#v0171--2026-05-14) | 2026-05-14 | DR_freshinstall — Rich progress bar, file logging, help-by-default + destructive-op confirmation gate |
 | [v0.17.0](#v0170--2026-05-14) | 2026-05-14 | **`DR_freshinstall.py`** — one-shot REST-based fresh-install driver (replaces cleandr+expect+playwright sequence) |
 | [v0.16.0](#v0160--2026-05-14) | 2026-05-14 | NewJobModal — **connector tree-browser is back** (FR-8), works for both DRSysAdmin and admin@org |
@@ -44,6 +45,61 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.17.2 — 2026-05-14
+
+### Fixed: 4 QA-driven bug fixes after end-to-end test pass
+
+QA Engineer (Jordan Park persona) ran the full TC1-TC13 test plan
+against v0.17.1 with a Dev/QA ping-pong: QA opened tickets, Dev
+fixed, QA re-tested in the same session. All 4 tickets closed,
+sign-off recommended SHIP. See `QA-DR_freshinstall-v0171.md` for
+the full test log with per-TC evidence.
+
+**Issues found and fixed (severity → headline → fix):**
+
+| # | Severity | Issue | Fix |
+|---|---|---|---|
+| QA-v0171-1 | Medium | Errors printed twice (stderr stream + Rich console) | Dropped the stderr stream handler in `_setup_logging`; file log unaffected |
+| QA-v0171-2 | **Critical** | `changeUserPassword` returned HTTP 500 because phase 3 raced wildfly's webapp deploy; uncaught `requests.HTTPError` printed a Python traceback | (a) `wait_for_drd()` adds a REST-readiness probe — POSTs to `createSession`, accepts any non-5xx OR a 5xx whose body mentions `digitalreef` (= structured DR error → handler is alive). (b) `main()` broadened to `except Exception` so HTTP errors produce a clean FAILURE panel |
+| QA-v0171-4 | **Critical** | `cleandr.sh` left the 4 DR postgres DBs in place; second install's `mgmtcustomeruser` table was empty, so `changeUserPassword` failed with "User does not exist" even when `getCurrentUser` returned the user | Extended `cleandr.sh` to drop `auraria_mgmt`, `auraria_admin`, `auraria_activemq`, `dr_history` after the filesystem teardown so the installer fully reinitialises them |
+| QA-v0171-5 | Medium | `trigger_virus_update()` timed out at 30s — the FIRST call on a fresh install does the inaugural virus-DB sync synchronously (~45-60s) | Bumped that call's timeout to 120 s, matching the storage-depot pattern |
+
+**End state verification (TC12):**
+
+```
+DRSysAdmin / password         ← login OK
+admin@training / password     ← login OK, sees 3 connectors
+training org                  ← exists
+localDocStorage @ /data/docstorage   localIndexStorage @ /data/indexstorage
+system depot assigned         inactivity = 99 min
+import-training-nfs-local    READ        /data/import
+export-training-nfs-local    READWRITE   /data/export
+archive-training-nfs-local   READWRITE   /data/archive
+pda-training-archive (PROJECT)  xda-training-export (EXPORT)
+```
+
+**Files:**
+
+- `dr_tui/data.py` — `trigger_virus_update` gets `timeout=120`
+- `cleandr.sh` — new postgres-drop block after the filesystem teardown
+- `DR_freshinstall.py` — REST-readiness probe in `wait_for_drd`,
+  broadened exception catch in `main()`, dropped stderr stream
+  handler in `_setup_logging`
+- `__version__.py` → 0.17.2
+- `QA-DR_freshinstall-v0171.md` — NEW QA report (4 tickets opened+
+  closed in-session, sign-off SHIP)
+- CHANGELOG.md (this entry).
+
+### Test coverage
+
+- 15/15 pilot tests still pass against the freshly-provisioned DR
+- Full TC4 end-to-end destructive run completed cleanly (~10 min wall
+  clock: cleandr 30 s, installer ~9 min, API phase 30 s)
+- TC5 idempotent recovery completes in 3.9 s with every step
+  correctly skip-or-fast-pass
 
 ---
 

@@ -45,6 +45,33 @@ rm -rfv /tmp/cbe* cpuinfo.txt artemis* install.dir.*
 rm -rfv /data/docstorage/*
 rm -rfv /data/indexstorage/*
 
+# ---- 3b. Drop the 4 DR postgres databases (v0.17.2 / QA-v0171-4) --------
+# Without this step, the InstallAnywhere installer skips populating
+# `mgmtcustomeruser` and `mgmtcustomer` on the second-and-subsequent
+# install of the same host (the schema is already present from the
+# previous install, so the installer's CREATE-IF-MISSING data-init
+# path doesn't fire). The result is a "schema present, zero rows"
+# state where createSession works (auraria-rf has the credentials)
+# but `userManager/changeUserPassword` fails with MgmtException:
+# "User does not exist" because the management bean does a real
+# table lookup that finds nothing.
+#
+# Dropping the DBs here forces the installer to recreate them from
+# scratch, including the DRSysAdmin / super_system_customer seed rows.
+# Safe to run when DBs don't exist (--if-exists no-ops).
+if command -v psql >/dev/null 2>&1; then
+    for db in auraria_mgmt auraria_admin auraria_activemq dr_history; do
+        echo "[cleandr] dropping postgres DB: $db"
+        sudo -u postgres dropdb --if-exists "$db" 2>/dev/null \
+            || echo "[cleandr]   (skipped — $db may not exist or postgres is down)"
+    done
+else
+    echo "[cleandr] warning: psql not found; skipping postgres-DB cleanup."
+    echo "[cleandr]   On a re-installed host this can cause"
+    echo "[cleandr]   userManager/changeUserPassword to return"
+    echo "[cleandr]   'User does not exist' (QA-v0171-4)."
+fi
+
 # ---- 4. dr-tools RPM (v0.15+) -------------------------------------------
 # §dr-tools-removal
 if [ "$KEEPRPM" = "true" ]; then

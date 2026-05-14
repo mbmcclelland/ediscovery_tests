@@ -210,39 +210,31 @@ _step_started_at: Optional[float] = None
 
 
 def _setup_logging(log_path: Path, level: str, verbose: bool) -> None:
-    """Configure the module logger to write to a file + stderr.
+    """Configure the module logger to write to a file only.
 
     The file handler captures everything at DEBUG so post-mortem
-    debugging has full detail; the stream handler honours --log-level
-    (or --verbose) so the user-facing console output stays clean.
+    debugging has full detail. We DO NOT add a stderr stream handler:
+    user-facing output (including warnings and errors) is already
+    routed through the Rich `console` via the `_warn` / `_fail` /
+    `_ok` / `_info` helpers — adding a stream handler would print
+    every WARN/ERROR twice (QA-v0171-1).
 
-    We DON'T add a Rich handler to the logger because the Progress
-    bar already owns the live console — duplicate Rich output would
-    fight for the same rows. Instead, the _ok/_info/etc. helpers
-    below both write to the logger (file only) AND to the Rich
-    console directly.
+    `--verbose` / `--log-level` now control only the *file* log
+    depth. (The Rich console output is always at the same level
+    — that's what users see; it doesn't need a separate knob.) If
+    you want to inspect DEBUG output, `tail -f` the log file.
     """
     log.handlers.clear()
     log.setLevel(logging.DEBUG)
 
     log_path.parent.mkdir(parents=True, exist_ok=True)
     fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
-    fh.setLevel(logging.DEBUG)
+    fh.setLevel(logging.DEBUG if verbose else getattr(logging, level))
     fh.setFormatter(logging.Formatter(
         "%(asctime)s  %(levelname)-7s  %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     ))
     log.addHandler(fh)
-
-    # Stderr stream handler — only fires when we explicitly log.warning
-    # or higher (or at DEBUG when --verbose). The user-facing happy
-    # path goes through console.print() so the progress bar can
-    # interleave correctly.
-    sh = logging.StreamHandler(sys.stderr)
-    sh.setLevel(logging.DEBUG if verbose else getattr(logging, level))
-    sh.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
-    sh.addFilter(lambda r: r.levelno >= logging.WARNING or verbose)
-    log.addHandler(sh)
 
     log.info("dr-freshinstall starting — log file: %s", log_path)
 
@@ -471,19 +463,86 @@ def _drd_listening(host: str, port: int = 8443, timeout: float = 5.0) -> bool:
         return False
 
 
-def wait_for_drd(host: str, max_wait_s: int = 180) -> None:
-    """Poll until drd is up after an installer run. Times out cleanly
-    so a hang in jboss startup doesn't leave us spinning forever.
+def _drd_api_ready(host: str, timeout: float = 5.0) -> bool:
+    """App-readiness probe — confirms the eDiscovery webapp's REST
+    handlers are wired up.
+
+    v0.17.2 (QA-v0171-2) — first cut accepted "status < 500" as
+    ready. Refined after QA found that DR's createSession returns
+    a structured 500 ("AuthenticationInfo is null") when probed with
+    nonsense credentials EVEN ON A FULLY-DEPLOYED WEBAPP — so we
+    were wrongly waiting out the 240s deadline. The ground truth
+    we actually want: did our request reach a DR handler at all?
+    If yes → webapp is alive (auth might still fail later, but the
+    routing exists). If no → still deploying.
+
+    Detection signal: a structured DR response includes a
+    `com.digitalreefinc.*` class reference in either the HTML body
+    or the JSON. Pre-deploy 502/503/Wildfly-default-error pages don't.
+    Also: any 2xx/3xx/4xx counts as ready directly.
+    """
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    import requests
+    url = f"https://{host}:8443/ediscovery/rest/realmManager/createSession"
+    try:
+        r = requests.post(
+            url,
+            json={"requestHandle": None, "userName": "_readiness_probe_",
+                  "password": "x", "domain": "local", "customerName": ""},
+            verify=False, timeout=timeout,
+        )
+    except Exception:
+        return False
+    if r.status_code < 500:
+        return True
+    # Structured DR 5xx → handler routed correctly, webapp is alive.
+    return "digitalreef" in r.text.lower()
+
+
+def wait_for_drd(host: str, max_wait_s: int = 240) -> None:
+    """Poll until drd is REST-ready after an installer run.
+
+    Two-stage: first wait for TCP-listen on :8443 (quick — usually
+    a few seconds), then poll the REST API itself until the
+    eDiscovery webapp has finished deploying. The second stage is
+    the one that matters — pre-v0.17.2 we only checked TCP and
+    QA-v0171-2 caught the resulting 500 on a fresh install.
+
+    Bumped to 240s default (from 180s) to cover slower hosts where
+    war deploy + DB schema init takes >2 min.
     """
     deadline = time.time() + max_wait_s
+    # Stage 1: TCP listen
+    tcp_ready_at: Optional[float] = None
     while time.time() < deadline:
         if _drd_listening(host):
-            _ok(f"drd is listening on {host}:8443")
+            tcp_ready_at = time.time()
+            log.debug("drd TCP listener up after %.1fs",
+                      tcp_ready_at - (deadline - max_wait_s))
+            break
+        time.sleep(3)
+    if tcp_ready_at is None:
+        raise TimeoutError(
+            f"drd did not start listening on {host}:8443 within "
+            f"{max_wait_s}s — check /home/auraria/AHS/output/server.log"
+        )
+
+    # Stage 2: REST API ready (eDiscovery webapp deployed). This is
+    # the real readiness signal — pre-v0.17.2 we skipped this and
+    # hit QA-v0171-2's HTTP 500 on changeUserPassword.
+    _set_progress_description(f"waiting for eDiscovery webapp to deploy…")
+    while time.time() < deadline:
+        if _drd_api_ready(host):
+            elapsed = time.time() - tcp_ready_at
+            _ok(f"drd is REST-ready on {host}:8443 "
+                f"(webapp deployed in {elapsed:.1f}s after TCP listen)")
             return
         time.sleep(3)
     raise TimeoutError(
-        f"drd did not come up within {max_wait_s}s — check "
-        f"/home/auraria/AHS/jboss/standalone/log/server.log"
+        f"drd TCP listener is up but eDiscovery REST API still "
+        f"returns 5xx after {max_wait_s}s — webapp deploy may have "
+        f"failed. Check /home/auraria/AHS/output/server.log"
     )
 
 
@@ -1097,6 +1156,20 @@ def main() -> int:
                           f"status={e.status}[/]")
             console.print(f"        [red]extended="
                           f"{e.extended_status[:200]}[/]")
+        rc = 1
+    except Exception as e:
+        # v0.17.2 fix for QA-v0171-2 part 2: catch the requests.*
+        # exception hierarchy (HTTPError, ConnectionError, Timeout)
+        # plus anything else unexpected. Without this, an HTTP 500
+        # from a not-yet-deployed webapp leaks the full Python
+        # traceback to the user instead of a clean failure panel.
+        # `requests` exceptions all subclass IOError → catching
+        # the broad `Exception` here means even unforeseen failures
+        # produce a friendly summary. The full traceback still goes
+        # to the log file via log.exception().
+        console.print()
+        _fail(f"FATAL ({type(e).__name__}): {e}")
+        log.exception("FATAL exception during run")
         rc = 1
     except KeyboardInterrupt:
         console.print()

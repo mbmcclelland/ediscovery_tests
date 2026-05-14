@@ -1814,6 +1814,16 @@ def trigger_virus_update(
             "updateDefinitionFiles": True,
             "systemScope": True,
         },
+        # QA-v0171-5: the FIRST call on a fresh install does the
+        # inaugural virus-defs download synchronously; only later
+        # calls queue + return immediately. The default 30s
+        # `EDiscoveryClient.post` timeout is too short for the cold
+        # path (TC4-v3 captured a clean ReadTimeout exception during
+        # a fresh install — server-side completes ~45-60s later).
+        # 120 s matches the storage-depot timeout — generous enough
+        # for the cold call without making honest failures (drd died)
+        # hang the script for half an hour.
+        timeout=120,
     )
 
 
