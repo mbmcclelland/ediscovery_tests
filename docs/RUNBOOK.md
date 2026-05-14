@@ -193,6 +193,40 @@ cat ~/.dr-tools/runs/<slug>.jsonl | tail -1 | jq .
 
 ---
 
+## §4d — New Job → Browse fails with "PROJECT_NOT_ACTIVATED Project 0 not activated"
+
+### Symptom
+
+Inline error on the NewJobModal:
+
+```
+Browse failed: PROJECT_NOT_ACTIVATED  Project 0 not activated
+```
+
+### Root cause
+
+`connectorManager/exploreConnector` requires `contextHandle` to be the
+**project handle** (e.g. `"254"`), not the **org name** (e.g.
+`"training"`). With an org name and no active project, the server
+defaults to project 0 — which isn't activated — and raises.
+
+The DR Web UI works because clicking around a project activates it on
+the server side first; our TUI doesn't go through that flow.
+
+### Fix
+
+Upgrade to v0.14.9 or later. `explore_connector()` now takes a
+`project_handle` kwarg, and the NewJobModal passes
+`self._cur_project_handle` (the org's first project, auto-picked at
+modal-open time).
+
+If you're on v0.14.9+ and still hit this: the auto-picked project
+handle is empty, which means the chosen org has **no projects**. The
+modal's project-status hint will say so; either pick a different org
+or create a project in DR's Web UI first.
+
+---
+
 ## §4c — `dr-job-run` / `dr-job-delete` fails with `permission to perform createDataArea`
 
 ### Symptom

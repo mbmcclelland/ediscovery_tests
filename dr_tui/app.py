@@ -1902,6 +1902,7 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                 remote_host=conn.host,
                 remote_path=conn.path or "",
                 parent_path=data.get("path") or conn.path or "",
+                project_handle=self._cur_project_handle,
             )
         except APIError as e:
             # v0.14.8 — most likely PERMISSION_DENIED because the modal
@@ -1989,6 +1990,7 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                 remote_host=conn.host,
                 remote_path=conn.path or "",
                 root_path=self._cur_path,
+                project_handle=self._cur_project_handle,
                 progress_cb=_cb,
             )
         except Exception as e:

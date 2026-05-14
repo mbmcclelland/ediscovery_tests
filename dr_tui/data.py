@@ -1653,6 +1653,7 @@ def explore_connector(
     remote_host: str,
     remote_path: str,
     parent_path: str = "",
+    project_handle: str = "",
 ) -> list[PathEntry]:
     """Browse one directory under a connector.
 
@@ -1667,12 +1668,22 @@ def explore_connector(
     message rather than rendering an empty tree silently. (Earlier
     versions swallowed all APIError → [], which made permission
     failures look like empty directories.)
+
+    v0.14.9: `contextHandle` must be the **project handle** when one is
+    available, NOT the org name. The server interprets an org-name
+    contextHandle as "no project selected", defaults to project 0,
+    and raises `PROJECT_NOT_ACTIVATED Project 0 not activated`.
+    Captured v0.10+ flows always use the project handle here. Fall
+    back to org name if no project_handle is supplied — preserves the
+    original behaviour for callers that don't have a project context
+    yet (e.g. very-early init flows).
     """
     pp_name = parent_path or remote_path
+    ctx = project_handle or org_name
     resp = client.post(
         "connectorManager/exploreConnector",
         extra_body={
-            "contextHandle": org_name,
+            "contextHandle": ctx,
             "connectorType": connector_type,
             "connectorName": connector_name,
             "remoteHost": remote_host,
@@ -1710,6 +1721,7 @@ def count_files_recursively(
     remote_host: str,
     remote_path: str,
     root_path: str,
+    project_handle: str = "",
     progress_cb=None,
     max_depth: int = 12,
 ) -> tuple[int, int]:
@@ -1723,6 +1735,10 @@ def count_files_recursively(
     `progress_cb`, if provided, is called as `progress_cb(files, dirs,
     current_path)` every 100 path entries so the UI can show a live
     counter.
+
+    `project_handle` is threaded through to `explore_connector` so each
+    recursive call carries the right `contextHandle` (v0.14.9 fix —
+    without it, the server raises `PROJECT_NOT_ACTIVATED`).
     """
     from collections import deque
     files = 0
@@ -1741,6 +1757,7 @@ def count_files_recursively(
             remote_host=remote_host,
             remote_path=remote_path,
             parent_path=current,
+            project_handle=project_handle,
         )
         for e in entries:
             seen_paths += 1

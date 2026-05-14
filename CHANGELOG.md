@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.14.9](#v0149--2026-05-14) | 2026-05-14 | explore_connector uses project_handle as contextHandle (PROJECT_NOT_ACTIVATED fix) |
 | [v0.14.8](#v0148--2026-05-14) | 2026-05-14 | NewJobModal file tree uses org-admin client; explore_connector re-raises APIError so PERMISSION_DENIED is visible |
 | [v0.14.7](#v0147--2026-05-14) | 2026-05-14 | set_* fetchers re-read after write (set-endpoint responses don't echo persisted state) |
 | [v0.14.6](#v0146--2026-05-14) | 2026-05-14 | dr-job-run / dr-job-delete use org-admin login (DRSysAdmin denied by DR permission model) |
@@ -37,6 +38,44 @@ feature-by-feature **expected behaviour** see
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ---
+
+## v0.14.9 — 2026-05-14
+
+### Fixed: NewJobModal "Browse failed: PROJECT_NOT_ACTIVATED Project 0 not activated"
+
+User-reported during post-v0.14.8 testing: clicking a folder in the
+New Job file tree now surfaces (instead of silently failing — good
+news) but with `PROJECT_NOT_ACTIVATED Project 0 not activated`.
+
+**Root cause** found by walking the captured proxy sessions:
+`connectorManager/exploreConnector` accepts two `contextHandle`
+patterns:
+
+| contextHandle value | When it works |
+|---|---|
+| Org name (`"training"`) | Only immediately after `realmManager/initializeOrganization` — and even then, only for sessions that the server tags with a "current project" via earlier UI clicks |
+| **Project handle** (`"254"`) | **Always works for org-admin sessions** — this is what the v0.10+ captures consistently send |
+
+The org-name path is fragile: when the org-admin session has no
+active project, the server defaults to project 0 and raises
+`PROJECT_NOT_ACTIVATED`. The Web UI gets around this by activating a
+project before the user can reach the connector browser; our TUI
+doesn't go through that flow.
+
+**Fix.** `dr_tui/data.py`:
+
+- `explore_connector()` gains a new `project_handle: str = ""` kwarg.
+  When supplied, it's used as `contextHandle` instead of the org name.
+  Falls back to org name for callers that don't have a project context
+  yet (preserves the early-init use case).
+- `count_files_recursively()` accepts the same kwarg and threads it
+  through every recursive `explore_connector` call.
+
+`dr_tui/app.py`: `NewJobModal._load_children_blocking` and
+`_count_blocking` now pass `self._cur_project_handle` (the auto-picked
+first project of the chosen org) through to both fetchers.
+
+19/19 pilot tests still pass.
 
 ## v0.14.8 — 2026-05-14
 
