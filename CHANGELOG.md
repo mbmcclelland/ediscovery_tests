@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.14.7](#v0147--2026-05-14) | 2026-05-14 | set_* fetchers re-read after write (set-endpoint responses don't echo persisted state) |
 | [v0.14.6](#v0146--2026-05-14) | 2026-05-14 | dr-job-run / dr-job-delete use org-admin login (DRSysAdmin denied by DR permission model) |
 | [v0.14.5](#v0145--2026-05-14) | 2026-05-14 | dr-job-run pre-flight + actionable "binary missing" error; RUNBOOK §4b |
 | [v0.14.4](#v0144--2026-05-13) | 2026-05-13 | Documentation overhaul — QA handover (README, Workflow Guide, new QA Test Plan + Runbook, Release index) |
@@ -35,6 +36,57 @@ feature-by-feature **expected behaviour** see
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ---
+
+## v0.14.7 — 2026-05-14
+
+### Fixed: set_* fetchers re-read after write — set responses don't echo persisted state
+
+**Found during QA-11** of the v0.14.4 handover pass. Calling
+`set_password_policy(client, policy=PasswordPolicy(enforce_strong=True,
+min_length=12, ...))` and inspecting the return value showed
+`enforce_strong=False, min_length=0` — but a subsequent
+`get_password_policy()` confirmed the write actually persisted
+correctly.
+
+**Root cause confirmed against the live API.** The DR endpoint
+`setPasswordPolicy` returns the field keys in its response, but the
+values are all zeros / false regardless of what was actually
+persisted:
+
+```
+setPasswordPolicy response keys: ['enforceStrongPasswords',
+    'minimumLowercaseLetters', 'minimumNumbers',
+    'minimumPasswordLength', ...]
+  enforceStrongPasswords: false      ← lies
+  minimumPasswordLength:  0          ← lies
+  ...
+
+getPasswordPolicy response:
+  enforceStrongPasswords: true       ← actual persisted state
+  minimumPasswordLength:  12         ← actual persisted state
+```
+
+Same pattern observed in `setSplashMessage` (returned `enabled: false`
+while the persisted state was `enabled: true`). `setMailServerConfig`
+was masked by a fallback-to-input value in our code, but the same
+unreliability applies.
+
+**Fix:** all three `set_*` fetchers in `dr_tui/data.py` now do a
+follow-up `get_*` call and return THAT as the canonical persisted
+state. `set_inactivity_timeout` already returned the input value
+verbatim (the endpoint is 204 No Content) so it was already correct.
+
+**Affected callers**
+
+The TUI side `_settings_write_blocking` triggers `_load_view(...)`
+after a successful save, which already re-fetches the leaf — so users
+saw the correct state in the TUI even on the buggy build. The bug
+mainly affected programmatic users of `dr_tui.data.set_*` and any
+future caller that trusted the return value directly.
+
+**Pilot tests:** unchanged. The offline pilot fixtures don't drive
+the live `set_*` round-trip; this was a live-API bug visible only
+during the handover smoke test.
 
 ## v0.14.6 — 2026-05-14
 

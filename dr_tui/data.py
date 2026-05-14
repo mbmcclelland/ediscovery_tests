@@ -983,10 +983,15 @@ def set_mail_server_config(
 
     Despite the "create" name, this is the upsert path — there's no
     separate update endpoint. Body shape per v0.08 capture: `smtpHostId`
-    + `smtpHostPort` (both as strings server-side; we coerce). Response
-    echoes the persisted `mailServerConfig` block.
+    + `smtpHostPort` (both as strings server-side; we coerce).
+
+    v0.14.7: the set-endpoint responses on this realm don't reliably
+    echo the persisted state (QA-11 finding — `setPasswordPolicy` /
+    `setSplashMessage` return zeros while the actual persisted state is
+    correct). We do a follow-up `get` and return THAT, so the caller
+    sees what was actually written.
     """
-    resp = client.post(
+    client.post(
         "realmManager/createMailServerConfig",
         extra_body={
             "contextHandle": "super_system_customer",
@@ -995,13 +1000,8 @@ def set_mail_server_config(
             "systemScope": True,
         },
     )
-    cfg = resp.get("mailServerConfig") or {}
-    return MailServerConfig(
-        configured=bool(cfg),
-        smtp_host=str(cfg.get("smtpHostId") or smtp_host),
-        smtp_port=int(cfg.get("smtpHostPort") or smtp_port),
-        smtp_auth=bool(cfg.get("mailSmtpAuth")),
-    )
+    # Re-read to get the canonical persisted state.
+    return get_mail_server_config(client)
 
 
 def set_splash_message(
@@ -1009,11 +1009,15 @@ def set_splash_message(
 ) -> SplashMessage:
     """Write login banner via `realmManager/setSplashMessage`.
 
-    Server echoes `enabled` + `splashMessage` on success. To clear the
-    banner, pass `enabled=False` — the message text can stay (DR
-    persists it for the next time the banner is re-enabled).
+    v0.14.7: the set-endpoint response doesn't reliably echo the
+    persisted state (QA-11 finding — set returned `enabled: false`
+    while the persisted value was `true`). We follow up with `get`
+    and return that.
+
+    To clear the banner, pass `enabled=False` — the message text can
+    stay (DR persists it for the next time the banner is re-enabled).
     """
-    resp = client.post(
+    client.post(
         "realmManager/setSplashMessage",
         extra_body={
             "contextHandle": "super_system_customer",
@@ -1022,10 +1026,7 @@ def set_splash_message(
             "systemScope": True,
         },
     )
-    return SplashMessage(
-        enabled=bool(resp.get("enabled", enabled)),
-        message=str(resp.get("splashMessage") or message or ""),
-    )
+    return get_splash_message(client)
 
 
 def set_password_policy(
@@ -1036,8 +1037,14 @@ def set_password_policy(
     All eight numeric fields are mandatory in the body — server treats
     a missing field as "leave unchanged" inconsistently, so we send the
     whole policy every time.
+
+    v0.14.7: the set-endpoint response on this realm doesn't echo the
+    persisted state — it returns all zeros and `enforceStrongPasswords:
+    false` regardless of what was actually written (QA-11 finding,
+    confirmed against `getPasswordPolicy` immediately afterwards).
+    We do a follow-up `get_password_policy()` and return that.
     """
-    resp = client.post(
+    client.post(
         "realmManager/setPasswordPolicy",
         extra_body={
             "contextHandle": "super_system_customer",
@@ -1051,19 +1058,8 @@ def set_password_policy(
             "systemScope": True,
         },
     )
-    # Response echoes the persisted policy — re-hydrate so the caller
-    # sees the canonical state (server may clamp out-of-range values).
-    return PasswordPolicy(
-        enforce_strong=bool(resp.get("enforceStrongPasswords", policy.enforce_strong)),
-        min_length=int(resp.get("minimumPasswordLength") or policy.min_length),
-        min_uppercase=int(resp.get("minimumUppercaseLetters") or policy.min_uppercase),
-        min_lowercase=int(resp.get("minimumLowercaseLetters") or policy.min_lowercase),
-        min_numbers=int(resp.get("minimumNumbers") or policy.min_numbers),
-        min_symbols=int(resp.get("minimumSymbols") or policy.min_symbols),
-        expiration_days=int(
-            resp.get("passwordExpirationInDays") or policy.expiration_days,
-        ),
-    )
+    # Re-read to get the canonical persisted state.
+    return get_password_policy(client)
 
 
 def set_inactivity_timeout(

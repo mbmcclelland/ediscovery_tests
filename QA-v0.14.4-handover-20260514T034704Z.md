@@ -174,3 +174,49 @@ correct field-specific error message:
 All four strings match the QA Test Plan §4.4 spec verbatim.
 
 [2026-05-14T04:00:30Z]
+
+## QA-8 — dr-job-run end-to-end — **FIXED (2 bugs) + BLOCKED on env**
+
+Drove dr-job-run with a saved JobDefinition. Two real bugs surfaced;
+both fixed in-session. End-to-end success still blocked on the
+QA-3 environmental finding (admin@training user missing).
+
+### Bug 1 — `dr-job-run` / `dr-job-delete` binaries not installed
+- Symptom: `bash: .venv/bin/dr-job-run: No such file or directory`.
+- Root cause: editable install predated the v0.13.0 setup.cfg entry
+  points; `pip install -e .` only generates console scripts at
+  install time.
+- Fix: re-ran `pip install -e .`, hardened `_sch_run_now` to pre-flight
+  the binary and surface an actionable message, added RUNBOOK §4b.
+- Shipped as **v0.14.5** (commit `493f719`).
+
+### Bug 2 — DRSysAdmin lacks permission for the indexing chain
+- Symptom: dr-job-run logs in (DRSysAdmin) but HTTP 500 on
+  `orgManager/createDataArea`.
+- AHS server log: `User drsysadmin does not have permission to
+  perform createDataArea operation`.
+- **RTFM:** DR PDF "Add or Edit a Project Data Area" explicitly states
+  "Requires Organization - Project Data Areas - Add/Edit Permissions"
+  — i.e. the indexing chain is org-scoped, not system-scoped.
+  `locustfile_indexing.py` (the reference implementation) already uses
+  an org token for these calls; the new dr-job-run / dr-job-delete
+  CLIs did not.
+- Fix: both CLIs now log in via `OrgUserConfig()` (admin@<org>) and
+  surface a specific actionable error pointing at
+  `playwright_fresh_init.py` when the org admin doesn't exist.
+  RUNBOOK §4c documents the symptom + fix.
+- Shipped as **v0.14.6** (commit `197d7b7`).
+
+### Remaining blocker
+
+After both fixes, dr-job-run now logs in correctly as the org admin
+— but the org admin user (`admin@training`) doesn't exist in this DR
+install (the documented RUNBOOK §1 environmental issue, also surfaced
+in QA-3).
+
+QA-8 / QA-9 / QA-10 end-to-end validation requires the org admin to
+exist. **Will surface this to the user at close-out and ask whether
+to run `python playwright_fresh_init.py` to recreate the user, or to
+defer those scenarios for a follow-up pass.**
+
+[2026-05-14T04:05:00Z]
