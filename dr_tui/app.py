@@ -3740,9 +3740,26 @@ class DashboardScreen(Screen):
         Same code path as cron / systemd would use — we deliberately
         don't replicate the submit-chain inline so there's exactly one
         place where things can go wrong.
+
+        Pre-flight: resolve the binary path and bail loudly if it's
+        missing. The most common cause is an editable install that
+        predates the v0.13 setup.cfg entry-point additions
+        (`pip install -e .` needs to be re-run after setup.cfg changes
+        to regenerate the console scripts in `.venv/bin/`).
         """
-        import shutil, subprocess
-        bin_path = shutil.which("dr-job-run") or "/opt/dr-tools/venv/bin/dr-job-run"
+        import shutil, os, subprocess
+        bin_path = (
+            shutil.which("dr-job-run")
+            or "/opt/dr-tools/venv/bin/dr-job-run"
+        )
+        if not os.path.exists(bin_path):
+            # Pre-flight: surface a specific, actionable error before
+            # even spawning the worker.
+            self._post_status(
+                f"dr-job-run binary missing — re-run `pip install -e .` "
+                f"(or `make rpm` + reinstall). Looked at {bin_path}."
+            )
+            return
         self._post_status(f"running: {job.name} via {bin_path}")
         def _run():
             try:
@@ -3756,7 +3773,8 @@ class DashboardScreen(Screen):
             except FileNotFoundError:
                 self.app.call_from_thread(
                     self._post_status,
-                    f"dr-job-run not found at {bin_path}",
+                    f"dr-job-run not found at {bin_path} — "
+                    f"re-run `pip install -e .`",
                 )
             except Exception as e:
                 self.app.call_from_thread(

@@ -193,6 +193,41 @@ cat ~/.dr-tools/runs/<slug>.jsonl | tail -1 | jq .
 
 ---
 
+## §4b — `dr-job-run` or `dr-job-delete` "not found"
+
+### Symptom
+
+- TUI status bar shows `dr-job-run binary missing — re-run pip install -e .`
+- Or shell error `bash: dr-job-run: command not found`
+
+### Root cause
+
+The `dr-job-run` / `dr-job-delete` console-script entry points were
+added to `setup.cfg` in v0.13.0. An **editable install** (`pip install -e .`)
+done *before* that change won't have the binaries — pip only generates
+console scripts at install time, not lazily on import.
+
+### Fix
+
+```bash
+source .venv/bin/activate          # or wherever your venv lives
+pip install -e .                   # regenerates console scripts
+ls .venv/bin/dr-*                  # should show all four binaries
+```
+
+For RPM installs, the launcher comes from `packaging/dr-tools.spec` —
+rebuild and reinstall the RPM (`cd packaging && make rpm && sudo dnf
+reinstall ./rpmbuild/RPMS/x86_64/dr-tools-*.rpm`).
+
+### Detection
+
+The TUI's `_sch_run_now` (v0.14.5+) pre-flights the binary path and
+posts a specific actionable error in the status bar. Earlier versions
+got a generic `FileNotFoundError` traceback into the worker, which
+quietly fell into "run error: …".
+
+---
+
 ## §5 — Pilot tests failing
 
 ### `test_indexing_workflow.py` fails with `500 Internal Server Error` on `ecaManager/createCase`

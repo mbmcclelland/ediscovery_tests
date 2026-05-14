@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.14.5](#v0145--2026-05-14) | 2026-05-14 | dr-job-run pre-flight + actionable "binary missing" error; RUNBOOK §4b |
 | [v0.14.4](#v0144--2026-05-13) | 2026-05-13 | Documentation overhaul — QA handover (README, Workflow Guide, new QA Test Plan + Runbook, Release index) |
 | [v0.14.3](#v0143--2026-05-13) | 2026-05-13 | NewJobModal connector dropdown — `initializeOrganization` per org |
 | [v0.14.2](#v0142--2026-05-13) | 2026-05-13 | Connectors view — visible empty state + error messages |
@@ -33,6 +34,39 @@ feature-by-feature **expected behaviour** see
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ---
+
+## v0.14.5 — 2026-05-14
+
+### Fixed: dr-job-run pre-flight + actionable error when binary missing
+
+**Found during QA-8** of the v0.14.4 handover pass: invoking
+`dr-job-run` on a host whose venv pre-dates the v0.13.0 setup.cfg
+changes raises a `FileNotFoundError`, which the TUI's `_sch_run_now`
+worker silently buried in a generic `run error: …` status line. The
+underlying cause is that `pip install -e .` only regenerates console
+scripts at install time, so a stale editable install never gets the
+`dr-job-run` / `dr-job-delete` entry points even when the code is
+present.
+
+**Code change:** `_sch_run_now` now pre-flights `os.path.exists(bin_path)`
+before spawning the subprocess worker and posts a specific actionable
+message:
+
+```
+dr-job-run binary missing — re-run `pip install -e .`
+(or `make rpm` + reinstall). Looked at <path>.
+```
+
+Same hardening on the `FileNotFoundError` branch (kept as a belt for
+the case where `shutil.which` succeeds but the binary is removed
+mid-session) — it now also tells the user to re-run the install.
+
+**New runbook entry:** RUNBOOK §4b ("dr-job-run or dr-job-delete 'not
+found'") documents the root cause, the fix, and the v0.14.5 detection
+behaviour.
+
+No new pilot test — the failure is environmental and the new pre-flight
+branch only fires when the binary genuinely doesn't exist.
 
 ## v0.14.4 — 2026-05-13
 
