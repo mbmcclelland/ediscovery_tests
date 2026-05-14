@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.15.2](#v0152--2026-05-14) | 2026-05-14 | **api_client no longer auto-injects `systemScope: true`** — fixes the core PERMISSION_DENIED that blocked the whole Job Scheduler chain |
 | [v0.15.1](#v0151--2026-05-14) | 2026-05-14 | Beta-tester fixes — glyph prefixes on status cells (accessibility) + actionable empty-project message |
 | [v0.15.0](#v0150--2026-05-14) | 2026-05-14 | NewJobModal — manual path Input (drops file-tree) + recurring schedules via systemd user timers |
 | [v0.14.10](#v01410--2026-05-14) | 2026-05-14 | NewJobModal — pre-emptive org-admin warning + clearer Browse error translation |
@@ -41,6 +42,80 @@ feature-by-feature **expected behaviour** see
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ---
+
+## v0.15.2 — 2026-05-14
+
+### Fixed: api_client no longer auto-injects `systemScope: true`
+
+This is the **root cause** of every `PERMISSION_DENIED` we've fought
+since QA-14 (NewJobModal file tree empty), QA-16 (admin@training also
+denied), QA-17 (Web UI worked but our REST didn't), and every dead-end
+in between.
+
+**Discovery:** mitmproxy capture of a working Web UI browse session
+(reverse-proxy mode on port 8091, so no cert install needed) revealed
+that Firefox's `exploreConnector` request and ours had **byte-for-byte
+identical bodies** — except ours had an extra `"systemScope": true`
+field that the Web UI never sends.
+
+```diff
+  POST /ediscovery/rest/connectorManager/exploreConnector
+  {
+    "requestHandle": null,
+    "contextHandle": "training",
+-   "systemScope": true,        ← we injected this
+    "connectorType": "NFS",
+    "connectorName": "import-training-nfs-local",
+    ...
+  }
+```
+
+DR's `SecureObjectInterceptor` treats `systemScope: true` as a
+declaration that the caller is acting in super-system mode, which
+requires the IT Administrator role's super-system permissions —
+permissions that **don't include `exploreConnector`** in DR 5.5.3.2.
+Without `systemScope` (or with `systemScope: false`), DR uses the
+caller's org-context role, which DOES allow exploreConnector for
+DRSysAdmin after `initializeOrganization(training)`.
+
+**Code change:** `helpers/api_client.py` line 147–149. Removed the
+unconditional `"systemScope": True` from the auto-built base body.
+Endpoints that genuinely need `systemScope: true` (Realm Settings —
+get/setMailServerConfig, getPasswordPolicy, etc.; F3 actions —
+cancelTask; realm-wide reads — listJobs, listRealmTasks; etc.)
+already pass it explicitly in their `extra_body` — 34 call sites
+verified.
+
+**Live verification after fix (DRSysAdmin):**
+
+```
+$ explore_connector(training, "import-training-nfs-local", "/data/import")
+12 entries
+  🗀 Dave White Collected Hard Drive 2023-07-24
+  🗀 deletedcustomerstorage
+  🗀 Digital Reef PDFs
+  🗀 drmanual
+  🗀 prod
+  🗀 testload
+  ...
+
+$ orgManager/createDataArea(project=254, connector=…, path=/data/import/testload)
+OK — handle 00003994fc7a11c0b4954993a3137fa5c7df2d40
+```
+
+**Both** the browse path AND the indexing-chain submit (createDataArea)
+now succeed for DRSysAdmin — meaning Run-Now and scheduled jobs both
+unblock too, with no DR-side role configuration needed.
+
+This also makes the elaborate role-config workaround documented in
+`docs/DR_ROLE_SETUP.md` **no longer required**. Kept the doc as a
+reference but the prereq is gone.
+
+19/19 pilot tests still pass.
+
+Credit: the user's "DRSysAdmin can browse in the Web UI but the tool
+can't — let me show you" insistence + mitmproxy reverse-proxy
+capture is what cracked this open. RTFM the wire.
 
 ## v0.15.1 — 2026-05-14
 

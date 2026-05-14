@@ -144,9 +144,17 @@ class EDiscoveryClient:
         Returns:
             Parsed JSON response dict.
         """
+        # v0.15.2 — DO NOT auto-inject systemScope here. Doing so used
+        # to force every request into super-system mode, which DR's
+        # permission interceptor treats as "IT Administrator only" —
+        # silently breaking endpoints that work fine for an org-context
+        # session (e.g. connectorManager/exploreConnector, where the
+        # Web UI's request never carries systemScope). Endpoints that
+        # genuinely need `systemScope: True` (Realm Settings, listJobs,
+        # listRealmTasks, cancelTask, etc.) pass it explicitly via
+        # `extra_body`.
         body: dict[str, Any] = {
             "contextHandle": self.cfg.organization,
-            "systemScope": True,
         }
         if extra_body:
             body.update(extra_body)
