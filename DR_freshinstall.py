@@ -47,6 +47,8 @@ expect it there.
 from __future__ import annotations
 
 import argparse
+import datetime
+import logging
 import os
 import socket
 import subprocess
@@ -54,6 +56,7 @@ import sys
 import time
 import warnings
 from pathlib import Path
+from typing import Optional
 
 # Silence the urllib3 self-signed-cert spam early. data.py imports already
 # emit warnings; squash them at module load so the progress log stays
@@ -69,45 +72,231 @@ from config import Config                                           # noqa: E402
 from helpers.api_client import EDiscoveryClient, APIError           # noqa: E402
 from dr_tui import data as drdata                                   # noqa: E402
 
+# Rich is already a runtime dep (textual depends on it). We use it for
+# the progress bar + colourised console output. Falling back to plain
+# print would be possible but the v0.17.1 spec asks for a progress
+# bar, so we hard-require it.
+from rich.console import Console                                    # noqa: E402
+from rich.progress import (                                         # noqa: E402
+    Progress, BarColumn, TextColumn, TimeElapsedColumn,
+    SpinnerColumn, MofNCompleteColumn,
+)
+from rich.panel import Panel                                        # noqa: E402
+from rich.text import Text                                          # noqa: E402
+
 
 # ---------- CLI ----------------------------------------------------------------
 
-def _parse_args() -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--skip-clean", action="store_true",
-                    help="skip the cleandr teardown")
-    ap.add_argument("--skip-installer", action="store_true",
-                    help="skip DR_freshinstall.exp (assume drd is up)")
-    ap.add_argument("--skip-api", action="store_true",
-                    help="skip API provisioning (clean + install only)")
-    ap.add_argument("--keep-existing", action="store_true",
-                    help="API steps no-op when target already exists")
-    ap.add_argument("--keeprpm", action="store_true",
-                    help="passed through to cleandr.sh (keep dr-tools RPM)")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="print every action without doing it")
-    ap.add_argument("--hostname", default="192.168.58.128",
-                    help="DR REST host (default: 192.168.58.128)")
-    ap.add_argument("--nfs-host", default="",
-                    help="NFS server fqdn for storage + connectors "
-                         "(default: same as --hostname)")
-    ap.add_argument("--inactivity-minutes", type=int, default=99,
-                    help="session inactivity timeout in minutes "
-                         "(default: 99)")
-    ap.add_argument("--initial-password", default="DRSysAdmin",
-                    help="DRSysAdmin's default first-login password "
-                         "(default: DRSysAdmin)")
-    ap.add_argument("--final-password", default="password",
-                    help="DRSysAdmin's new password after change "
-                         "(default: password)")
-    return ap.parse_args()
+_DEFAULT_LOG_DIR = Path("/tmp")
+_LOG_TS = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+_DEFAULT_LOG_PATH = _DEFAULT_LOG_DIR / f"dr-freshinstall-{_LOG_TS}.log"
 
 
-# ---------- progress logging ----------------------------------------------------
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the argparse parser separately so `--help` and the
+    no-args-shows-help path share one source of truth."""
+    ap = argparse.ArgumentParser(
+        prog="DR_freshinstall.py",
+        description=(
+            "End-to-end fresh-install driver for Digital Reef. Runs "
+            "teardown (cleandr.sh) → installer (DR_freshinstall.exp) "
+            "→ 13 REST provisioning steps in one shot."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  # Full destructive teardown + reinstall + provisioning:\n"
+            "  sudo .venv/bin/python DR_freshinstall.py --force\n"
+            "\n"
+            "  # Idempotent recovery (drd already up, /data intact):\n"
+            "  sudo .venv/bin/python DR_freshinstall.py "
+            "--skip-clean --skip-installer --keep-existing\n"
+            "\n"
+            "  # See what it would do, no API calls or shelling out:\n"
+            "  .venv/bin/python DR_freshinstall.py --dry-run "
+            "--skip-clean --skip-installer\n"
+            "\n"
+            "Logs every run to /tmp/dr-freshinstall-<TIMESTAMP>.log by "
+            "default; override with --log-file. The destructive phases "
+            "(clean + installer) require --force or an interactive "
+            "y/n confirmation."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
 
-# A single global so step output stays aligned regardless of which
-# function is logging. The terminal-width check keeps wide messages
-# readable on 80-column legacy clients (v0.10.2 lesson).
+    # ---- phase toggles ----
+    phases = ap.add_argument_group("Phase selection")
+    phases.add_argument("--skip-clean", action="store_true",
+                        help="skip the cleandr.sh teardown phase")
+    phases.add_argument("--skip-installer", action="store_true",
+                        help="skip DR_freshinstall.exp (assume drd is "
+                             "already up)")
+    phases.add_argument("--skip-api", action="store_true",
+                        help="skip the 13-step REST provisioning phase")
+
+    # ---- behaviour flags ----
+    behav = ap.add_argument_group("Behaviour")
+    behav.add_argument("--keep-existing", action="store_true",
+                       help="API steps no-op when target already exists "
+                            "(idempotent recovery mode)")
+    behav.add_argument("--keeprpm", action="store_true",
+                       help="passed through to cleandr.sh — keeps the "
+                            "dr-tools RPM installed")
+    behav.add_argument("--dry-run", action="store_true",
+                       help="print every action without doing it; no "
+                            "shells out or API calls fire")
+    behav.add_argument("--force", action="store_true",
+                       help="run destructive phases without the "
+                            "interactive y/n confirmation prompt")
+    behav.add_argument("--no-progress", action="store_true",
+                       help="disable the live progress bar (useful for "
+                            "CI logs / non-TTY environments)")
+
+    # ---- target overrides ----
+    target = ap.add_argument_group("Target overrides")
+    target.add_argument("--hostname", default="192.168.58.128",
+                        help="DR REST host (default: 192.168.58.128)")
+    target.add_argument("--nfs-host", default="",
+                        help="NFS server fqdn for storage + connectors "
+                             "(default: same as --hostname)")
+    target.add_argument("--inactivity-minutes", type=int, default=99,
+                        help="session inactivity timeout in minutes "
+                             "(default: 99)")
+    target.add_argument("--initial-password", default="DRSysAdmin",
+                        help="DRSysAdmin's first-install password "
+                             "(default: DRSysAdmin)")
+    target.add_argument("--final-password", default="password",
+                        help="DRSysAdmin's password after the "
+                             "first-login change (default: password)")
+
+    # ---- logging ----
+    logf = ap.add_argument_group("Logging")
+    logf.add_argument("--log-file", default=str(_DEFAULT_LOG_PATH),
+                      help=f"log file path (default: "
+                           f"/tmp/dr-freshinstall-<TIMESTAMP>.log)")
+    logf.add_argument("--log-level", default="INFO",
+                      choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+                      help="logger verbosity (default: INFO)")
+    logf.add_argument("--verbose", "-v", action="store_true",
+                      help="equivalent to --log-level=DEBUG")
+
+    return ap
+
+
+def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+    return _build_parser().parse_args(argv)
+
+
+# ---------- Rich console + logging globals -------------------------------------
+
+# A single Console drives all output. When the progress bar is active
+# (every step except the first banner), Rich routes console.print()
+# calls above the bar so the running tally stays pinned at the bottom.
+# When --no-progress is set or stdout isn't a TTY, the Progress context
+# is a no-op and console.print() lines just stream normally.
+console = Console(highlight=False)
+
+# Module-level logger — wrapped by every _ok/_info/_warn helper below
+# so that file + stdout output stay in lock-step. Configured in
+# _setup_logging() at the start of main().
+log = logging.getLogger("dr_freshinstall")
+
+# Set by _setup_progress(); the active Progress task ID for the global
+# phase tracker. We update its description on every _step() call so the
+# user sees the current activity inline with the bar.
+_progress: Optional[Progress] = None
+_progress_task: Optional[int] = None
+# Per-step elapsed-time tracking — written to the log at step finish.
+_step_started_at: Optional[float] = None
+
+
+def _setup_logging(log_path: Path, level: str, verbose: bool) -> None:
+    """Configure the module logger to write to a file + stderr.
+
+    The file handler captures everything at DEBUG so post-mortem
+    debugging has full detail; the stream handler honours --log-level
+    (or --verbose) so the user-facing console output stays clean.
+
+    We DON'T add a Rich handler to the logger because the Progress
+    bar already owns the live console — duplicate Rich output would
+    fight for the same rows. Instead, the _ok/_info/etc. helpers
+    below both write to the logger (file only) AND to the Rich
+    console directly.
+    """
+    log.handlers.clear()
+    log.setLevel(logging.DEBUG)
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(logging.Formatter(
+        "%(asctime)s  %(levelname)-7s  %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+    log.addHandler(fh)
+
+    # Stderr stream handler — only fires when we explicitly log.warning
+    # or higher (or at DEBUG when --verbose). The user-facing happy
+    # path goes through console.print() so the progress bar can
+    # interleave correctly.
+    sh = logging.StreamHandler(sys.stderr)
+    sh.setLevel(logging.DEBUG if verbose else getattr(logging, level))
+    sh.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    sh.addFilter(lambda r: r.levelno >= logging.WARNING or verbose)
+    log.addHandler(sh)
+
+    log.info("dr-freshinstall starting — log file: %s", log_path)
+
+
+def _setup_progress(total_steps: int, disabled: bool) -> Optional[Progress]:
+    """Spin up the global Progress context. Returns the Progress
+    object so main() can use it as a context manager."""
+    global _progress, _progress_task
+    if disabled or not sys.stdout.isatty():
+        _progress = None
+        _progress_task = None
+        log.debug("progress bar disabled (--no-progress or non-TTY stdout)")
+        return None
+    _progress = Progress(
+        SpinnerColumn(),
+        TextColumn("[bold cyan]{task.description}"),
+        BarColumn(bar_width=None),
+        MofNCompleteColumn(),
+        TextColumn("•"),
+        TimeElapsedColumn(),
+        console=console,
+        transient=False,
+        refresh_per_second=8,
+    )
+    _progress_task = _progress.add_task(
+        "starting…", total=total_steps,
+    )
+    return _progress
+
+
+def _advance_progress(description: str) -> None:
+    """Tick the global progress bar one step forward + update the
+    'now doing' label."""
+    if _progress is not None and _progress_task is not None:
+        _progress.update(_progress_task, advance=1, description=description)
+
+
+def _set_progress_description(description: str) -> None:
+    """Update the running label without advancing the bar (useful for
+    sub-step status inside a long phase)."""
+    if _progress is not None and _progress_task is not None:
+        _progress.update(_progress_task, description=description)
+
+
+# ---------- user-facing output helpers -----------------------------------------
+
+# These mirror every line into:
+#   * the log file (DEBUG → captured)
+#   * the Rich console (above the progress bar)
+# So the on-screen experience stays tidy AND we have a complete
+# audit trail for post-mortem.
+
+# Terminal-width sniff — Rich handles wrapping but the banner rule
+# wants a hard width. Same v0.10.2 lesson as before: clamp 80–120.
 _TERM_WIDTH = 100
 try:
     _TERM_WIDTH = max(80, min(120, os.get_terminal_size().columns))
@@ -116,34 +305,105 @@ except Exception:
 
 
 def _hr() -> None:
-    print("─" * _TERM_WIDTH)
+    console.print("─" * _TERM_WIDTH, style="dim")
 
 
 def _step(num: int, title: str) -> None:
-    print()
-    _hr()
-    print(f"  Step {num:2d}.  {title}")
-    _hr()
+    """Begin a numbered step. Logs the header, advances the progress
+    bar, and stamps the wall-clock start so we can report duration on
+    success."""
+    global _step_started_at
+    _step_started_at = time.time()
+    label = f"Step {num:2d} — {title}"
+    log.info("──── %s ────", label)
+    _advance_progress(label)
+    # Also emit a visible header above the bar so the user has a
+    # rolling history, not just the live label.
+    console.print()
+    console.print(f"[bold cyan]Step {num:2d}.[/] {title}")
 
 
 def _ok(msg: str) -> None:
-    print(f"    ✓  {msg}")
+    elapsed = ""
+    if _step_started_at is not None:
+        elapsed = f"  [dim]({time.time() - _step_started_at:.1f}s)[/]"
+    log.info("OK    %s", msg)
+    console.print(f"    [green]✓[/]  {msg}{elapsed}")
 
 
 def _info(msg: str) -> None:
-    print(f"    ·  {msg}")
+    log.info("INFO  %s", msg)
+    console.print(f"    [dim]·[/]  {msg}")
 
 
 def _warn(msg: str) -> None:
-    print(f"    ⚠  {msg}")
+    log.warning("WARN  %s", msg)
+    console.print(f"    [yellow]⚠[/]  {msg}")
 
 
 def _fail(msg: str) -> None:
-    print(f"    ✗  {msg}")
+    log.error("FAIL  %s", msg)
+    console.print(f"    [bold red]✗[/]  {msg}")
 
 
 def _skip(msg: str) -> None:
-    print(f"    ⊘  skipped: {msg}")
+    log.info("SKIP  %s", msg)
+    console.print(f"    [dim cyan]⊘[/]  skipped: {msg}")
+
+
+def _phase_banner(num: int, name: str) -> None:
+    """Sub-header for phases 1/2/3 in main(). Bigger than _step's."""
+    log.info("════ Phase %d — %s ════", num, name)
+    _advance_progress(f"Phase {num} — {name}")
+    console.print()
+    console.print(Panel.fit(
+        Text(f"Phase {num} — {name}", style="bold magenta"),
+        border_style="magenta",
+    ))
+
+
+def _confirm_destruction(args: argparse.Namespace) -> bool:
+    """Interactive y/n gate for the destructive phases.
+
+    Returns True to proceed, False to abort. --force bypasses the
+    prompt entirely (CI / scripted-run path). --dry-run also bypasses
+    because nothing destructive actually runs in that mode.
+    """
+    if args.dry_run or args.force:
+        return True
+    if args.skip_clean and args.skip_installer:
+        # Non-destructive run — neither shell phase will fire.
+        return True
+    if not sys.stdin.isatty():
+        # No human to ask. Require --force in scripted contexts so a
+        # rogue pipeline can't accidentally nuke a working install.
+        _fail("destructive phases requested without --force on a non-TTY "
+              "stdin. Re-run with --force or --skip-clean --skip-installer.")
+        return False
+
+    console.print()
+    console.print(Panel.fit(
+        Text(
+            "⚠  This will DESTROY the current DR install:\n"
+            "    • /home/auraria/AHS*    (entire install tree)\n"
+            "    • /data/docstorage/*    (document storage)\n"
+            "    • /data/indexstorage/*  (index storage)\n"
+            "    • dr-tools RPM          (unless --keeprpm)\n"
+            "    • per-user systemd timers (retention + recurring jobs)\n"
+            "\n"
+            "License is preserved to /root/license.lic automatically.\n"
+            "This is NOT recoverable. Type 'YES' (uppercase) to proceed.",
+            style="bold yellow",
+        ),
+        border_style="red",
+        title="[bold red]DESTRUCTIVE OPERATION[/]",
+    ))
+    try:
+        answer = input("Proceed? > ").strip()
+    except (EOFError, KeyboardInterrupt):
+        console.print()
+        return False
+    return answer == "YES"
 
 
 # ---------- Phase 1: teardown via cleandr.sh -----------------------------------
@@ -735,68 +995,153 @@ def phase_api(args: argparse.Namespace) -> None:
 
 # ---------- main ----------------------------------------------------------------
 
+def _show_help_and_exit() -> int:
+    """No-args path — print full help and exit 0.
+
+    The default flow without any flags is destructive (cleandr + expect
+    + API). Running the script with no args used to silently start
+    that flow, which is a footgun. v0.17.1 switches the no-args path
+    to print help instead, matching how most "modal" CLI tools behave
+    (kubectl, helm, etc.).
+    """
+    _build_parser().print_help(sys.stdout)
+    print()
+    print("[Tip] Run with --dry-run --skip-clean --skip-installer "
+          "to see the API phase plan without doing anything.")
+    return 0
+
+
 def main() -> int:
+    # ---- 0. No args → print help and exit. ----
+    # This is a safety guard: the default flow is destructive, so we
+    # require at least ONE explicit flag (even just `--force`) before
+    # the script starts ripping things up. See _show_help_and_exit
+    # for the rationale.
+    if len(sys.argv) == 1:
+        return _show_help_and_exit()
+
     args = _parse_args()
 
-    # Banner — show the user exactly what they're about to do BEFORE
-    # we start ripping things out.
-    print()
-    _hr()
-    print(f"  DR_freshinstall.py — fresh-install driver "
-          f"(target: {args.hostname})")
-    _hr()
-    print(f"  Phases: "
-          f"clean={'no' if args.skip_clean else 'YES'} | "
-          f"installer={'no' if args.skip_installer else 'YES'} | "
-          f"api={'no' if args.skip_api else 'YES'}")
-    print(f"  dry-run: {args.dry_run}   keep-existing: {args.keep_existing}")
-    print()
+    # ---- 1. Set up logging FIRST so every subsequent action is
+    # recorded, even if the confirmation prompt aborts. ----
+    log_path = Path(args.log_file)
+    _setup_logging(log_path, args.log_level, args.verbose)
+    log.debug("args: %s", vars(args))
 
-    try:
-        if not args.skip_clean:
-            _step(0, "Phase 1 — teardown (cleandr.sh inline)")
-            phase_clean(args)
-        else:
-            _skip("Phase 1 (teardown)")
+    # ---- 2. Banner. ----
+    title = (f"DR_freshinstall.py v0.17.1 — fresh-install driver "
+             f"(target: {args.hostname})")
+    console.print()
+    console.print(Panel.fit(
+        Text(
+            f"{title}\n"
+            f"Phases:  clean={'no' if args.skip_clean else 'YES'}  "
+            f"|  installer={'no' if args.skip_installer else 'YES'}  "
+            f"|  api={'no' if args.skip_api else 'YES'}\n"
+            f"Mode:    dry-run={args.dry_run}  "
+            f"keep-existing={args.keep_existing}  "
+            f"force={args.force}\n"
+            f"Log:     {log_path}",
+            style="white",
+        ),
+        border_style="cyan",
+    ))
 
-        if not args.skip_installer:
-            _step(0, "Phase 2 — DR installer (DR_freshinstall.exp)")
-            phase_installer(args)
-        else:
-            _skip("Phase 2 (installer)")
-
-        if not args.skip_api:
-            print()
-            _hr()
-            print(f"  Phase 3 — API provisioning ({len(STEPS)} steps)")
-            _hr()
-            phase_api(args)
-        else:
-            _skip("Phase 3 (API provisioning)")
-    except (APIError, RuntimeError, TimeoutError, FileNotFoundError) as e:
-        print()
-        _fail(f"FATAL: {e}")
-        if isinstance(e, APIError):
-            print(f"        error_code={e.error_code}  status={e.status}")
-            print(f"        extended={e.extended_status[:200]}")
-        return 1
-    except KeyboardInterrupt:
-        print()
-        _fail("interrupted by user")
+    # ---- 3. Destructive-operation confirmation. ----
+    if not _confirm_destruction(args):
+        _fail("aborted by user (or by --force-required policy).")
         return 130
 
-    print()
-    _hr()
-    print("  ✓ Fresh install complete.")
-    _hr()
-    print(f"  DR Web UI:  https://{args.hostname}:8443/ediscovery/")
-    print(f"  DRSysAdmin   /  {args.final_password}")
-    print(f"  admin@training / {args.final_password}")
-    print()
-    print(f"  To use dr-tui against this install, drop into the repo and run:")
-    print(f"    .venv/bin/dr-tui")
-    print()
-    return 0
+    # ---- 4. Compute total progress steps for the bar. ----
+    # Each shell phase counts as 1; phase 3 counts as len(STEPS).
+    total_units = (
+        (0 if args.skip_clean else 1)
+        + (0 if args.skip_installer else 1)
+        + (0 if args.skip_api else len(STEPS))
+    )
+    if total_units == 0:
+        _warn("All phases skipped — nothing to do.")
+        return 0
+
+    progress = _setup_progress(total_units, disabled=args.no_progress)
+
+    # ---- 5. Run the phases inside the Progress context. ----
+    started_at = time.time()
+    rc = 0
+    try:
+        ctx = progress if progress is not None else _NullContext()
+        with ctx:
+            if not args.skip_clean:
+                _phase_banner(1, "Teardown (cleandr.sh)")
+                phase_clean(args)
+            else:
+                _skip("Phase 1 (teardown)")
+
+            if not args.skip_installer:
+                _phase_banner(2, "DR installer (DR_freshinstall.exp)")
+                phase_installer(args)
+            else:
+                _skip("Phase 2 (installer)")
+
+            if not args.skip_api:
+                _phase_banner(3, f"API provisioning ({len(STEPS)} steps)")
+                phase_api(args)
+            else:
+                _skip("Phase 3 (API provisioning)")
+    except (APIError, RuntimeError, TimeoutError, FileNotFoundError) as e:
+        console.print()
+        _fail(f"FATAL: {e}")
+        log.exception("FATAL exception during run")
+        if isinstance(e, APIError):
+            console.print(f"        [red]error_code={e.error_code}  "
+                          f"status={e.status}[/]")
+            console.print(f"        [red]extended="
+                          f"{e.extended_status[:200]}[/]")
+        rc = 1
+    except KeyboardInterrupt:
+        console.print()
+        _fail("interrupted by user (Ctrl-C)")
+        log.warning("interrupted by SIGINT")
+        rc = 130
+
+    # ---- 6. Summary. ----
+    elapsed = time.time() - started_at
+    log.info("total wall clock: %.1fs (exit=%d)", elapsed, rc)
+    console.print()
+    if rc == 0:
+        console.print(Panel.fit(
+            Text(
+                f"✓  Fresh install complete in {elapsed:.1f}s.\n\n"
+                f"DR Web UI:        https://{args.hostname}:8443/ediscovery/\n"
+                f"DRSysAdmin     /  {args.final_password}\n"
+                f"admin@training /  {args.final_password}\n\n"
+                f"Log file:         {log_path}\n"
+                f"Run dr-tui:       .venv/bin/dr-tui",
+                style="green",
+            ),
+            border_style="green",
+            title="[bold green]SUCCESS[/]",
+        ))
+    else:
+        console.print(Panel.fit(
+            Text(
+                f"Run failed after {elapsed:.1f}s.\n"
+                f"Log file: {log_path}\n"
+                f"For symptom→fix lookup see docs/RUNBOOK.md "
+                f"§4g/§4h/§5.",
+                style="red",
+            ),
+            border_style="red",
+            title="[bold red]FAILURE[/]",
+        ))
+    return rc
+
+
+class _NullContext:
+    """Context-manager no-op used when the progress bar is disabled
+    (--no-progress or non-TTY). Keeps main()'s `with` block uniform."""
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
 
 
 if __name__ == "__main__":

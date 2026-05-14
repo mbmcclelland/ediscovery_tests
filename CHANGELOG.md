@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.17.1](#v0171--2026-05-14) | 2026-05-14 | DR_freshinstall — Rich progress bar, file logging, help-by-default + destructive-op confirmation gate |
 | [v0.17.0](#v0170--2026-05-14) | 2026-05-14 | **`DR_freshinstall.py`** — one-shot REST-based fresh-install driver (replaces cleandr+expect+playwright sequence) |
 | [v0.16.0](#v0160--2026-05-14) | 2026-05-14 | NewJobModal — **connector tree-browser is back** (FR-8), works for both DRSysAdmin and admin@org |
 | [v0.15.3](#v0153--2026-05-14) | 2026-05-14 | Documentation overhaul + new **API Programming Guide** for future Claude sessions |
@@ -43,6 +44,90 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.17.1 — 2026-05-14
+
+### Added: progress bar, file logging, and a help-by-default safety gate on `DR_freshinstall.py`
+
+Quality-of-life pass on the v0.17.0 driver. No new functionality —
+same 13 API steps, same shell phases — but the UX is now legible
+instead of being a wall of plain text.
+
+**Highlights:**
+
+- **Rich progress bar** — single global `rich.progress.Progress`
+  spans all phases. The bar shows `Phase X — <name>` or `Step N
+  — <title>` as it advances, plus elapsed time and an M/N
+  completion counter. Refresh rate 8 Hz so it's smooth without
+  burning CPU. `--no-progress` (or non-TTY stdout) disables it
+  cleanly — useful for CI logs where the carriage-return tricks
+  garble the output.
+- **File logging** — every action is mirrored into
+  `/tmp/dr-freshinstall-<TIMESTAMP>.log` at DEBUG level, with
+  ISO-8601 timestamps. Override with `--log-file`. Stderr stream
+  handler honours `--log-level` (default INFO) or `--verbose`
+  for full DEBUG flow. Post-mortem debugging now has a full
+  audit trail instead of "what did the screen say again?"
+- **Per-step timing** — `_ok()` now appends `(0.2s)` to the
+  success line so slow phases (e.g. NFS storage provisioning,
+  which can run 30-60s) are visible to the eye, not just the
+  log. Total wall clock also reported in the final summary.
+- **Help by default** — running with no args used to silently
+  start the destructive default flow. Now prints help and exits
+  0. Matches the convention of `kubectl`, `helm`, etc. — modal
+  tools shouldn't default to destruction.
+- **Destructive-op confirmation gate** — running with phase 1
+  (cleandr) or phase 2 (expect installer) requested now needs
+  EITHER `--force` OR an interactive `YES` (uppercase) at a
+  Rich-styled red-bordered warning panel. Non-TTY stdin without
+  `--force` aborts cleanly. Catches the "rogue CI pipeline
+  nukes the lab" failure mode.
+- **Rich panel banners** — start banner shows target, phases,
+  mode, and log file location in one boxed view. End banner is
+  a green SUCCESS or red FAILURE panel with credentials, log
+  path, and next-step command. The visual delta between SUCCESS
+  and FAILURE is obvious at a glance.
+
+**Flags added (10 → 16):**
+
+| Flag | Purpose |
+|---|---|
+| `--force` | bypass the destructive-op y/n prompt |
+| `--no-progress` | disable the live progress bar |
+| `--log-file PATH` | override default `/tmp/dr-freshinstall-*.log` |
+| `--log-level LEVEL` | DEBUG / INFO / WARNING / ERROR (default INFO) |
+| `--verbose`, `-v` | shortcut for `--log-level=DEBUG` |
+
+**No-args invocation now safe:**
+
+```bash
+$ python DR_freshinstall.py
+# Prints help + exits 0. Old behaviour: started ripping things up.
+```
+
+**Verified:**
+
+- `--dry-run --skip-clean --skip-installer` runs all 13 API steps
+  in dry-run, progress bar increments visibly, summary panel green.
+- `--skip-clean --skip-installer --keep-existing --no-progress`
+  against live install: 15/15 step ticks, per-step timing
+  visible, full log written.
+- `--skip-installer --skip-api < /dev/null` (non-TTY without
+  `--force`) aborts cleanly with a specific error message.
+- All 15 pilot tests still pass.
+
+**Files:**
+
+- `DR_freshinstall.py` — refactored argparse (4 argument groups
+  for readability), new `_setup_logging`, `_setup_progress`,
+  `_advance_progress`, `_phase_banner`, `_confirm_destruction`,
+  `_show_help_and_exit`, `_NullContext`. All user-facing helpers
+  (`_ok` / `_info` / `_warn` / `_fail` / `_skip` / `_step`) now
+  emit to both the logger and the Rich console.
+- `__version__.py` → 0.17.1
+- CHANGELOG.md (this entry).
 
 ---
 
