@@ -99,6 +99,25 @@ def _yn(b: bool) -> str:
     return "yes" if b else "no"
 
 
+def _status_glyph(status: str) -> str:
+    """v0.15.1 — TICKET-2: glyph prefix for status cells so the cue
+    isn't colour-only. Maps the operationState / RunRecord status
+    enums to a single-char prefix readable on every terminal that
+    supports UTF-8 (PuTTY in UTF-8 mode, Tabby, Windows Terminal,
+    iTerm2, GNOME Terminal — all good)."""
+    s = (status or "").upper()
+    if s == "RUNNING":          return "▶"
+    if s == "SUCCESS":          return "✓"
+    if s in ("FAILURE", "FAILED", "DELETE_FAILED"):
+                                 return "✗"
+    if s in ("DELETED",):       return "⊘"
+    if s in ("CANCELLED", "CANCELED"):
+                                 return "⊘"
+    if s in ("PAUSED",):        return "‖"
+    if s in ("COMPLETE",):      return "✓"
+    return "·"
+
+
 def _fmt_retention(seconds: int) -> str:
     """Render a retention duration in the largest unit that divides cleanly."""
     if seconds <= 0:
@@ -1011,8 +1030,11 @@ class JobsMonitorModal(ModalScreen[None]):
                     row.user_name,
                 )
             else:
-                state_disp = (f"[green]{row.state}[/]" if row.state == "RUNNING"
-                              else f"[dim]{row.state}[/]")
+                # v0.15.1 TICKET-2: glyph + colour, never colour-only.
+                glyph = _status_glyph(row.state)
+                state_disp = (f"[green]{glyph} {row.state}[/]"
+                              if row.state == "RUNNING"
+                              else f"[dim]{glyph} {row.state}[/]")
                 t.add_row(
                     row.org or "—", row.project, row.job, state_disp,
                     row.started or "—", row.completed or "—",
@@ -1758,15 +1780,27 @@ class NewJobModal(ModalScreen[Optional[dict]]):
             )
 
     def _refresh_project_status(self) -> None:
-        """Show which project this org will index into (informational)."""
+        """Show which project this org will index into (informational).
+
+        v0.15.1 TICKET-1: empty project handle now surfaces an
+        actionable message about likely role-permission gaps (the
+        common cause when `admin@<org>` was just created without the
+        DR_ROLE_SETUP.md permissions). The old wording rendered as
+        `Indexing into project: ? (handle )` which read like broken
+        UI to the beta tester.
+        """
         try:
             line = self.query_one("#newjob-project-status", Static)
         except Exception:
             return
         if not self._cur_project_handle:
             line.update(
-                f"[yellow]Org '{self._cur_org}' has no projects — pick a "
-                f"different org or create a project first.[/]"
+                f"[yellow]No projects visible to your account in "
+                f"organisation '{self._cur_org}'.[/]\n"
+                f"[dim]Most likely cause: your role lacks the "
+                f"'Project Data Areas - View' permission. See "
+                f"`docs/DR_ROLE_SETUP.md` for the one-time Web UI "
+                f"grant.[/]"
             )
             return
         # Look up the friendly name for the auto-picked project.
@@ -1776,7 +1810,8 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                 proj_name = p.get("name") or ""
                 break
         line.update(
-            f"[dim]Indexing into project: {proj_name or '?'} "
+            f"[dim]Indexing into project: "
+            f"{proj_name or '(unknown)'} "
             f"(handle {self._cur_project_handle})[/]"
         )
 
@@ -3052,8 +3087,11 @@ class DashboardScreen(Screen):
         t.clear()
         self._sch_running_rows = running
         for r in running:
-            state_disp = (f"[green]{r.state}[/]" if r.state == "RUNNING"
-                          else f"[dim]{r.state}[/]")
+            # v0.15.1 TICKET-2: glyph + colour.
+            glyph = _status_glyph(r.state)
+            state_disp = (f"[green]{glyph} {r.state}[/]"
+                          if r.state == "RUNNING"
+                          else f"[dim]{glyph} {r.state}[/]")
             t.add_row(
                 r.org or "—", r.project, r.job, state_disp,
                 r.started or "—", r.duration or "—", r.user or "—",
@@ -3105,7 +3143,11 @@ class DashboardScreen(Screen):
                 "FAILURE": "red", "DELETED": "dim",
                 "DELETE_FAILED": "red",
             }.get(r.status, "")
-            status_disp = f"[{colour}]{r.status}[/]" if colour else r.status
+            # v0.15.1 TICKET-2 — glyph prefix so colour is never the
+            # only differentiator.
+            glyph = _status_glyph(r.status)
+            payload = f"{glyph} {r.status}"
+            status_disp = f"[{colour}]{payload}[/]" if colour else payload
             t.add_row(
                 f"{job_name}:{r.run_id}", r.started_at, status_disp,
                 r.task_handle[:16], r.finished_at or "—",

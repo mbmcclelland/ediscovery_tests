@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.15.1](#v0151--2026-05-14) | 2026-05-14 | Beta-tester fixes — glyph prefixes on status cells (accessibility) + actionable empty-project message |
 | [v0.15.0](#v0150--2026-05-14) | 2026-05-14 | NewJobModal — manual path Input (drops file-tree) + recurring schedules via systemd user timers |
 | [v0.14.10](#v01410--2026-05-14) | 2026-05-14 | NewJobModal — pre-emptive org-admin warning + clearer Browse error translation |
 | [v0.14.9](#v0149--2026-05-14) | 2026-05-14 | explore_connector uses project_handle as contextHandle (PROJECT_NOT_ACTIVATED fix) |
@@ -40,6 +41,52 @@ feature-by-feature **expected behaviour** see
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ---
+
+## v0.15.1 — 2026-05-14
+
+### Fixed: two beta-tester findings — accessibility + empty-project wording
+
+From the v0.15 beta walkthrough (see `BETA-Marcus-Chen-20260514.md`):
+
+**TICKET-2 (accessibility):** every status cell — F3 Jobs Monitor
+state column, Job Scheduler Running-Jobs sub-view, Run History
+status — now renders with a leading glyph prefix in addition to the
+colour. The colour-blind beta tester (deuteranopia) confirmed the
+text labels saved the cue, but adding a glyph makes the table
+scannable without reading every word.
+
+```
+▶ RUNNING        (was "[green]RUNNING[/]")
+✓ SUCCESS        (was "[green]SUCCESS[/]")
+✗ FAILURE        (was "[red]FAILURE[/]")
+⊘ DELETED        (was "[dim]DELETED[/]")
+⊘ CANCELLED      (was "[dim]CANCELLED[/]")
+‖ PAUSED         (was "[dim]PAUSED[/]")
+```
+
+Implemented as a single `_status_glyph(status)` helper at module
+top, used everywhere a status enum is rendered. UTF-8 required (all
+recommended terminals — Tabby, Windows Terminal, iTerm2, GNOME
+Terminal — support these glyphs).
+
+**TICKET-1 (UX):** `NewJobModal._refresh_project_status` no longer
+renders `Indexing into project: ? (handle )` when the org admin
+can't see any projects. New wording:
+
+```
+No projects visible to your account in organisation 'training'.
+Most likely cause: your role lacks the 'Project Data Areas - View'
+permission. See `docs/DR_ROLE_SETUP.md` for the one-time Web UI grant.
+```
+
+Yellow header line + dim explanation; surfaces the exact role-grant
+prereq the beta user spent three README reads to discover.
+
+**TICKET-3 (Cancel + Close redundancy):** WONT FIX — both labels
+preserved for habit-compatibility (original spec listed all four
+button labels explicitly).
+
+19/19 pilot tests still pass.
 
 ## v0.15.0 — 2026-05-14
 
