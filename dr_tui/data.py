@@ -1662,24 +1662,37 @@ def explore_connector(
     root itself. The captured response uses `name` for the path
     component; the DR Web UI builds a breadcrumb by concatenating these.
 
-    v0.14.8: this endpoint is **org-admin scoped** — DRSysAdmin raises
-    `PERMISSION_DENIED`. Callers must pass an org-admin EDiscoveryClient.
+    v0.15.2 update: works for **both** DRSysAdmin and org-admin users.
+    The previous v0.14.8 claim that DRSysAdmin gets `PERMISSION_DENIED`
+    was a symptom of the (now-removed) `systemScope: True` auto-inject
+    in api_client.post — see `docs/API_PROGRAMMING_GUIDE.md` §5. The
+    only DRSysAdmin-specific prerequisite is that the caller has
+    already invoked `ensure_org_context(client, org_name)` so the
+    session token carries the org context.
+
     We re-raise APIError unchanged so the UI can surface a specific
     message rather than rendering an empty tree silently. (Earlier
     versions swallowed all APIError → [], which made permission
     failures look like empty directories.)
 
-    v0.14.9: `contextHandle` must be the **project handle** when one is
-    available, NOT the org name. The server interprets an org-name
-    contextHandle as "no project selected", defaults to project 0,
-    and raises `PROJECT_NOT_ACTIVATED Project 0 not activated`.
-    Captured v0.10+ flows always use the project handle here. Fall
-    back to org name if no project_handle is supplied — preserves the
-    original behaviour for callers that don't have a project context
-    yet (e.g. very-early init flows).
+    v0.16.0: `contextHandle` is the **org name**, not the project
+    handle. Empirically (live test against DR 5.5.3.2 on 2026-05-14):
+      - ctx=<org name>           → works for DRSysAdmin + admin@org
+      - ctx=<project handle>     → DRSysAdmin gets
+        `PROJECT_NOT_ACTIVATED Project 0 not activated` unless the
+        Web UI had pre-activated that project on the same token
+        (which the TUI cannot do — there's no usable
+        `ecaManager/selectProject` REST endpoint; it 500s).
+    The v0.14.9 docstring (which preferred the project handle) was
+    written from a single Web-UI capture where the project happened
+    to be active, and turned out not to generalise. We keep the
+    `project_handle` parameter as a signal-only field for callers
+    that want to record it in the audit trail / error message; it
+    no longer drives the request.
     """
     pp_name = parent_path or remote_path
-    ctx = project_handle or org_name
+    # contextHandle MUST be the org name here — see v0.16.0 note above.
+    ctx = org_name or project_handle
     resp = client.post(
         "connectorManager/exploreConnector",
         extra_body={

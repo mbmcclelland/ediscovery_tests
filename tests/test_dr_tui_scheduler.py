@@ -333,6 +333,85 @@ def test_newjob_modal_v0141_defaults_and_buttons() -> None:
     asyncio.run(_walk_newjob_v0141_defaults_and_buttons())
 
 
+# ---------- v0.16.0: NewJobModal connector tree-browser ---------------------
+
+async def _walk_newjob_v016_tree_browser() -> None:
+    """v0.16.0 — Tree replaces the v0.15 manual-only path Input.
+
+    Verifies:
+      * #newjob-tree widget exists after mount
+      * root label is the connector path with a glyph
+      * #newjob-selected status line exists
+      * api_client=None doesn't crash mount (worker call is gated; an
+        exception is logged inside the Tree, not the modal)
+      * Changing the connector via the Select fires _reload_tree and
+        re-roots the Tree to the new connector's path
+      * Manual edit of #newjob-path syncs _cur_path (so deep-paste still
+        wins over the last tree click)
+    """
+    from dr_tui.app import NewJobModal
+    from dr_tui.data import Connector
+    from textual.widgets import Tree, Select as _S
+
+    app = _Harness()
+    orgs = ["training"]
+    connectors = {
+        "training": [
+            Connector(name="nfs-a", type="NFS", mode="IMPORT", status="OK",
+                      host="10.0.0.1", path="/data/import", handle="c-1"),
+            Connector(name="nfs-b", type="NFS", mode="IMPORT", status="OK",
+                      host="10.0.0.2", path="/srv", handle="c-2"),
+        ],
+    }
+    projects = {"training": [{"name": "test1", "handle": "254"}]}
+
+    async with app.run_test() as pilot:
+        holder: list = []
+        modal = NewJobModal(
+            orgs=orgs, connectors_by_org=connectors,
+            projects_by_org=projects, api_client=None,
+        )
+        app.push_screen(modal, lambda r: holder.append(r))
+        await pilot.pause()
+        scr = app.screen
+        # Tree widget exists.
+        tree = scr.query_one("#newjob-tree", Tree)
+        assert tree is not None
+        # Root label includes the connector path + folder glyph.
+        root_label = str(tree.root.label)
+        assert "/data/import" in root_label, root_label
+        assert "🗀" in root_label or "(no connector" in root_label
+        # Selected status line is present.
+        sel = scr.query_one("#newjob-selected", Static)
+        assert sel is not None
+        # _cur_path defaults to the connector root, not "".
+        assert scr._cur_path == "/data/import", scr._cur_path
+
+        # Switch connector → tree re-roots to the new path.
+        scr.query_one("#newjob-connector", _S).value = "c-2"
+        await pilot.pause()
+        root_label2 = str(scr.query_one("#newjob-tree", Tree).root.label)
+        assert "/srv" in root_label2, root_label2
+        assert scr._cur_path == "/srv", scr._cur_path
+
+        # Manual deep-paste into the Input wins (regression coverage
+        # for the on_input_changed sync — without it, Schedule would
+        # save the tree-root path, not what the user actually typed).
+        deep = "/srv/archive/2026/Q1"
+        scr.query_one("#newjob-path", Input).value = deep
+        await pilot.pause()
+        assert scr._cur_path == deep, scr._cur_path
+
+        # Cancel.
+        scr.query_one("#newjob-cancel", Button).action_press()
+        await pilot.pause()
+        assert holder == [None]
+
+
+def test_newjob_modal_v016_tree_browser() -> None:
+    asyncio.run(_walk_newjob_v016_tree_browser())
+
+
 # ---------- v0.14: unit-name parse + LogViewerModal mount ----------
 
 def test_unit_parse_regex() -> None:

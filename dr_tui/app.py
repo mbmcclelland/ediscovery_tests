@@ -1740,13 +1740,23 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                     )
 
                 with Vertical(id="newjob-tree-wrap"):
-                    yield Label("Folder to index (path on the connector)")
-                    # v0.15: replaced the file-tree browser with a plain
-                    # path Input. exploreConnector is org-admin scoped
-                    # AND requires permissions DR doesn't grant by default
-                    # in 5.5.3.2 — we matched locustfile_indexing.py's
-                    # proven pattern: user supplies the path, we skip the
-                    # browse and go straight to createDataArea.
+                    yield Label("Folder to index (browse the connector)")
+                    # v0.16.0 — file-tree browser is back. v0.15 dropped
+                    # it under the (wrong) v0.14.x theory that exploreConnector
+                    # was permanently broken for default DR installs. The
+                    # v0.15.2 systemScope fix unblocked it; this build wires
+                    # it back to the wizard for both DRSysAdmin and admin@org.
+                    # The Tree lazy-loads via on_tree_node_expanded; each
+                    # selected node syncs its full path into #newjob-path.
+                    yield Tree("(loading…)", id="newjob-tree")
+                    yield Static(
+                        "[dim]Selected: (none yet — pick a folder above)[/]",
+                        id="newjob-selected",
+                    )
+                    yield Label("Path on connector")
+                    # Editable mirror — auto-filled by tree clicks, but
+                    # power users can paste a deep path directly (e.g.
+                    # one copied from the DR Web UI breadcrumb).
                     yield Input(
                         value=(
                             self._existing.path if self._existing
@@ -1754,12 +1764,6 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                         ),
                         placeholder="e.g. /data/import/payroll/2026",
                         id="newjob-path",
-                    )
-                    yield Static(
-                        "[dim]Tip: paste the path from the DR Web UI's "
-                        "connector browser, or use the connector's root "
-                        "path shown above.[/]",
-                        classes="modal-hint",
                     )
                     yield Static(
                         f"[dim]Connector root: {self._connector_root_path_default() or '—'}[/]",
@@ -1843,48 +1847,36 @@ class NewJobModal(ModalScreen[Optional[dict]]):
 
     # ---- mount -------------------------------------------------------
     def on_mount(self) -> None:
-        # Auto-load the file tree on open. Without this the user has to
-        # click Re-browse to get anything to appear, even though the
-        # dropdowns already auto-picked an org + connector.
+        # Auto-load the file tree on open so the user sees folders as
+        # soon as the modal appears — no extra click required.
         self._refresh_project_status()
-        # v0.14.10 — pre-emptive warning when the modal is operating
-        # without an org-admin client. Schedule + Run Now hit org-admin-
-        # only endpoints (createDataArea / createCorpus / createRepresentation)
-        # so they'll fail. Tell the user up front.
-        self._warn_if_not_org_admin()
         self._refresh_path_hint()
+        # v0.16.0 — load the connector root into the Tree right away.
+        # Replaces the old _warn_if_not_org_admin yellow banner, which
+        # was always shown for DRSysAdmin sessions even though v0.15.2
+        # made DRSysAdmin work for exploreConnector. If the load
+        # actually fails, _tree_show_error will surface a precise
+        # message in #newjob-error.
+        self._reload_tree()
         # Focus the name field so the user can type a job name straight away.
         try:
             self.query_one("#newjob-name", Input).focus()
         except Exception:
             pass
 
-    def _warn_if_not_org_admin(self) -> None:
-        """If `_client` is the DRSysAdmin session, warn early.
+    def _is_sys_session(self) -> bool:
+        """True if `_client` is the DRSysAdmin (super-system) session.
 
-        The Job Scheduler's content operations (exploreConnector,
-        createDataArea, …) all require an org-admin session. We can
-        detect this by checking the client's config — sys users have
-        `customerName=='super_system_customer'`; org users have
-        their org name.
+        Used to decide whether to call `realmManager/initializeOrganization`
+        before each `exploreConnector` — required for sys sessions to
+        switch the token's org context, no-op for org-pinned sessions.
         """
         try:
             cfg = getattr(self._client, "cfg", None)
             customer = (getattr(cfg, "organization", "") or "").strip()
         except Exception:
             customer = ""
-        if customer == "super_system_customer":
-            # We have only a sys-admin session in hand.
-            try:
-                self.query_one("#newjob-error", Static).update(
-                    "[yellow]⚠ This modal is using a DRSysAdmin "
-                    "session. Browse / Count / Save all require an "
-                    "org-admin login (e.g. admin@" + self._cur_org +
-                    "). Log out and log back in as the org admin "
-                    "before scheduling a job.[/]"
-                )
-            except Exception:
-                pass
+        return customer == "super_system_customer"
 
     # ---- events ------------------------------------------------------
     def on_button_pressed(self, evt: Button.Pressed) -> None:
@@ -1924,6 +1916,8 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                 )
             except Exception:
                 pass
+            # v0.16.0 — reload the tree against the new org's first connector.
+            self._reload_tree()
         elif sid == "newjob-connector":
             self._cur_conn_handle = (str(evt.value)
                                      if evt.value != Select.BLANK else "")
@@ -1934,9 +1928,25 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                 )
             except Exception:
                 pass
+            # v0.16.0 — reload the tree for the newly-selected connector.
+            self._reload_tree()
 
     def action_cancel(self) -> None:
         self.dismiss(None)
+
+    def on_input_changed(self, evt) -> None:
+        """Manual path edits are the source of truth for `self._cur_path`.
+
+        v0.16.0 — the Tree mirrors changes into #newjob-path, but if the
+        user types directly in #newjob-path (e.g. pastes a deep path
+        from the Web UI breadcrumb), we want that text to be what we
+        save — not the last tree-click. Capture every change.
+        """
+        try:
+            if getattr(evt.input, "id", "") == "newjob-path":
+                self._cur_path = (evt.value or "").strip()
+        except Exception:
+            pass
 
     # ---- file tree ---------------------------------------------------
     def _selected_connector(self) -> Optional[drdata.Connector]:
@@ -1961,6 +1971,245 @@ class NewJobModal(ModalScreen[Optional[dict]]):
             )
         except Exception:
             pass
+
+    # ---- v0.16.0 Tree browser ---------------------------------------
+    # Node data shape (stored as a dict in `node.data`):
+    #   {"path":   "<absolute remote path>",
+    #    "loaded": <bool — children already fetched?>,
+    #    "leaf":   <bool — is this a file (true) or a folder (false)?>,
+    #    "kind":   "marker" | "error" | None}
+    # `kind` is used for sentinel rows like "(empty)" or error chips so
+    # selection ignores them.
+
+    def _join(self, parent: str, child: str) -> str:
+        """Concatenate parent path + child name with one separator."""
+        if not parent:
+            return child
+        sep = "" if parent.endswith("/") else "/"
+        return f"{parent}{sep}{child}"
+
+    def _reload_tree(self) -> None:
+        """Reset the tree to the connector root and kick off a load.
+
+        Called on mount, on org change, and on connector change. Safe
+        to call when no connector is selected (just shows a placeholder).
+        """
+        try:
+            tree = self.query_one("#newjob-tree", Tree)
+        except Exception:
+            return
+        tree.clear()
+        try:
+            self.query_one("#newjob-error", Static).update("")
+        except Exception:
+            pass
+        conn = self._selected_connector()
+        if not conn:
+            tree.root.label = "[dim](pick an organization and connector above)[/]"
+            tree.root.allow_expand = False
+            self._set_selected_label("")
+            return
+        root_path = (conn.path or "/") or "/"
+        # The root node label uses a status glyph (▸) that's high-contrast
+        # in deuteranopia (Marcus's accessibility request from §4 of the
+        # beta-tester log). We avoid relying on colour alone.
+        tree.root.label = f"▸ 🗀 {root_path}"
+        tree.root.data = {"path": root_path, "loaded": False, "leaf": False}
+        tree.root.allow_expand = True
+        # Default the selected-path display to the connector root so
+        # the user can save immediately if they want the whole share.
+        self._cur_path = root_path
+        try:
+            self.query_one("#newjob-path", Input).value = root_path
+        except Exception:
+            pass
+        self._set_selected_label(root_path)
+        # Pre-expand the root so the first level appears without a
+        # second click. on_tree_node_expanded will fire and load.
+        try:
+            tree.root.expand()
+        except Exception:
+            pass
+
+    def on_tree_node_expanded(self, evt) -> None:
+        """Lazy-load children when the user expands a folder node."""
+        node = evt.node
+        data = node.data or {}
+        if data.get("loaded") or data.get("leaf"):
+            return
+        # Mark loaded before launching the worker so back-to-back expand
+        # events don't double-fire the API call.
+        data["loaded"] = True
+        node.data = data
+        parent_path = data.get("path", "") or ""
+        # Flip the glyph from ▸ to ▾ to show "now expanded".
+        try:
+            lbl = str(node.label)
+            if lbl.startswith("▸"):
+                node.label = "▾" + lbl[1:]
+        except Exception:
+            pass
+        # Add a placeholder so the user sees something is happening even
+        # for slow NFS mounts. It's replaced when the worker completes.
+        try:
+            ph = node.add_leaf(
+                "[dim]loading…[/]",
+                data={"kind": "marker", "path": ""},
+            )
+        except Exception:
+            ph = None
+        self.run_worker(
+            lambda n=node, p=parent_path, m=ph: self._fetch_and_fill(n, p, m),
+            thread=True, exclusive=False, group="newjob-tree",
+        )
+
+    def _fetch_and_fill(self, node, parent_path, placeholder) -> None:
+        """Worker: call explore_connector, then hand off to the UI thread."""
+        conn = self._selected_connector()
+        if not conn:
+            return
+        org = self._cur_org
+        try:
+            # v0.15.2 — DRSysAdmin sessions need initializeOrganization
+            # to switch the token's org context before the org-scoped
+            # exploreConnector. Org-pinned sessions (admin@<org>) have
+            # this baked in by login, so we skip the call there.
+            if self._is_sys_session():
+                drdata.ensure_org_context(self._client, org)
+            entries = drdata.explore_connector(
+                self._client,
+                org_name=org,
+                connector_name=conn.name,
+                connector_type=conn.type,
+                remote_host=conn.host,
+                remote_path=conn.path,
+                parent_path=parent_path,
+                # v0.16.0 — project_handle is informational only here;
+                # explore_connector always uses org name as contextHandle.
+                project_handle=self._cur_project_handle,
+            )
+        except APIError as e:
+            self.app.call_from_thread(
+                self._tree_show_error, node, parent_path, placeholder,
+                e.error_code or e.status, e.extended_status,
+            )
+            return
+        except Exception as e:
+            self.app.call_from_thread(
+                self._tree_show_error, node, parent_path, placeholder,
+                "ERROR", repr(e),
+            )
+            return
+        self.app.call_from_thread(
+            self._tree_fill, node, parent_path, placeholder, entries,
+        )
+
+    def _tree_fill(self, node, parent_path, placeholder, entries) -> None:
+        """UI thread: replace the loading placeholder with real children."""
+        if placeholder is not None:
+            try:
+                placeholder.remove()
+            except Exception:
+                pass
+        if not entries:
+            try:
+                node.add_leaf(
+                    "[dim](empty folder)[/]",
+                    data={"kind": "marker", "path": ""},
+                )
+            except Exception:
+                pass
+            return
+        # Directories first, files second, alpha within each — matches
+        # the DR Web UI's connector browser ordering. The 🗀/🗎 glyphs
+        # give a colour-blind-safe visual cue (deuteranopia).
+        dirs = sorted(
+            (e for e in entries if not e.leaf),
+            key=lambda e: e.name.lower(),
+        )
+        files = sorted(
+            (e for e in entries if e.leaf),
+            key=lambda e: e.name.lower(),
+        )
+        for e in dirs:
+            full = self._join(parent_path, e.name)
+            sub = node.add(
+                f"▸ 🗀 {e.name}",
+                data={"path": full, "loaded": False, "leaf": False},
+            )
+            sub.allow_expand = True
+        for e in files:
+            full = self._join(parent_path, e.name)
+            node.add_leaf(
+                f"  🗎 {e.name}",
+                data={"path": full, "leaf": True},
+            )
+
+    def _tree_show_error(
+        self, node, parent_path, placeholder, code, detail,
+    ) -> None:
+        """Surface a browse failure in the tree AND the error pane."""
+        if placeholder is not None:
+            try:
+                placeholder.remove()
+            except Exception:
+                pass
+        # Tree chip: short, in red, on the failing node so the user
+        # sees exactly which folder couldn't be browsed.
+        short = (detail or "")[:80]
+        try:
+            node.add_leaf(
+                f"[red]⚠ {code}: {_rich_escape(short)}[/]",
+                data={"kind": "error", "path": ""},
+            )
+        except Exception:
+            pass
+        # Error pane: longer, with actionable hints — different wording
+        # depending on which user we're logged in as, so the suggested
+        # next step is the right one.
+        sess_kind = "DRSysAdmin" if self._is_sys_session() else "org-admin"
+        try:
+            self.query_one("#newjob-error", Static).update(
+                f"[red]Browse failed under "
+                f"{_rich_escape(parent_path or '/')}: "
+                f"{_rich_escape(code)} — {_rich_escape(short)}[/]\n"
+                f"[dim]Session: {sess_kind}. Connector: "
+                f"{_rich_escape((self._selected_connector() or '').name) if self._selected_connector() else '?'}. "
+                f"Org: {_rich_escape(self._cur_org)}. "
+                f"If you see PROJECT_NOT_ACTIVATED, the project handle "
+                f"is being passed where the org name should go — "
+                f"see docs/API_PROGRAMMING_GUIDE.md §5 + §13.[/]"
+            )
+        except Exception:
+            pass
+
+    def on_tree_node_selected(self, evt) -> None:
+        """A node was activated — sync its path into #newjob-path."""
+        node = evt.node
+        data = (node.data or {}) if node is not None else {}
+        kind = data.get("kind")
+        if kind in ("marker", "error"):
+            return
+        path = data.get("path") or ""
+        if not path:
+            return
+        self._cur_path = path
+        try:
+            self.query_one("#newjob-path", Input).value = path
+        except Exception:
+            pass
+        self._set_selected_label(path)
+
+    def _set_selected_label(self, path: str) -> None:
+        """Update the 'Selected: …' line under the tree."""
+        try:
+            line = self.query_one("#newjob-selected", Static)
+        except Exception:
+            return
+        if not path:
+            line.update("[dim]Selected: (none yet — pick a folder above)[/]")
+        else:
+            line.update(f"[b green]Selected:[/] {_rich_escape(path)}")
 
     # ---- submit ------------------------------------------------------
     def _submit(self, *, action: str) -> None:
@@ -3673,13 +3922,15 @@ class DashboardScreen(Screen):
         except Exception:
             pass
 
-        # v0.14.8 — `connectorManager/exploreConnector` is org-admin-only
-        # (DRSysAdmin gets PERMISSION_DENIED — QA-14 finding). The file
-        # tree + recursive count inside NewJobModal need the org client.
-        # Same applies to `submit_indexing_job` later, but that runs from
-        # dr-job-run with its own login. Prefer org_client when present;
-        # if the only session is the sys client, the modal will surface
-        # a specific error on first browse attempt.
+        # v0.16.0 — pick whichever session is available. Post-v0.15.2
+        # (the systemScope auto-inject fix), BOTH DRSysAdmin and
+        # admin@<org> sessions work for connectorManager/exploreConnector,
+        # provided the sys session calls realmManager/initializeOrganization
+        # first. NewJobModal._fetch_and_fill handles that switch
+        # internally via _is_sys_session(), so we just hand it whatever
+        # session the app actually logged in with. Org-pinned login wins
+        # only if both happen to be present — fewer initializeOrganization
+        # round-trips per browse.
         modal_client = self.app.org_client or client
         self.app.call_from_thread(
             self._sch_push_modal,

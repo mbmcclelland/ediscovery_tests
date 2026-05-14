@@ -208,20 +208,40 @@ string:
 
 ```python
 # The captured v0.10+ Web UI flow does this:
-client.post("connectorManager/exploreConnector", extra_body={
+client.post("orgManager/createDataArea", extra_body={
     "contextHandle": "254",         # ← project handle
-    "connectorType": "NFS",
+    "connectorHandle": "...",
     ...
 })
 ```
 
-For browse-from-the-Connectors-page (no project active yet), the
-captured Web UI uses `contextHandle: "training"` (org name) instead
-— and it works because DR's async SRI worker only fails with
-`PROJECT_NOT_ACTIVATED` when **`systemScope: true` is set** (see §5).
+**For `exploreConnector` specifically — use the org name, not the
+project handle.** This is the v0.16.0 correction to the earlier
+v0.14.9 rule. Live evidence (DR 5.5.3.2, 2026-05-14):
 
-**Rule of thumb:** for the indexing chain, prefer project handle.
-For everything else org-scoped, org name works.
+| ctx value | DRSysAdmin | admin@&lt;org&gt; |
+|---|---|---|
+| `<org name>` (e.g. `"training"`) | ✓ 12 entries | ✓ 12 entries |
+| `<project handle>` (e.g. `"254"`) | ✗ `PROJECT_NOT_ACTIVATED Project 0 not activated` | n/a (we have no test where it's needed) |
+
+The Web UI capture that motivated v0.14.9 had a project pre-selected
+in the same session (which "activates" it server-side); our TUI never
+does that, and the no-good workaround `ecaManager/selectProject`
+returns 500. The fix is simply: **for browse, use the org name.**
+For the indexing chain that *follows* the browse, the project handle
+works because by then we've created the data area and the server has
+its own activation path.
+
+**Rule of thumb (v0.16.0):**
+
+| Operation | `contextHandle` |
+|---|---|
+| `connectorManager/exploreConnector` | org name |
+| `adminOrgManager/listConnectors`     | org name |
+| `orgManager/createDataArea`          | project handle |
+| `orgManager/createCorpus`            | project handle |
+| `corpusManager/createRepresentation` | project handle |
+| `realmManager/listOrganizations`     | `"super_system_customer"` + `systemScope: true` |
 
 ---
 
@@ -408,7 +428,7 @@ read back the canonical state if you care. The `set_*` fetchers in
 | `adminOrgManager/listConnectors` | `{contextHandle: <org>, organizationName: <org>}` | Org's connector list. Works for DRSysAdmin post-`initializeOrganization`. |
 | `connectorManager/getNFSConnector` | `{contextHandle: <org>, handle: <conn-handle>}` | Single-connector details |
 | `connectorManager/getConnector` | `{contextHandle: <conn-handle>}` | Note: contextHandle here is the connector handle (quirk) |
-| `connectorManager/exploreConnector` | `{contextHandle, connectorType, connectorName, remoteHost, remotePath, organizationName, parentPath}` | **MUST NOT have `systemScope`.** Async — async-fail mode is "PROJECT_NOT_ACTIVATED" rather than PERMISSION_DENIED. |
+| `connectorManager/exploreConnector` | `{contextHandle: <org name>, connectorType, connectorName, remoteHost, remotePath, organizationName, parentPath}` | **MUST NOT have `systemScope`.** **`contextHandle` MUST be the org name** — using a project handle on a non-activated session returns `PROJECT_NOT_ACTIVATED Project 0 not activated` (see §4.3). DRSysAdmin must call `initializeOrganization` first. |
 | `connectorManager/validateNFSConnector` | (capture v0.07) | Pre-create validation |
 | `orgManager/createNFSConnector` | (capture v0.07) | Create new NFS connector |
 | `adminOrgManager/deactivateConnectors` | `{contextHandle: <org>, handles: [<names>], systemScope: false}` | **Sends connector NAMES, not handles** (DR API quirk). Soft-delete. |
@@ -909,6 +929,58 @@ The beta-user persona is colour-blind. Existing patterns:
 | Important row marker | `[yellow b]<name>[/]` (yellow alone) | `[yellow b]* <name>[/]` (asterisk + bold + colour) |
 
 Use `_status_glyph()` (in `dr_tui/app.py`) for status cells.
+
+### 12.6 Lazy-loading Tree pattern (v0.16.0)
+
+The connector browser in `NewJobModal` (re-introduced in v0.16.0) is
+the canonical example of how to wire a Textual `Tree` against a paged
+or expensive REST endpoint. The same shape works any time you have
+"folder-like" data that's too big to pre-walk (corpora, datasets,
+projects with deep nesting, etc.).
+
+**Node data shape:**
+
+```python
+node.data = {
+    "path":   "<absolute identifier — what the API needs>",
+    "loaded": bool,   # children already fetched?
+    "leaf":   bool,   # file/terminal node?
+    "kind":   "marker" | "error" | None,  # for sentinel rows
+}
+```
+
+**Lifecycle:**
+
+1. **Initial load** — `_reload_tree()` resets the root, sets
+   `root.data = {"path": <api id>, "loaded": False}`, and calls
+   `root.expand()` to fire `on_tree_node_expanded` for the first
+   batch.
+2. **Lazy expand** — `on_tree_node_expanded` checks
+   `data.get("loaded")` to avoid double-fires, flips the glyph
+   `▸ → ▾`, adds a `loading…` placeholder, and runs a worker
+   thread.
+3. **Worker** — calls the REST endpoint, catches `APIError` and
+   bare exceptions, then `call_from_thread` to the UI.
+4. **UI fill** — sorts dirs before files, adds child nodes with
+   their own `data["loaded"] = False`, removes the placeholder.
+5. **Error** — replaces the placeholder with a red `⚠` chip *on
+   the failing node* AND writes a longer message to a dedicated
+   error pane. Both are needed: the chip shows "what folder
+   broke", the pane explains why.
+6. **Selection** — `on_tree_node_selected` reads `node.data["path"]`
+   and writes it to whatever Input/state field needs it. Sentinel
+   rows (`kind in ("marker", "error")`) are skipped.
+
+**Why threading matters here:** `connectorManager/exploreConnector`
+is async on the server side and can take 5+ seconds on slow NFS
+mounts. Calling it on the UI thread freezes the entire TUI. The
+placeholder makes the wait visible without a spinner widget.
+
+See `NewJobModal._reload_tree`, `on_tree_node_expanded`,
+`_fetch_and_fill`, `_tree_fill`, `_tree_show_error`, and
+`on_tree_node_selected` in `dr_tui/app.py` for the full reference
+implementation. Pilot coverage:
+`tests/test_dr_tui_scheduler.py::test_newjob_modal_v016_tree_browser`.
 
 ---
 

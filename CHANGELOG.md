@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.16.0](#v0160--2026-05-14) | 2026-05-14 | NewJobModal — **connector tree-browser is back** (FR-8), works for both DRSysAdmin and admin@org |
 | [v0.15.3](#v0153--2026-05-14) | 2026-05-14 | Documentation overhaul + new **API Programming Guide** for future Claude sessions |
 | [v0.15.2](#v0152--2026-05-14) | 2026-05-14 | **api_client no longer auto-injects `systemScope: true`** — fixes the core PERMISSION_DENIED that blocked the whole Job Scheduler chain |
 | [v0.15.1](#v0151--2026-05-14) | 2026-05-14 | Beta-tester fixes — glyph prefixes on status cells (accessibility) + actionable empty-project message |
@@ -41,6 +42,115 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.16.0 — 2026-05-14
+
+### Added: connector tree-browser in the New Indexing Job dialog (FR-8)
+
+The v0.15.0 build dropped the file-tree browser from `NewJobModal` and
+replaced it with a manual path Input — at the time, under the (wrong)
+theory that `connectorManager/exploreConnector` was permanently broken
+for default DR installs. v0.15.2's `systemScope` fix proved that wrong:
+the endpoint works fine for any logged-in user who has been granted
+org-context (DRSysAdmin via `realmManager/initializeOrganization`;
+admin@&lt;org&gt; via login). v0.16.0 wires the tree back into the modal
+and verifies it for both account types live.
+
+**Highlights:**
+
+- **Tree widget** is back in `#newjob-tree-wrap`. Lazy expansion via
+  `on_tree_node_expanded` calls `explore_connector` in a worker
+  thread, so the UI stays responsive even on slow NFS mounts. A
+  `loading…` placeholder appears the moment a node is expanded and
+  is replaced when the API returns.
+- **Path Input is preserved** as an editable mirror beneath the tree
+  (per the user's "keep it" answer to the design question). Tree
+  clicks auto-fill the Input; the user can still paste a deep path
+  from the Web UI's breadcrumb. The new `on_input_changed` handler
+  keeps `self._cur_path` synced both ways — a typed value always
+  wins over the last tree-click.
+- **Status glyphs** (`▸ 🗀` for collapsed folders, `▾ 🗀` for
+  expanded, `🗎` for files, `⚠` for errors) work on monochrome
+  terminals and pass deuteranopia accessibility (Marcus Chen's
+  beta-tester request). Selection is shown on a dedicated
+  `#newjob-selected` line — no colour dependency.
+- **Error surface** is precise: `on_tree_node_expanded` traps both
+  `APIError` (code + extended_status) and bare exceptions; failures
+  appear as a red `⚠ <code>: <detail>` chip *on the failing node*
+  AND as a full message in `#newjob-error` with actionable hints
+  ("If you see PROJECT_NOT_ACTIVATED, the project handle is being
+  passed where the org name should go — see API_PROGRAMMING_GUIDE
+  §5 + §13").
+- **DRSysAdmin support** — `NewJobModal._is_sys_session()` detects a
+  super-system client and calls `ensure_org_context(client, org)`
+  before each `exploreConnector`, so DRSysAdmin no longer falls
+  back to the empty-results / PERMISSION_DENIED path. Verified live
+  against DR 5.5.3.2 on 2026-05-14: both DRSysAdmin and
+  admin@training return 12 entries under `/data/import` and can
+  descend further.
+
+**Fixed:**
+
+- `explore_connector()` — the v0.14.9 `contextHandle = project_handle`
+  rule was empirically wrong for sessions that haven't pre-activated a
+  project in the Web UI. Live test showed DRSysAdmin gets
+  `PROJECT_NOT_ACTIVATED Project 0 not activated` when we pass the
+  project handle, but the org name works for both account types.
+  Switched to `ctx = org_name or project_handle`. The `project_handle`
+  parameter is kept for backward compatibility (and audit trail) but
+  no longer drives the request. Long docstring update with the live
+  evidence and the no-good `ecaManager/selectProject` workaround
+  (it 500s).
+- Removed `_warn_if_not_org_admin()` — the yellow banner was always
+  shown for DRSysAdmin sessions even though v0.15.2 made DRSysAdmin
+  work for the Job Scheduler. Replaced with the helper `_is_sys_session`
+  that's used internally (no banner, no clutter).
+- `_sch_collect_then_open` comment block in `app.py` updated — the
+  v0.14.8 "DRSysAdmin gets PERMISSION_DENIED" rationale was historical.
+- Stale v0.14.8 docstring on `explore_connector` rewritten with the
+  v0.15.2 + v0.16.0 reality.
+
+### Changed
+
+- CSS — `#newjob-selected` gets `height: auto` + `margin-bottom: 1`
+  for a tidy line between the Tree and the path Input.
+
+### Files
+
+- `dr_tui/app.py` — `NewJobModal.compose`, `on_mount`, `on_select_changed`,
+  `on_input_changed` (new), `_reload_tree` (new), `on_tree_node_expanded`
+  (new), `_fetch_and_fill` (new), `_tree_fill` (new), `_tree_show_error`
+  (new), `on_tree_node_selected` (new), `_set_selected_label` (new),
+  `_is_sys_session` (new), `_warn_if_not_org_admin` (removed).
+  Also: `_sch_collect_then_open` rationale comment refreshed.
+- `dr_tui/data.py` — `explore_connector` docstring rewritten;
+  `ctx = org_name or project_handle`.
+- `dr_tui/app.tcss` — `#newjob-selected` rule added; `#newjob-tree`
+  comment updated.
+- `tests/test_dr_tui_scheduler.py` — new
+  `test_newjob_modal_v016_tree_browser` exercising mount, connector
+  switch, manual-edit override.
+- `__version__.py` — `0.16.0`.
+
+### Test coverage
+
+- 33/33 pilot tests pass.
+- Live verification on DR 5.5.3.2 (192.168.58.128):
+  - DRSysAdmin: `ensure_org_context` → `list_connectors` (1 connector)
+    → `explore_connector` root (12 entries) → nested browse (12).
+  - admin@training: `list_connectors` (1) → `explore_connector` root
+    (12) → nested browse (12).
+- Both account types get identical results — confirming the v0.15.2
+  systemScope fix + the v0.16.0 contextHandle correction generalise.
+
+### Docs
+
+- `CHANGELOG.md` — this entry + release index row.
+- `docs/API_PROGRAMMING_GUIDE.md` — §7 connector subsection updated
+  with the contextHandle correction; §12 TUI patterns gets a new
+  "lazy-loading Tree pattern" subsection.
 
 ---
 

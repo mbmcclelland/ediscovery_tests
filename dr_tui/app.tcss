@@ -562,6 +562,15 @@ NewJobModal {
     height: 1fr;
     border: round grey;
     margin: 0 0 1 0;
+    /* v0.16.0 — give the tree the bulk of the right column so deep
+       paths read on one line. The path Input below it gets a fixed
+       row, so this absorbs the remaining vertical space. */
+}
+
+#newjob-selected {
+    height: auto;
+    padding: 0 1;
+    margin-bottom: 1;
 }
 
 #newjob-tree-actions {
