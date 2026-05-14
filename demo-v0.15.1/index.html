@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>dr-tools v0.15.1 — demo tour</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+       Helvetica, Arial, sans-serif; max-width: 1400px;
+       margin: 2em auto; padding: 0 2em; line-height: 1.5;
+       background: #f7f7f5; color: #222; }
+h1 { border-bottom: 2px solid #444; padding-bottom: 0.3em; }
+h2 { margin-top: 2.5em; color: #1a4670; }
+.shot { margin: 1em 0 2em 0; padding: 1em; background: white;
+        border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+.shot img { width: 100%; height: auto; display: block; }
+.caption { color: #555; margin-top: 0.5em; font-size: 0.92em; }
+.row { display: flex; gap: 1em; align-items: flex-start; }
+.row > div:first-child { flex: 1; }
+.row > div:last-child { flex: 0 0 38%; }
+.note { background: #fffce8; border-left: 4px solid #d4b835;
+        padding: 0.5em 1em; margin: 0.5em 0; font-size: 0.92em; }
+code { background: #eee; padding: 0.1em 0.3em; border-radius: 3px; }
+ul li { margin-bottom: 0.3em; }
+hr { border: none; border-top: 1px solid #ccc; margin: 3em 0; }
+.meta { color: #888; font-size: 0.85em; }
+</style>
+</head>
+<body>
+
+<h1>dr-tools v0.15.1 — demo tour</h1>
+<p class="meta">Built on <code>2026-05-14</code>. Branch <code>v0.06</code>,
+commit <code>dd88958</code>. RPM:
+<code>dr-tools-0.15.1-1.el9.x86_64.rpm</code>.</p>
+
+<p>Seven screenshots taken by the
+<a href="https://textual.textualize.io/">Textual</a> Pilot harness
+against the live DR install (<code>192.168.58.128</code>). Each SVG
+is a faithful render of what your terminal sees — open them directly
+to inspect the pixel-perfect output.</p>
+
+<h2>1. Login</h2>
+<div class="row">
+<div class="shot">
+  <img src="01-login.svg" alt="dr-tui login screen">
+  <p class="caption">DR sysadmin or organization admin. Cleaner-than-default
+  Textual login dialog; focused field highlighted in cyan.</p>
+</div>
+<div>
+<ul>
+<li>Two roles: <strong>DRSysAdmin</strong> (system-wide) or
+    <strong>admin@training</strong> (org-scoped).</li>
+<li>Password default in lab: <code>password</code>.</li>
+<li><kbd>Enter</kbd> in either field submits.</li>
+</ul>
+</div>
+</div>
+
+<h2>2. Landing Dashboard <span class="meta">(DRSysAdmin)</span></h2>
+<div class="shot">
+  <img src="02-landing-dashboard.svg" alt="Landing dashboard">
+  <p class="caption">Five live panels: license + nodes (REST,
+  30s refresh); system metrics with sparklines (psutil, 2s); streaming
+  AHS log with INFO/WARN/ERROR filters (1s file poll); top 5 procs
+  (3s).</p>
+</div>
+<div class="note">
+<strong>Traffic-control station.</strong> Marcus the beta user
+specifically wanted this view as his all-day default. CPU / Mem /
+Net / Disk-IOPS sparklines show peak + average over a rolling
+60-sample window.
+</div>
+
+<h2>3. System Settings — Realm Settings sub-tree</h2>
+<div class="row">
+<div class="shot">
+  <img src="03-system-settings.svg" alt="System Settings tab">
+  <p class="caption">Hierarchical tree with two write-paths: Storage
+  depots, Virus Detection, System Users / Groups, and the v0.08+
+  Realm Settings (mail / splash / password policy / inactivity).</p>
+</div>
+<div>
+<ul>
+<li><kbd>F7</kbd> New, <kbd>F4</kbd> Edit, <kbd>F8</kbd> Delete on
+    rows that support it.</li>
+<li>Realm Settings entries open dedicated edit modals (v0.12).</li>
+<li>Auto-refresh ticks every 5s on the visible leaf only.</li>
+</ul>
+</div>
+</div>
+
+<h2>4. Job Scheduler — Saved Templates</h2>
+<div class="shot">
+  <img src="04-saved-templates.svg" alt="Saved Templates table">
+  <p class="caption">Three demo templates seeded. Note the
+  <code>* weekly-archive-longterm</code> row — the bold asterisk
+  prefix is the v0.15 accessibility cue for "longterm"-named jobs,
+  visible to colour-blind users regardless of the yellow tint.</p>
+</div>
+<div class="note">
+<strong>Beta-tester win.</strong> Marcus (deuteranopia) specifically
+called this out: "Asterisk is the deciding cue. Thank you for not
+relying on yellow alone."<br><br>
+Columns: Job Name · Org · Path · Retention · Schedule · Description.
+Schedule shows preset names (<code>3x-day</code>, <code>weekly</code>)
+or <code>on-demand</code> in dim text when no recurrence.
+</div>
+
+<h2>5. Run History <span class="meta">(v0.15.1 status glyphs)</span></h2>
+<div class="shot">
+  <img src="05-run-history.svg" alt="Run history">
+  <p class="caption">Each status cell carries a leading UTF-8 glyph
+  in addition to its colour: ▶ RUNNING, ✓ SUCCESS, ✗ FAILURE,
+  ⊘ DELETED/CANCELLED, ‖ PAUSED. v0.15.1 TICKET-2 fix.</p>
+</div>
+<div class="note">
+<strong>v0.15.1 accessibility fix.</strong> Pre-glyph version
+relied on red-vs-green colour alone to distinguish FAILURE from
+SUCCESS — invisible at a glance for deuteranopia. Now the glyph
+makes the cue table-scannable even without colour.
+</div>
+
+<h2>6. F3 — realm-wide Jobs Monitor</h2>
+<div class="shot">
+  <img src="06-f3-jobs-monitor.svg" alt="F3 Jobs Monitor modal">
+  <p class="caption">Single <code>realmManager/listRealmTasks</code>
+  call (v0.11 — replaces the per-project fan-out). Filter buttons
+  All/Running/Completed/Deleted, operation-type Select populated
+  from <code>listOperationTypes</code>, action row for
+  Pause/Resume/Cancel/Priority/Log. <kbd>L</kbd> opens the AE
+  live-log viewer.</p>
+</div>
+<div class="note">
+<strong>Press <kbd>F3</kbd> anywhere</strong> — the modal pops over
+whatever tab you're on. Cancel is confirm-gated. Priority opens
+a 3-button modal (High/Normal/Low, hotkeys <kbd>h</kbd>/<kbd>n</kbd>/<kbd>l</kbd>).
+</div>
+
+<h2>7. New Job wizard</h2>
+<div class="shot">
+  <img src="07-newjob-modal.svg" alt="New Job wizard">
+  <p class="caption">v0.15 layout: form fields left
+  (Name/Description/Organization/Connector/Retention/Schedule),
+  Path Input right. The file-tree browser was dropped in v0.15 in
+  favour of a path Input — matches the proven
+  <code>locustfile_indexing.py</code> pattern and sidesteps DR
+  5.5.3.2's permission gates on <code>exploreConnector</code>.</p>
+</div>
+<div class="note">
+<strong>Four explicit actions</strong> (per original spec): Cancel,
+Schedule, Run Now, Close. <strong>Eight schedule presets</strong>
+including the "3× daily (03/11/19)" preset Marcus needed for the
+"every day, 3 times a day" use case. The text input below the
+connector pre-fills with the connector's root path so the user
+just appends the subfolder.
+</div>
+
+<hr>
+
+<h2>Quick CLI tour</h2>
+
+<p>Beyond the TUI, dr-tools v0.15.1 ships three CLIs. Run any of
+these from a shell on the lab host:</p>
+
+<pre style="background:#222;color:#eee;padding:1em;border-radius:6px;">
+<strong style="color:#9cdcfe">$ dr-tui</strong>                              <em style="color:#888"># the TUI we just toured</em>
+
+<strong style="color:#9cdcfe">$ dr-load preflight</strong>                   <em style="color:#888"># env health-check</em>
+<strong style="color:#9cdcfe">$ dr-load indexing --users 5 --duration 300s</strong>  <em style="color:#888"># Locust load test</em>
+
+<strong style="color:#9cdcfe">$ dr-job-run nightly-payroll</strong>          <em style="color:#888"># same code path as TUI's Run Now</em>
+<strong style="color:#9cdcfe">$ dr-job-delete nightly-payroll 20260514T030000</strong>  <em style="color:#888"># manual retention expire</em>
+
+<strong style="color:#9cdcfe">$ systemctl --user list-timers --all | grep dr-tools</strong>
+NEXT                          LEFT          UNIT                                                  ACTIVATES
+Thu 2026-05-15 03:00:00 EDT   18h left      dr-tools-recur-nightly-payroll.timer                  dr-tools-recur-nightly-payroll.service
+Wed 2026-05-21 02:00:00 EDT   6 days left   dr-tools-retention-nightly-payroll-20260514T030000.timer  dr-tools-retention-...service
+</pre>
+
+<h2>State layout</h2>
+
+<pre style="background:#222;color:#eee;padding:1em;border-radius:6px;">
+<strong style="color:#9cdcfe">~/.dr-tools/</strong>
+├── <span style="color:#fce070">jobs/</span>
+│   ├── daily-payroll-import.json    <em style="color:#888"># saved JobDefinition template</em>
+│   ├── on-demand-spotcheck.json
+│   └── weekly-archive-longterm.json
+├── <span style="color:#fce070">runs/</span>
+│   ├── daily-payroll-import.jsonl   <em style="color:#888"># append-only run history</em>
+│   └── ...
+└── <span style="color:#fce070">logs/</span>
+    └── daily-payroll-import-20260513T030000.log  <em style="color:#888"># tee'd run output</em>
+
+<strong style="color:#9cdcfe">~/.config/systemd/user/</strong>
+├── dr-tools-recur-daily-payroll-import.{service,timer}      <em style="color:#888"># 3x/day</em>
+├── dr-tools-recur-weekly-archive-longterm.{service,timer}   <em style="color:#888"># weekly</em>
+└── dr-tools-retention-*-{run_id}.{service,timer}            <em style="color:#888"># per-run cleanup</em>
+</pre>
+
+<hr>
+
+<h2>What's new in v0.15.1 vs v0.14.x</h2>
+
+<ul>
+<li><strong>v0.15.0</strong> — Dropped the file-tree browser (DR
+    5.5.3.2 doesn't grant <code>exploreConnector</code> permission
+    to any role by default). Added recurring schedules via systemd
+    user timers with 8 presets.</li>
+<li><strong>v0.15.1</strong> — Beta-tester fixes: <code>▶ ✓ ✗ ⊘ ‖</code>
+    glyph prefixes on every status cell (colour-blind accessibility);
+    actionable empty-project hint that names the missing permission.</li>
+</ul>
+
+<p class="meta">See <code>CHANGELOG.md</code> for the full release
+index and <code>BETA-Marcus-Chen-20260514.md</code> for the
+beta-tester findings + Feature Requests filed for v0.16+.</p>
+
+</body>
+</html>
