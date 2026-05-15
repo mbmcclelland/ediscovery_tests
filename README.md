@@ -1,6 +1,6 @@
 # REEF-A-TUI — eDiscovery API Test Suite
 
-**Version 0.17.10**
+**Version 0.19.3**
 
 > **REEF-A-TUI** (pronounced *Reef-a-too-ee* — a homophone of *Ratatouille*)
 > is the umbrella name for this collection of Digital Reef ops tools.
