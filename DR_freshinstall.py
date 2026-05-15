@@ -110,20 +110,20 @@ _DEFAULT_LOG_PATH = _DEFAULT_LOG_DIR / f"dr-freshinstall-{_LOG_TS}.log"
 # Re-generate via `bit "Reef-a-TUI" -save reef-a-tui-logo`.
 _LOGO_PATH = _REPO / "reef-a-tui-logo.txt"
 
-# Digital Reef ocean palette — Blue → White → Black, top to bottom,
-# like looking down into deepening water.
-#   row 0  surface blue          (sky reflected on the water)
-#   row 1  shallow / foam-edge   (sunlight scattering)
-#   row 2  white foam            (the breaker)
-#   row 3  deep blue-grey        (light fading with depth)
-#   row 4  abyssal               (dark, with a hint of blue so it's
-#                                 still visible on a black terminal)
+# Digital Reef palette — 7-step smooth blue→light-grey gradient,
+# matching the values baked into the user's reef-a-tui-logo.go.
+# (v0.17.5 used a 3-stop blue→white→black; v0.17.6 replaces it with
+# the user-supplied gradient: deeper-blue at the top, near-white at
+# the bottom — like looking *up* through clear water toward the
+# surface.)
 _LOGO_COLORS = [
-    "rgb(50,130,220)",     # row 0 — surface blue
-    "rgb(150,200,240)",    # row 1 — shallow / foam edge
-    "rgb(255,255,255)",    # row 2 — white foam (the breaker)
-    "rgb(70,90,130)",      # row 3 — deep blue-grey (light fading)
-    "rgb(10,20,40)",       # row 4 — abyssal (near-black with hint of blue)
+    "rgb(36,114,200)",     # row 0 — deepest blue
+    "rgb(68,133,204)",
+    "rgb(100,152,209)",
+    "rgb(132,171,214)",
+    "rgb(164,190,219)",
+    "rgb(196,209,224)",
+    "rgb(229,229,229)",    # row 6 — light grey (surface)
 ]
 
 
@@ -501,13 +501,19 @@ def _skip(msg: str) -> None:
 
 
 def _phase_banner(num: int, name: str) -> None:
-    """Sub-header for phases 1/2/3 in main(). Bigger than _step's."""
+    """Sub-header for phases 1/2/3 in main(). Bigger than _step's.
+
+    v0.17.6 colour change (user request): the phase text-box border
+    is bright blue and the title text inside is bold yellow — to
+    match the Digital Reef brand palette and stand out from the
+    cyan run-config panel above.
+    """
     log.info("════ Phase %d — %s ════", num, name)
     _advance_progress(f"Phase {num} — {name}")
     console.print()
     console.print(Panel.fit(
-        Text(f"Phase {num} — {name}", style="bold magenta"),
-        border_style="magenta",
+        Text(f"Phase {num} — {name}", style="bold yellow"),
+        border_style="bright_blue",
     ))
 
 

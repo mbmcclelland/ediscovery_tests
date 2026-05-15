@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.17.6](#v0176--2026-05-14) | 2026-05-14 | Logo swapped to user-supplied 7-line gradient; phase banner re-coloured bright-blue border + bold-yellow text |
 | [v0.17.5](#v0175--2026-05-14) | 2026-05-14 | Reef-a-TUI logo regenerated at fivebyfive scale 0 — readable as REEF-A-TUI, single-line render even on narrow terminals |
 | [v0.17.4](#v0174--2026-05-14) | 2026-05-14 | DR_freshinstall — Reef-a-TUI logo, ocean-depth gradient, bright-yellow subtitle, subprocess-streaming wrapper (bar stays pinned at the bottom while logs scroll above) |
 | [v0.17.3](#v0173--2026-05-14) | 2026-05-14 | DR_freshinstall — pause progress bar during cleandr + installer (no more spinner spam during shell-subprocess phases) |
@@ -48,6 +49,62 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.17.6 — 2026-05-14
+
+### Changed: user-supplied logo (`newreef-a-tui.go`) + Digital-Reef colour tweaks
+
+User dropped a hand-crafted 7-line REEF-A-TUI logo at
+`/root/newreef-a-tui.go` with a smooth blue→light-grey gradient.
+Imported it verbatim:
+
+- **Logo files** — `reef-a-tui-logo.go` is the user's file
+  byte-for-byte; `reef-a-tui-logo.txt` is the ANSI-stripped plain-text
+  extraction (7 lines × 110 cols max). The Python `_LOGO_COLORS`
+  palette mirrors the seven `rgb(R,G,B)` stops baked into the Go
+  source.
+- **Phase banner colours** — border swapped from magenta → bright
+  blue; title text from bold magenta → bold yellow. The bright-blue
+  border now contrasts with the cyan run-config panel above it, so
+  the eye picks out the phase header immediately.
+
+The ocean-depth metaphor from v0.17.5 (blue → white → black) is
+retired in favour of the user-supplied palette, which is a smooth
+single-direction blue→light-grey gradient — like looking *up* through
+clear water toward the surface.
+
+Visual preview (130-col terminal, ANSI stripped):
+
+```
+██████████                            ████              ██████████              ██████████  ██      ██  ██████
+██      ██                            ██                ██      ██                  ██      ██      ██    ██
+██      ██  ██████████  ██████████  ██████              ██      ██                  ██      ██      ██    ██
+██████████  ██      ██  ██      ██    ██    ██████████  ██████████  ██████████      ██      ██      ██    ██
+██    ██    ██████████  ██████████    ██                ██      ██                  ██      ██      ██    ██
+██      ██  ██          ██            ██                ██      ██                  ██      ██      ██    ██
+██      ██  ██████████  ██████████    ██                ██      ██                  ██      ██████████  ██████
+    Digital Reef Fresh Installer version 0.17.6
+
+╭──────────────────────────────────────────────╮    ← bright-blue border
+│ Phase 2 — DR installer (DR_freshinstall.exp) │    ← bold yellow text
+╰──────────────────────────────────────────────╯
+```
+
+**Files:**
+
+- `reef-a-tui-logo.go` — replaced by user's `newreef-a-tui.go`
+- `reef-a-tui-logo.txt` — regenerated from the new .go
+- `DR_freshinstall.py::_LOGO_COLORS` — 5-stop → 7-stop palette
+- `DR_freshinstall.py::_phase_banner` — `border_style="bright_blue"`,
+  text `style="bold yellow"`
+- `__version__.py` → 0.17.6
+- CHANGELOG.md (this entry).
+
+Not yet validated against a live destructive run — user has an
+in-progress install at v0.17.5, the v0.17.6 colour changes will
+be visible on the next destructive cycle.
 
 ---
 
