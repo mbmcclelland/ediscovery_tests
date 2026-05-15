@@ -266,6 +266,48 @@ ResetPasswordModal {
     min-width: 12;
 }
 
+/* ---------------------------------------------------- v0.19.0 New Project */
+NewProjectModal {
+    align: center middle;
+}
+
+#newproj-card {
+    width: 64;
+    height: auto;
+    padding: 1 2;
+    border: round $accent;
+    background: $panel;
+}
+
+#newproj-title {
+    content-align: center middle;
+    color: $accent;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#newproj-card Label {
+    margin-top: 1;
+    color: grey;
+}
+
+#newproj-error {
+    color: $error;
+    margin-top: 1;
+    height: auto;
+}
+
+#newproj-buttons {
+    height: 3;
+    align: center middle;
+    margin-top: 1;
+}
+
+#newproj-buttons Button {
+    margin: 0 1;
+    min-width: 12;
+}
+
 GroupFormModal {
     align: center middle;
 }

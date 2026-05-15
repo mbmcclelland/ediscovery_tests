@@ -622,6 +622,104 @@ class GroupFormModal(ModalScreen[Optional[dict]]):
         })
 
 
+class NewProjectModal(ModalScreen[Optional[dict]]):
+    """v0.19.0 — Organizations tab → Projects view → F7.
+
+    Minimal Name + Description form. Returns
+    `{"org": <org-name>, "name": <project-name>,
+       "description": <project-description>}` on save, or None on
+    cancel. The DashboardScreen consumes the dict in a worker thread
+    that calls `drdata.create_project()` and refreshes the projects
+    table.
+
+    Why no role / member picker in this MVP: the captured Web-UI
+    "New Project" modal also only collects Name + Description in
+    its primary form; everything else (default templates,
+    DRSysAdmin + admin@<org> as Org Admin) gets attached server-side
+    via the same defaults that `drdata.create_project()` applies.
+    A future enhancement can surface custodians / extra members /
+    custom templates if needed.
+    """
+
+    BINDINGS = [Binding("escape", "cancel", "Cancel")]
+
+    def __init__(self, *, org_name: str) -> None:
+        super().__init__()
+        self._org_name = org_name
+
+    def compose(self) -> ComposeResult:
+        with Container(id="newproj-card"):
+            yield Static(f"New Project in [b]{self._org_name}[/]",
+                         id="newproj-title")
+            yield Label("Project name (required)")
+            yield Input(
+                value="", id="newproj-name",
+                placeholder="e.g. payroll-2026-q1",
+            )
+            yield Label("Description (optional)")
+            yield Input(value="", id="newproj-desc")
+            yield Static(
+                "[dim]Members: DRSysAdmin + admin@" + self._org_name +
+                " auto-added as Organization Administrator.\n"
+                "Default templates auto-attached via "
+                "`orgManager/listTemplates`.[/]",
+                classes="modal-hint",
+            )
+            yield Static("", id="newproj-error")
+            with Horizontal(id="newproj-buttons"):
+                yield Button.success("Create", id="newproj-create")
+                yield Button("Cancel", id="newproj-cancel")
+            yield Static(
+                "[dim][Enter] create · [Esc] cancel · [Tab] next field[/]",
+                classes="modal-hint",
+            )
+
+    def on_mount(self) -> None:
+        try:
+            self.query_one("#newproj-name", Input).focus()
+        except Exception:
+            pass
+
+    def on_button_pressed(self, evt: Button.Pressed) -> None:
+        if evt.button.id == "newproj-cancel":
+            self.dismiss(None)
+        elif evt.button.id == "newproj-create":
+            self._submit()
+
+    def on_input_submitted(self, _evt: Input.Submitted) -> None:
+        self._submit()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    def _submit(self) -> None:
+        name = self.query_one("#newproj-name", Input).value.strip()
+        desc = self.query_one("#newproj-desc", Input).value.strip()
+        err = self.query_one("#newproj-error", Static)
+        if not name:
+            err.update(
+                "[red]Name is required. Pick something descriptive "
+                "(e.g. 'payroll-2026-q1' or 'matter-acme-v-doe').[/]"
+            )
+            return
+        # DR rejects whitespace + a handful of special chars in case
+        # names. Be defensive — pre-empt the cryptic server-side
+        # error with a friendly local one. The DR Web UI allows
+        # letters, digits, dashes, underscores, dots.
+        if not all(c.isalnum() or c in "-_." for c in name):
+            err.update(
+                "[red]Name must contain only letters, digits, "
+                "and the characters '-', '_', '.' "
+                "(no spaces or other punctuation).[/]"
+            )
+            return
+        self.dismiss({
+            "org": self._org_name,
+            "name": name,
+            "description": desc,
+        })
+
+
 class JobsMonitorModal(ModalScreen[None]):
     """F3 — full-screen realm-wide jobs monitor.
 
@@ -4833,8 +4931,95 @@ class DashboardScreen(Screen):
             self._sys_user_open_new()
         elif kind == "sys-groups":
             self._sys_group_open_new()
+        elif kind == "org-projects":
+            # v0.19.0 — create a project (ecaManager/createCase) in the
+            # currently-selected org. The Org name is captured in
+            # `selected_org` whenever the user navigates into an org
+            # subtree (set in _load_view's "org-projects" branch).
+            self._project_open_new()
         else:
             self._post_status("[F7] New — not available on this view")
+
+    # ---- v0.19.0 Create Project flow ---------------------------------
+    def _project_open_new(self) -> None:
+        """Open NewProjectModal for the currently-selected org. The
+        org is derived from `self.selected_org` (set when the user
+        clicks the `Projects` leaf under an org)."""
+        org = (self.selected_org or "").strip()
+        if not org:
+            self._post_status(
+                "[F7] New Project — no org selected. Click an org's "
+                "Projects leaf first."
+            )
+            return
+        self.app.push_screen(
+            NewProjectModal(org_name=org),
+            self._project_after_modal,
+        )
+
+    def _project_after_modal(self, payload: Optional[dict]) -> None:
+        """Modal closed — if the user pressed Create, fire the API call
+        in a worker so the UI stays responsive (createCase + the
+        listTemplates probe can each take a few seconds on a slow
+        host)."""
+        if not payload:
+            return
+        org = payload["org"]
+        name = payload["name"]
+        desc = payload["description"]
+        self._post_status(f"project: creating {name} in {org}…")
+        self.run_worker(
+            lambda: self._project_create_blocking(org, name, desc),
+            thread=True, exclusive=True, group="project-write",
+        )
+
+    def _project_create_blocking(
+        self, org: str, name: str, description: str,
+    ) -> None:
+        """Worker thread: resolve the right client for this org and
+        invoke `drdata.create_project()`. Refresh the projects table
+        on success."""
+        client = self._client_for_org(org)
+        if client is None:
+            self._post_status(
+                f"project: no API session for {org} — log in as the "
+                f"org admin or DRSysAdmin"
+            )
+            return
+        try:
+            # DRSysAdmin sessions need an org-context switch first;
+            # org-pinned sessions are no-op. Same pattern as the
+            # Connector / NewJob flows.
+            try:
+                drdata.ensure_org_context(client, org)
+            except Exception:
+                pass
+            resp = drdata.create_project(
+                client, org_name=org, name=name, description=description,
+            )
+            handle = (resp.get("caseHandle")
+                      or resp.get("handle")
+                      or "")
+            self.app.call_from_thread(
+                self._post_status_ok,
+                f"project: created {name} (handle {handle}) in {org}",
+            )
+            # Refresh the projects table so the new row shows up.
+            self.app.call_from_thread(
+                self._load_view, "org-projects", "",
+            )
+        except APIError as e:
+            self.app.call_from_thread(
+                self._post_status,
+                f"project create failed: "
+                f"{e.error_code or e.status} — "
+                f"{(e.extended_status or '')[:120]}",
+            )
+        except Exception as e:
+            self.app.call_from_thread(
+                self._post_status,
+                f"project create error: {e!r}",
+            )
 
     def action_ctx_edit(self) -> None:
         kind = self.selected_kind

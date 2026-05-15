@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.19.0](#v0190--2026-05-14) | 2026-05-14 | Organizations tab — **Create Project** via F7 on the Projects view (`ecaManager/createCase` + clear error when org has no default templates yet) |
 | [v0.18.0](#v0180--2026-05-14) | 2026-05-14 | NewJobModal — explicit **Project** picker (fixes "PROJECT_NOT_ACTIVATED Project 0 not activated" by letting the user choose which existing project the imports attach to) |
 | [v0.17.10](#v01710--2026-05-14) | 2026-05-14 | **REEF-A-TUI** rebrand — scripts → `/opt/digitalreef/scripts/reef-a-tui/`; new `dr_tui` + `dr-freshinstall` + `dr_freshinstall` launchers ship with the RPM |
 | [v0.17.9](#v0179--2026-05-14) | 2026-05-14 | Per-phase wall-clock subtotals — file log gets one `phase wall clock:` line per phase + a console one-liner between phases |
@@ -54,6 +55,110 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.19.0 — 2026-05-14
+
+### Added: Create Project flow in the Organizations tab
+
+Organizations tab → drill into any org → **Projects** leaf → **F7
+(New)** now opens a `NewProjectModal` that collects:
+
+- **Project name** (required; letters / digits / `-_.` only)
+- **Description** (optional)
+
+Submit fires `drdata.create_project()` in a worker thread, which:
+
+1. Resolves the Organization Administrator role handle via the
+   sys-scoped `adminOrgManager/listRoles` (works even before
+   DRSysAdmin has been added as a regular org member).
+2. Fetches every default template for the org via
+   `orgManager/listTemplates(scope=ORG_LEVEL)` and packs them
+   into the `attributes` array `createCase` requires.
+3. POSTs `ecaManager/createCase` with the captured body shape from
+   `locustfile_indexing.py:279-299` — auto-adds DRSysAdmin +
+   `admin@<org>` (both as Org Admin) to the project members list,
+   matching what `playwright_fresh_install.py` does.
+4. Refreshes the projects table on success so the new row appears.
+
+**Helpers in `dr_tui/data.py`:**
+
+| Function | Endpoint | Body shape |
+|---|---|---|
+| `list_org_templates(client, org_name)` | `orgManager/listTemplates` | `{contextHandle, scope: "ORG_LEVEL", tempType: null, organizationName, systemScope: false}` |
+| `create_project(client, org_name, name, description="", member_users=None)` | `ecaManager/createCase` | full body per locustfile capture; auto-resolves role handle + template attrs; auto-includes DRSysAdmin + admin@<org> if `member_users` is None |
+
+### KNOWN LIMITATION: brand-new orgs have no default templates
+
+Live-discovered during v0.19.0 development: a fresh-install
+organization has **zero default templates** until the org's
+*"New Project"* dialog is opened ONCE in the DR Web UI. That
+first Web-UI open triggers a lazy server-side copy from the
+realm's meta-template profile (likely via
+`templateManager/copyMetaTemplateProfileEntriesToOrganizations` —
+JS-bundle reference indicates this exists but the trigger path
+isn't fully captured).
+
+Without those templates, `createCase` fails server-side with the
+cryptic 500: **"No service with id = 0 found"**.
+
+To avoid that ugly failure mode, `create_project()` checks
+`listTemplates` first and pre-empts with a clean APIError when
+the list is empty:
+
+```
+NO_TEMPLATES — Org 'training' has no default templates configured.
+`orgManager/listTemplates` returns 0 rows. createCase will fail
+server-side with 'No service with id = 0 found'. Bootstrap
+templates by opening the org's 'New Project' dialog ONCE in the
+DR Web UI — that triggers a lazy template-copy from the realm's
+meta-template profile. Subsequent REST createCase calls will then
+succeed. Future dr-tools will automate this via
+templateManager/copyMetaTemplateProfileEntriesToOrganizations.
+```
+
+The status bar surfaces this clearly:
+`project create failed: NO_TEMPLATES — Org 'training' has no default templates…`
+
+**Workaround for users today:** open the DR Web UI's New Project
+dialog once per org (cancel it without creating), then return to
+`dr-tui` and use F7 → New Project. Once templates are bootstrapped,
+the REST path works for all subsequent project creations in that
+org.
+
+**Future fix (v0.19.x or v0.20):** automate the template bootstrap
+in `create_project()` by calling
+`templateManager/copyMetaTemplateProfileEntriesToOrganizations`
+when `listTemplates` is empty. Needs one more capture pass to
+nail down the `ownerHandle` source (probably from
+`realmManager/listMetaTemplateProfiles` or similar — JS bundle
+hints at this but no live capture yet).
+
+### Files
+
+- `dr_tui/data.py` — new `list_org_templates()` + `create_project()`
+- `dr_tui/app.py`
+  - new `NewProjectModal` class — Name + Description form with
+    `[a-zA-Z0-9._-]` validation and a "members auto-added" hint
+  - `action_ctx_new()` dispatches `"org-projects"` → `_project_open_new()`
+  - new `_project_open_new()`, `_project_after_modal()`,
+    `_project_create_blocking()` — push modal, then worker thread
+    runs `drdata.create_project()` and refreshes the projects table
+- `dr_tui/app.tcss` — new `#newproj-card` / `#newproj-title` /
+  `#newproj-buttons` rules (modeled on `ResetPasswordModal`'s CSS)
+- `tests/test_dr_tui_scheduler.py` — new
+  `test_newproject_modal_v019` exercises mount, empty-name error,
+  invalid-character error, valid-submit payload shape
+- `__version__.py` → 0.19.0
+- CHANGELOG.md (this entry).
+
+### Tests
+
+- 12/12 pilot tests pass (including the new modal test)
+- Live error-path test confirmed: `NO_TEMPLATES` APIError fires
+  cleanly on the current fresh-install state, surfaces the
+  actionable message in the status bar
 
 ---
 

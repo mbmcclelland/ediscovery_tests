@@ -491,6 +491,80 @@ def test_newjob_modal_v018_project_picker() -> None:
     asyncio.run(_walk_newjob_v018_project_picker())
 
 
+# ---------- v0.19.0: NewProjectModal -------------------------------------
+
+async def _walk_newproject_modal() -> None:
+    """v0.19.0 — NewProjectModal collects {name, description} for
+    `ecaManager/createCase`. Verify:
+      * mount with org_name="training"; widgets present
+      * empty name → error + no dismiss
+      * invalid characters → error + no dismiss
+      * valid name → dismiss with payload dict
+
+    All three sub-cases share one run_test block — Textual's Pilot
+    harness doesn't tolerate re-entering run_test on the same App
+    instance (push_screen + dismiss cycles inside ONE harness work
+    fine).
+    """
+    from dr_tui.app import NewProjectModal
+    app = _Harness()
+    async with app.run_test() as pilot:
+
+        # ---- 1. empty name → error, no dismiss ----
+        holder1: list = []
+        app.push_screen(
+            NewProjectModal(org_name="training"),
+            lambda r: holder1.append(r),
+        )
+        await pilot.pause()
+        scr = app.screen
+        assert scr.query_one("#newproj-title") is not None
+        scr.query_one("#newproj-create", Button).action_press()
+        await pilot.pause()
+        assert holder1 == [], "empty name must not dismiss"
+        scr.query_one("#newproj-cancel", Button).action_press()
+        await pilot.pause()
+        assert holder1 == [None]
+
+        # ---- 2. invalid characters → error, no dismiss ----
+        holder2: list = []
+        app.push_screen(
+            NewProjectModal(org_name="training"),
+            lambda r: holder2.append(r),
+        )
+        await pilot.pause()
+        scr = app.screen
+        scr.query_one("#newproj-name", Input).value = "has spaces!"
+        scr.query_one("#newproj-create", Button).action_press()
+        await pilot.pause()
+        assert holder2 == [], "invalid name must not dismiss"
+        scr.query_one("#newproj-cancel", Button).action_press()
+        await pilot.pause()
+        assert holder2 == [None]
+
+        # ---- 3. valid name + description → dismiss with payload ----
+        holder3: list = []
+        app.push_screen(
+            NewProjectModal(org_name="training"),
+            lambda r: holder3.append(r),
+        )
+        await pilot.pause()
+        scr = app.screen
+        scr.query_one("#newproj-name", Input).value = "payroll-2026-q1"
+        scr.query_one("#newproj-desc", Input).value = "Q1 payroll archive"
+        scr.query_one("#newproj-create", Button).action_press()
+        await pilot.pause()
+        assert len(holder3) == 1 and holder3[0] is not None, holder3
+        p = holder3[0]
+        assert p["org"] == "training"
+        assert p["name"] == "payroll-2026-q1"
+        assert p["description"] == "Q1 payroll archive"
+
+
+def test_newproject_modal_v019() -> None:
+    asyncio.run(_walk_newproject_modal())
+
+
 # ---------- v0.14: unit-name parse + LogViewerModal mount ----------
 
 def test_unit_parse_regex() -> None:

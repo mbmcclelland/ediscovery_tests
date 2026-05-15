@@ -1397,6 +1397,156 @@ def create_org_user(
     )
 
 
+def list_org_templates(
+    client: EDiscoveryClient, *, org_name: str,
+) -> list[tuple[str, str, str]]:
+    """Return [(template_type, handle, name), …] for the org's default
+    templates.
+
+    Maps to `orgManager/listTemplates` with `scope: "ORG_LEVEL"`.
+    Used as a prerequisite to `create_project()` — `ecaManager/createCase`
+    expects an `attributes` array of `{name: <templateType>, value:
+    <handle>}` pairs, one per default template. Filter to
+    `defaultTemplate=true` to mirror the Web UI's "Create Project"
+    flow (which auto-attaches every default template).
+    """
+    resp = client.post(
+        "orgManager/listTemplates",
+        extra_body={
+            "contextHandle": org_name,
+            "scope": "ORG_LEVEL",
+            "tempType": None,
+            "organizationName": org_name,
+            "systemScope": False,
+        },
+    )
+    out: list[tuple[str, str, str]] = []
+    for t in resp.get("templates") or []:
+        if not t.get("defaultTemplate"):
+            continue
+        tt = str(t.get("templateType") or "")
+        h = str(t.get("handle") or "")
+        n = str(t.get("name") or "")
+        if tt and h:
+            out.append((tt, h, n))
+    return out
+
+
+def create_project(
+    client: EDiscoveryClient,
+    *,
+    org_name: str,
+    name: str,
+    description: str = "",
+    member_users: list[tuple[str, str]] | None = None,
+) -> dict:
+    """Create an eDiscovery project (DR's "case") inside *org_name*.
+
+    Maps to `ecaManager/createCase`. The body matches the captured
+    Web-UI flow in `locustfile_indexing.py:279-299`:
+
+        {requestHandle, contextHandle=<org>, addToCaseData: false,
+         custodians: [], name, description, attributes: <default
+         templates>, projectLogoBytes: null, logoFileName: "",
+         systemScope: false, reviewSystem: null, reviewProjectId: 0,
+         membersRequestMessage: {groups: [], users: [<members>]}}
+
+    `attributes` is the default-template list from
+    `list_org_templates(client, org_name=org)` — 17 templates is
+    typical for a stock DR install (DocumentMetadata, AuditLog,
+    BulkEditFields, …). Without these the server rejects the call.
+
+    `member_users` is `[(username, role_handle), …]`. If None, we
+    auto-include DRSysAdmin and `admin@<org>` (lowercase) — the same
+    pair `playwright_fresh_install.py` adds. Pass `[]` to create a
+    project with no members (DRSysAdmin can still see it via the
+    sys-scoped endpoints).
+
+    Returns the create response; `caseHandle` (or `handle`) is the
+    new project handle.
+    """
+    # Resolve the Org Admin role handle inside this org. Use the
+    # sys-scoped listRoles variant so this works even when the caller
+    # hasn't been added to the org as a regular member (the
+    # `empty-org-permission-trap` pattern from v0.17.0).
+    org_admin_handle = ""
+    for n, h in list_org_roles(client, org_name=org_name, sys_scope=True):
+        if n == "Organization Administrator":
+            org_admin_handle = h
+            break
+    if not org_admin_handle:
+        raise APIError(
+            "MISSING_ROLE",
+            "MISSING_ROLE",
+            f"Organization Administrator role not found in org "
+            f"'{org_name}' — cannot create project",
+            {},
+        )
+
+    # Default members: DRSysAdmin + admin@<org>, both as Org Admin.
+    # Matches what playwright_fresh_install.py and v0.17.0's
+    # `submit_indexing_job` test fixtures expect.
+    if member_users is None:
+        member_users = [
+            ("drsysadmin", org_admin_handle),
+            ("admin", org_admin_handle),
+        ]
+
+    # Default templates — required for createCase to succeed. On a
+    # brand-new fresh-install org the templates table is empty (the
+    # Web UI's `New Project` modal bootstraps them lazily via a path
+    # we haven't fully captured yet — see KNOWN_LIMITATION below).
+    # If we send an empty attributes array, the server fails with
+    # "No service with id = 0 found" — a cryptic 500 that's a pain
+    # to debug. Pre-empt with a clear APIError pointing at the
+    # workaround.
+    templates = list_org_templates(client, org_name=org_name)
+    if not templates:
+        raise APIError(
+            "NO_TEMPLATES",
+            "NO_TEMPLATES",
+            f"Org '{org_name}' has no default templates configured — "
+            f"`orgManager/listTemplates` returns 0 rows. createCase "
+            f"will fail server-side with 'No service with id = 0 "
+            f"found'. Bootstrap templates by opening the org's "
+            f"'New Project' dialog ONCE in the DR Web UI "
+            f"(https://<host>:8443/ediscovery/) — that triggers a "
+            f"lazy template-copy from the realm's meta-template "
+            f"profile. Subsequent REST createCase calls will then "
+            f"succeed. Future dr-tools will automate this via "
+            f"templateManager/copyMetaTemplateProfileEntriesToOrganizations.",
+            {},
+        )
+    template_attrs = [
+        {"name": tt, "value": h} for tt, h, _ in templates
+    ]
+
+    return client.post(
+        "ecaManager/createCase",
+        extra_body={
+            "contextHandle": org_name,
+            "addToCaseData": False,
+            "custodians": [],
+            "name": name,
+            "description": description,
+            "attributes": template_attrs,
+            "projectLogoBytes": None,
+            "logoFileName": "",
+            "systemScope": False,
+            "reviewSystem": None,
+            "reviewProjectId": 0,
+            "membersRequestMessage": {
+                "groups": [],
+                "users": [
+                    {"name": u, "roleHandles": [r]}
+                    for u, r in member_users
+                ],
+            },
+        },
+        timeout=60,
+    )
+
+
 def add_system_user_to_org(
     client: EDiscoveryClient,
     *,
