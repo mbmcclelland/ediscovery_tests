@@ -511,7 +511,7 @@ Response: `tasks: [{handle, currentStatus, dateCompleted, ...}]`.
 Each task carries `currentStatus[]` with named sections — "General
 Information", "Execution Summary" — each containing `data: [{name,
 value}]` rows. The same structure as `projectManager/listTasks` used
-by dr-tui's Running/Completed Jobs panels.
+by dr_tui's Running/Completed Jobs panels.
 
 Used by long-running ops like
 `copyMetaTemplateProfileEntriesToOrganizations` to poll completion.
