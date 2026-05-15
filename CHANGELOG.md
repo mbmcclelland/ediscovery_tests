@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.18.0](#v0180--2026-05-14) | 2026-05-14 | NewJobModal — explicit **Project** picker (fixes "PROJECT_NOT_ACTIVATED Project 0 not activated" by letting the user choose which existing project the imports attach to) |
 | [v0.17.10](#v01710--2026-05-14) | 2026-05-14 | **REEF-A-TUI** rebrand — scripts → `/opt/digitalreef/scripts/reef-a-tui/`; new `dr_tui` + `dr-freshinstall` + `dr_freshinstall` launchers ship with the RPM |
 | [v0.17.9](#v0179--2026-05-14) | 2026-05-14 | Per-phase wall-clock subtotals — file log gets one `phase wall clock:` line per phase + a console one-liner between phases |
 | [v0.17.8](#v0178--2026-05-14) | 2026-05-14 | DR_freshinstall.exp — installer now spawned with `LAX_DEBUG=true` and `_JAVA_OPTIONS` for verbose InstallAnywhere diagnostics |
@@ -53,6 +54,78 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.18.0 — 2026-05-14
+
+### Added: explicit Project picker in NewJobModal (fixes `PROJECT_NOT_ACTIVATED`)
+
+**Symptom (user):** "PROJECT_NOT_ACTIVATED Project 0 not activated" from
+the indexing chain (`createDataArea` with `mode=IMPORT`).
+
+**Root cause:** an IMPORT data area must be attached to an existing
+project — `createDataArea`'s `contextHandle` is the **project
+handle**, and DR decodes an empty / unknown handle as project id 0,
+which then fails the activation check. The pre-v0.18 modal silently
+auto-picked the first project visible to the caller via
+`_auto_pick_project()`. On orgs where that pick wasn't valid for
+the caller's role (or returned an empty list), the chain bombed out
+during `dr-job-run` with the cryptic server-side error.
+
+**Fix:** a new **Project** `Select` widget between the Connector and
+the existing status line. Populated from `projects_by_org` (which
+the parent screen already fetches via
+`orgManager/listUserProjectsForAllOrgs` /
+`realmManager/listSystemUserProjectsByUserName`). The user picks
+which project the imports land in; `_cur_project_handle` tracks the
+selection; `submit_indexing_job` uses it for every
+`contextHandle: <project-handle>` call in the chain.
+
+```
+Organization          [ training ▼ ]
+Connector             [ import-training-nfs-local (NFS) ▼ ]
+Project (imports attach here)  [ alpha  (#254) ▼ ]
+✓ Imports will be attached to project alpha (handle 254) —
+  3 project(s) available in 'training'.
+```
+
+The hint underneath now has two states:
+
+- **Green ✓** — project picked, count of available projects shown.
+- **Yellow ⚠** — org has 0 visible projects. Tells the user to
+  create one in the DR Web UI (or check role permissions if
+  projects exist there but not here).
+
+The dropdown label format is `<project name>  (#<handle>)` so the
+user can see both the friendly name AND the numeric handle in one
+row. Switching the Org repopulates the Project Select with that
+org's projects and auto-selects the first one.
+
+**Files:**
+
+- `dr_tui/app.py::NewJobModal`
+  - new `_project_options(org)` helper
+  - new Select widget `#newjob-project` between connector + hint
+  - `on_select_changed` handles `newjob-project` → updates
+    `_cur_project_handle`, refreshes status
+  - `on_select_changed`'s `newjob-org` branch now rebuilds the
+    Project Select via `set_options` and pins the value to the
+    newly-auto-picked handle
+  - `_refresh_project_status` rewritten with two clear states
+    (green ✓ pick / yellow ⚠ empty)
+- `tests/test_dr_tui_scheduler.py` — new
+  `test_newjob_modal_v018_project_picker` covering mount, options
+  list, value change, org switch + repopulate
+- `__version__.py` → 0.18.0
+- CHANGELOG.md (this entry).
+
+### Test coverage
+
+- 11/11 pilot tests pass
+- New test covers: 3 projects rendered in dropdown with `name (#handle)`
+  labels; selecting `#200` updates `_cur_project_handle` to `"200"`;
+  switching org rebuilds dropdown for the new org
 
 ---
 

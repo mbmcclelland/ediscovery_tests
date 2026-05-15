@@ -1693,6 +1693,29 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                         and any(v == self._cur_conn_handle for _, v in conn_opts)):
                         conn_select.value = self._cur_conn_handle
                     yield conn_select
+
+                    # v0.18.0 — explicit Project picker. Imports MUST be
+                    # attached to an existing project; the indexing chain
+                    # calls createDataArea with `contextHandle=<project
+                    # handle>` and DR rejects anything else with
+                    # `PROJECT_NOT_ACTIVATED Project 0 not activated`
+                    # (the actual REST symptom: an empty / unknown handle
+                    # is decoded server-side as project id 0, which then
+                    # fails the activation check). Previously we
+                    # auto-picked the first project silently; now we
+                    # show the user every project in the chosen org and
+                    # let them pick which one the imports land in.
+                    yield Label("Project (imports attach here)")
+                    proj_opts = self._project_options(self._cur_org)
+                    proj_select = Select(
+                        proj_opts,
+                        id="newjob-project",
+                        allow_blank=False,
+                    )
+                    if (self._cur_project_handle
+                        and any(v == self._cur_project_handle for _, v in proj_opts)):
+                        proj_select.value = self._cur_project_handle
+                    yield proj_select
                     yield Static(
                         "", id="newjob-project-status",
                         classes="modal-hint",
@@ -1786,43 +1809,82 @@ class NewJobModal(ModalScreen[Optional[dict]]):
     def _refresh_project_status(self) -> None:
         """Show which project this org will index into (informational).
 
-        v0.15.1 TICKET-1: empty project handle now surfaces an
-        actionable message about likely role-permission gaps (the
-        common cause when `admin@<org>` was just created without the
-        DR_ROLE_SETUP.md permissions). The old wording rendered as
-        `Indexing into project: ? (handle )` which read like broken
-        UI to the beta tester.
+        v0.18.0: the user now picks the project explicitly via the
+        new Select widget — this hint line is the confirmation
+        underneath. Two failure modes still produce an actionable
+        warning:
+
+          * org has 0 projects → tell the user to create one in the
+            DR Web UI (or via `ecaManager/createCase` directly).
+          * role-permission gap (the original v0.15.1 issue) → same
+            "no projects visible" message because the role-scoped
+            `listUserProjectsForAllOrgs` returns an empty array
+            indistinguishable from "the org genuinely has none".
         """
         try:
             line = self.query_one("#newjob-project-status", Static)
         except Exception:
             return
-        if not self._cur_project_handle:
+        projs = self._projects_by_org.get(self._cur_org, []) or []
+        if not projs:
             line.update(
                 f"[yellow]No projects visible to your account in "
                 f"organisation '{self._cur_org}'.[/]\n"
-                f"[dim]Most likely cause: your role lacks the "
-                f"'Project Data Areas - View' permission. See "
-                f"`docs/DR_ROLE_SETUP.md` for the one-time Web UI "
-                f"grant.[/]"
+                f"[dim]Imports must attach to an existing project. "
+                f"Create one in the DR Web UI (Org → Settings → "
+                f"Projects → New Project) and reopen this dialog. "
+                f"If projects DO exist in the Web UI but don't appear "
+                f"here, your role likely lacks 'Project Data Areas - "
+                f"View' — see docs/DR_ROLE_SETUP.md.[/]"
             )
             return
-        # Look up the friendly name for the auto-picked project.
+        if not self._cur_project_handle:
+            # Org has projects but none selected — shouldn't happen
+            # with allow_blank=False on the Select, but be defensive.
+            line.update(
+                f"[yellow]Pick a project from the dropdown above. "
+                f"{len(projs)} available in '{self._cur_org}'.[/]"
+            )
+            return
+        # Look up the friendly name for the selected project.
         proj_name = ""
-        for p in self._projects_by_org.get(self._cur_org, []):
+        for p in projs:
             if str(p.get("handle") or "") == self._cur_project_handle:
                 proj_name = p.get("name") or ""
                 break
         line.update(
-            f"[dim]Indexing into project: "
-            f"{proj_name or '(unknown)'} "
-            f"(handle {self._cur_project_handle})[/]"
+            f"[green]✓[/] [dim]Imports will be attached to project "
+            f"[b]{proj_name or '(unknown)'}[/b] "
+            f"(handle {self._cur_project_handle}) — "
+            f"{len(projs)} project(s) available in '{self._cur_org}'.[/]"
         )
 
     def _connector_options(self, org: str) -> list[tuple[str, str]]:
         conns = self._connectors_by_org.get(org, [])
         return [(f"{c.name}  ({c.type})", c.handle) for c in conns] \
             or [("(no connectors)", "")]
+
+    def _project_options(self, org: str) -> list[tuple[str, str]]:
+        """v0.18.0 — produce a (label, handle) list for every project in
+        *org* that has a usable handle. Used by the Project Select in
+        the New-Job wizard.
+
+        Label format: `<name>  (#<handle>)` so the user can see both
+        the human-readable project name and the underlying numeric
+        handle in one row. The handle is the value field — that's
+        what flows into `submit_indexing_job`'s `context_handle`.
+        """
+        projs = self._projects_by_org.get(org) or []
+        opts: list[tuple[str, str]] = []
+        for p in projs:
+            handle = str(p.get("handle") or "")
+            name = str(p.get("name") or "(unnamed)")
+            if not handle:
+                continue
+            opts.append((f"{name}  (#{handle})", handle))
+        if not opts:
+            opts.append(("(no projects — create one in DR Web UI first)", ""))
+        return opts
 
     # v0.14.1: default retention is 5 days (per user request).
     _DEFAULT_RETENTION_SECONDS = 5 * 86400
@@ -1905,7 +1967,26 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                 self._cur_conn_handle = (first.handle if first else "")
             except Exception:
                 pass
+            # v0.18.0 — also rebuild the Project dropdown when org changes.
+            # Selects are reset to the first option on `set_options`,
+            # which matches `_auto_pick_project()`'s "first usable
+            # handle" behaviour — so the picker default tracks
+            # whatever `_cur_project_handle` ends up.
             self._cur_project_handle = self._auto_pick_project(self._cur_org)
+            try:
+                proj_opts = self._project_options(self._cur_org)
+                proj_sel = self.query_one("#newjob-project", Select)
+                proj_sel.set_options(proj_opts)
+                # Force the value to the auto-picked handle so the
+                # widget displays it. `set_options` would otherwise
+                # leave the value as whatever was first in the new
+                # list, which usually matches but defensively pin.
+                if (self._cur_project_handle
+                    and any(v == self._cur_project_handle
+                            for _, v in proj_opts)):
+                    proj_sel.value = self._cur_project_handle
+            except Exception:
+                pass
             self._refresh_project_status()
             self._refresh_path_hint()
             # v0.15 — repopulate the path Input with the new connector's
@@ -1918,6 +1999,14 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                 pass
             # v0.16.0 — reload the tree against the new org's first connector.
             self._reload_tree()
+        elif sid == "newjob-project":
+            # v0.18.0 — user explicitly picked a project from the
+            # dropdown. Update `_cur_project_handle` and refresh the
+            # hint line below so the green-✓ confirmation tracks.
+            handle = (str(evt.value)
+                      if evt.value != Select.BLANK else "")
+            self._cur_project_handle = handle
+            self._refresh_project_status()
         elif sid == "newjob-connector":
             self._cur_conn_handle = (str(evt.value)
                                      if evt.value != Select.BLANK else "")

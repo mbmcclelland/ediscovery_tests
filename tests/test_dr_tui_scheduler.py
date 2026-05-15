@@ -412,6 +412,85 @@ def test_newjob_modal_v016_tree_browser() -> None:
     asyncio.run(_walk_newjob_v016_tree_browser())
 
 
+# ---------- v0.18.0: explicit project picker --------------------------------
+
+async def _walk_newjob_v018_project_picker() -> None:
+    """v0.18.0 — verify the Project picker added between Connector and
+    the status hint:
+
+      * #newjob-project widget exists after mount
+      * It's pre-populated with every project in the chosen org
+      * Selecting a different project updates _cur_project_handle
+      * Switching the Org repopulates the Project picker for the new org
+    """
+    from dr_tui.app import NewJobModal
+    from dr_tui.data import Connector
+    from textual.widgets import Select as _S
+
+    app = _Harness()
+    orgs = ["training", "ops"]
+    connectors = {
+        "training": [
+            Connector(name="nfs-a", type="NFS", mode="IMPORT", status="OK",
+                      host="10.0.0.1", path="/data/import", handle="c-1"),
+        ],
+        "ops": [
+            Connector(name="nfs-ops", type="NFS", mode="IMPORT", status="OK",
+                      host="10.0.0.2", path="/srv", handle="c-9"),
+        ],
+    }
+    projects = {
+        "training": [
+            {"name": "alpha", "handle": "100"},
+            {"name": "bravo", "handle": "200"},
+            {"name": "charlie", "handle": "300"},
+        ],
+        "ops": [
+            {"name": "ops-only", "handle": "999"},
+        ],
+    }
+
+    async with app.run_test() as pilot:
+        modal = NewJobModal(
+            orgs=orgs, connectors_by_org=connectors,
+            projects_by_org=projects, api_client=None,
+        )
+        app.push_screen(modal, lambda r: None)
+        await pilot.pause()
+        scr = app.screen
+
+        # Project Select exists. Textual stores Select options as
+        # (prompt, value) tuples in `_options`; assert both pieces.
+        proj_sel = scr.query_one("#newjob-project", _S)
+        assert proj_sel is not None
+        opts = list(proj_sel._options)
+        labels = [str(t[0]) for t in opts]
+        values = [t[1] for t in opts]
+        assert any("alpha" in l and "#100" in l for l in labels), labels
+        assert any("bravo" in l and "#200" in l for l in labels), labels
+        assert any("charlie" in l and "#300" in l for l in labels), labels
+        assert "100" in values and "200" in values and "300" in values, values
+        assert scr._cur_project_handle == "100", scr._cur_project_handle
+
+        # Pick a different project → _cur_project_handle updates.
+        proj_sel.value = "200"
+        await pilot.pause()
+        assert scr._cur_project_handle == "200", scr._cur_project_handle
+
+        # Switch org to 'ops' → Project Select rebuilds with ops's
+        # project; _cur_project_handle resets to the auto-picked first.
+        scr.query_one("#newjob-org", _S).value = "ops"
+        await pilot.pause()
+        new_opts = list(scr.query_one("#newjob-project", _S)._options)
+        new_values = [t[1] for t in new_opts]
+        assert "999" in new_values, new_values
+        assert scr._cur_project_handle == "999", scr._cur_project_handle
+
+
+def test_newjob_modal_v018_project_picker() -> None:
+    asyncio.run(_walk_newjob_v018_project_picker())
+
+
 # ---------- v0.14: unit-name parse + LogViewerModal mount ----------
 
 def test_unit_parse_regex() -> None:
