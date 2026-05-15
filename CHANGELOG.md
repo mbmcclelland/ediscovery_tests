@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.17.7](#v0177--2026-05-14) | 2026-05-14 | DR_freshinstall.exp — `dr_ctl.sh status` path uses forward slashes (was backslashes; bash stripped them to `homeaurariaAHSbindr_ctl.sh`) |
 | [v0.17.6](#v0176--2026-05-14) | 2026-05-14 | Logo swapped to user-supplied 7-line gradient; phase banner re-coloured bright-blue border + bold-yellow text |
 | [v0.17.5](#v0175--2026-05-14) | 2026-05-14 | Reef-a-TUI logo regenerated at fivebyfive scale 0 — readable as REEF-A-TUI, single-line render even on narrow terminals |
 | [v0.17.4](#v0174--2026-05-14) | 2026-05-14 | DR_freshinstall — Reef-a-TUI logo, ocean-depth gradient, bright-yellow subtitle, subprocess-streaming wrapper (bar stays pinned at the bottom while logs scroll above) |
@@ -49,6 +50,45 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.17.7 — 2026-05-14
+
+### Fixed: `dr_ctl.sh status` path uses forward slashes
+
+User screenshot at the tail of phase 2:
+
+```
+[root@digitalreef tmp]# \home\auraria\AHS\bin\dr_ctl.sh status
+    │  bash: homeaurariaAHSbindr_ctl.sh: command not found
+```
+
+**Root cause:** `DR_freshinstall.exp` line 53 had the path written
+with backslashes — `\\home\\auraria\\AHS\\bin\\dr_ctl.sh`. Tcl's
+`send --` rendered each `\\` as `\`, then bash received
+`\home\auraria\AHS\bin\dr_ctl.sh`. Bash strips `\` as an escape
+character before non-special chars (so `\h` → `h`, `\a` → `a`),
+producing the meaningless `homeaurariaAHSbindr_ctl.sh`.
+
+(The companion `\\cp -v ...` on line 51 is *correct* — `\cp` is bash's
+"bypass alias" syntax and we genuinely want a single `\` in front
+of `cp` to ensure we hit the real binary, not whichever `cp -i`
+alias is set in the user's profile.)
+
+**Fix:** Replaced backslashes with forward slashes:
+`/home/auraria/AHS/bin/dr_ctl.sh`. The install itself was never
+affected — `dr_ctl.sh status` runs AFTER the installer finishes and
+drd has been restarted, so the only consequence pre-fix was a
+cosmetic "command not found" line at the very tail of phase 2's
+streamed output. Post-fix the user sees the actual drd status
+breakdown.
+
+**Files:**
+
+- `DR_freshinstall.exp` — line 53 path corrected
+- `__version__.py` → 0.17.7
+- CHANGELOG.md (this entry).
 
 ---
 

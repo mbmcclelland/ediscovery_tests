@@ -50,6 +50,6 @@ expect -exact ":/tmp"
 spawn bash
 send -- "\\cp -v /root/license.lic /home/auraria/AHS/conf/license.lic\r"
 send -- "SYSTEMD_LOG_LEVEL=debug systemctl restart drd\r"
-send -- "\\home\\auraria\\AHS\\bin\\dr_ctl.sh status\r"
+send -- "/home/auraria/AHS/bin/dr_ctl.sh status\r"
 send -- "exit\r"
 expect eof
