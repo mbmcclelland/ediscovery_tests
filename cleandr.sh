@@ -30,6 +30,39 @@ for arg in "$@"; do
     esac
 done
 
+# ---- 0. SELinux disable (v0.19.1) ----------------------------------------
+# DR's file-system layout (`/home/auraria/AHS`, `/data/{doc,index}storage`)
+# and the wildfly EE container both trip up SELinux MAC policies; under
+# `enforcing` the install runs but countless requests fail with cryptic
+# "AVC denied" entries in audit.log. The supported configuration is
+# SELINUX=disabled.
+#
+# Two-stage disable:
+#   1. runtime: `setenforce 0` flips enforcing → permissive immediately.
+#      RHEL 8/9 doesn't allow runtime "disabled"; permissive is as close
+#      as we get without a reboot, and it's enough for the installer.
+#   2. persistent: edit `/etc/selinux/config` so the post-reboot state
+#      is disabled too.
+#
+# Safe on hosts where SELinux is already disabled (getenforce → no-op).
+# Safe on hosts without selinux-utils installed (`command -v` gate).
+if command -v getenforce >/dev/null 2>&1; then
+    cur=$(getenforce 2>/dev/null || echo "Unknown")
+    if [ "$cur" != "Disabled" ]; then
+        echo "[cleandr] SELinux state: $cur — switching to permissive runtime"
+        setenforce 0 2>/dev/null \
+            || echo "[cleandr] warning: setenforce 0 failed (kernel may have selinux=0 already)"
+    else
+        echo "[cleandr] SELinux already disabled — no runtime change needed"
+    fi
+    if [ -f /etc/selinux/config ]; then
+        if ! grep -qE '^SELINUX=disabled[[:space:]]*$' /etc/selinux/config; then
+            echo "[cleandr] setting SELINUX=disabled in /etc/selinux/config (effective after reboot)"
+            sed -i.bak 's/^SELINUX=.*/SELINUX=disabled/' /etc/selinux/config
+        fi
+    fi
+fi
+
 # ---- 1. Stop drd --------------------------------------------------------
 SYSTEMD_LOG_LEVEL=debug systemctl stop drd 2>/dev/null || true
 

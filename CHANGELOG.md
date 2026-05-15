@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.19.1](#v0191--2026-05-14) | 2026-05-14 | cleandr.sh now disables SELinux as Phase 0 — runtime `setenforce 0` + persistent `SELINUX=disabled` in `/etc/selinux/config` |
 | [v0.19.0](#v0190--2026-05-14) | 2026-05-14 | Organizations tab — **Create Project** via F7 on the Projects view (`ecaManager/createCase` + clear error when org has no default templates yet) |
 | [v0.18.0](#v0180--2026-05-14) | 2026-05-14 | NewJobModal — explicit **Project** picker (fixes "PROJECT_NOT_ACTIVATED Project 0 not activated" by letting the user choose which existing project the imports attach to) |
 | [v0.17.10](#v01710--2026-05-14) | 2026-05-14 | **REEF-A-TUI** rebrand — scripts → `/opt/digitalreef/scripts/reef-a-tui/`; new `dr_tui` + `dr-freshinstall` + `dr_freshinstall` launchers ship with the RPM |
@@ -55,6 +56,70 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.19.1 — 2026-05-14
+
+### Added: SELinux auto-disable in `cleandr.sh` (Phase 0)
+
+**User policy:** SELinux should stay disabled on DR hosts. DR's
+file-system layout (`/home/auraria/AHS`, `/data/{doc,index}storage`)
+and the wildfly EE container both trip up SELinux MAC policies;
+under `enforcing` the install runs but countless requests fail
+with cryptic `AVC denied` entries in `/var/log/audit/audit.log`.
+
+`cleandr.sh` now opens with a Phase 0 block that:
+
+1. **Runtime:** calls `setenforce 0` if `getenforce` reports
+   anything other than `Disabled`. (RHEL 8/9 doesn't allow runtime
+   "disabled" — `permissive` is as close as we get without a
+   reboot, and it's enough for the installer's MAC-sensitive
+   operations.)
+2. **Persistent:** rewrites `/etc/selinux/config` to
+   `SELINUX=disabled` if it isn't already. Backup at
+   `/etc/selinux/config.bak` (sed's `-i.bak`). Takes effect on
+   the next reboot.
+
+```bash
+# ---- 0. SELinux disable ----
+if command -v getenforce >/dev/null 2>&1; then
+    cur=$(getenforce 2>/dev/null || echo "Unknown")
+    if [ "$cur" != "Disabled" ]; then
+        echo "[cleandr] SELinux state: $cur — switching to permissive runtime"
+        setenforce 0 2>/dev/null || true
+    fi
+    if [ -f /etc/selinux/config ] \
+        && ! grep -qE '^SELINUX=disabled' /etc/selinux/config; then
+        echo "[cleandr] setting SELINUX=disabled in /etc/selinux/config"
+        sed -i.bak 's/^SELINUX=.*/SELINUX=disabled/' /etc/selinux/config
+    fi
+fi
+```
+
+**Safety:**
+
+- Idempotent: no-op when SELinux is already `Disabled`.
+- Safe on hosts without `selinux-utils` (the `command -v
+  getenforce` gate skips everything).
+- Doesn't crash on bare RHEL or hosts already running with
+  `selinux=0` on the kernel cmdline.
+
+If you need full no-policy-loaded mode (RHEL 8+ caveat: runtime
+"disabled" no longer works), you'll still need to pass
+`selinux=0` to the kernel command line via `grubby`. The
+post-reboot `SELINUX=disabled` config we set now is enough for
+DR's needs in practice.
+
+**Files:**
+
+- `cleandr.sh` — new Phase 0 block (above the existing Phase 1
+  drd stop)
+- `__version__.py` → 0.19.1
+- CHANGELOG.md (this entry).
+
+Shell-syntax checked (`bash -n cleandr.sh` clean). No Python
+changes; pilot suite untouched.
 
 ---
 
