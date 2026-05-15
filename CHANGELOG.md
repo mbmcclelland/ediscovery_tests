@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.17.10](#v01710--2026-05-14) | 2026-05-14 | **REEF-A-TUI** rebrand — scripts → `/opt/digitalreef/scripts/reef-a-tui/`; new `dr_tui` + `dr-freshinstall` + `dr_freshinstall` launchers ship with the RPM |
 | [v0.17.9](#v0179--2026-05-14) | 2026-05-14 | Per-phase wall-clock subtotals — file log gets one `phase wall clock:` line per phase + a console one-liner between phases |
 | [v0.17.8](#v0178--2026-05-14) | 2026-05-14 | DR_freshinstall.exp — installer now spawned with `LAX_DEBUG=true` and `_JAVA_OPTIONS` for verbose InstallAnywhere diagnostics |
 | [v0.17.7](#v0177--2026-05-14) | 2026-05-14 | DR_freshinstall.exp — `dr_ctl.sh status` path uses forward slashes (was backslashes; bash stripped them to `homeaurariaAHSbindr_ctl.sh`) |
@@ -52,6 +53,96 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.17.10 — 2026-05-14
+
+### Added: REEF-A-TUI ("Ratatouille") collection + launcher aliases
+
+The collection of Digital-Reef ops tools (`dr-tui`, `dr-load`,
+`dr-job-run`, `dr-job-delete`, `DR_freshinstall.py`, the expect
+installer, `cleandr.sh`, the Reef-a-TUI logo files) is now formally
+named **REEF-A-TUI** — pronounced like *Ratatouille* (Reef-a-too-ee).
+A pun fusing the product name (Reef) with the technical class (TUI)
+into a homophone of the Pixar rat-chef movie.
+
+**New install paths (RPM):**
+
+```
+/opt/digitalreef/scripts/reef-a-tui/
+├── DR_freshinstall.py     ← end-to-end fresh-install driver
+├── DR_freshinstall.exp    ← expect wrapper for the InstallAnywhere .bin
+├── cleandr.sh             ← teardown shell
+├── reef-a-tui-logo.txt    ← ASCII art source
+└── reef-a-tui-logo.go     ← bit-generated reference
+
+/usr/bin/
+├── dr-tui      ← Textual TUI dashboard
+├── dr_tui      ← symlink → dr-tui  (Python-naming alias)
+├── dr-load     ← load-test CLI
+├── dr-job-run  ← indexing-chain CLI
+├── dr-job-delete
+├── dr-freshinstall   ← new! `python /opt/digitalreef/.../DR_freshinstall.py`
+└── dr_freshinstall   ← symlink → dr-freshinstall
+
+/opt/dr-tools/venv/         (unchanged — bundled Python venv)
+```
+
+So end-users can pick whichever naming convention sits in their
+muscle memory:
+
+```bash
+dr-tui                              # hyphen, Unix-CLI convention
+dr_tui                              # underscore, Python-module convention
+sudo dr-freshinstall --force        # full destructive fresh install
+sudo dr_freshinstall                # → prints help (no args = help-by-default)
+```
+
+The Python venv stays at `/opt/dr-tools/venv` for backward
+compatibility (every shebang inside the venv still points there).
+The new `/opt/digitalreef/scripts/reef-a-tui/` is the canonical
+place to find the **orchestration layer** that the venv doesn't
+ship: the fresh-install driver, the expect wrapper, the cleandr
+shell, and the logo source files.
+
+**RPM `%post` banner refreshed** to advertise both naming forms +
+the script directory + a quick-start hint for `dr-freshinstall`.
+
+**Files:**
+
+- `packaging/dr-tools.spec`
+  - new `%global reefroot /opt/digitalreef/scripts/reef-a-tui`
+  - `%install` creates the dir + installs the 5 script/asset files
+  - `%install` writes the new `dr-freshinstall` wrapper + the two
+    underscore-form symlinks
+  - `%files` manifest declares the new paths
+  - `%post` banner refreshed
+- `__version__.py` → 0.17.10
+- CHANGELOG.md (this entry).
+
+### Verified
+
+```bash
+$ rpm -qpl dr-tools-0.17.10-*.rpm | grep -E "reef-a-tui|dr_"
+/opt/digitalreef
+/opt/digitalreef/scripts
+/opt/digitalreef/scripts/reef-a-tui
+/opt/digitalreef/scripts/reef-a-tui/DR_freshinstall.exp
+/opt/digitalreef/scripts/reef-a-tui/DR_freshinstall.py
+/opt/digitalreef/scripts/reef-a-tui/cleandr.sh
+/opt/digitalreef/scripts/reef-a-tui/reef-a-tui-logo.go
+/opt/digitalreef/scripts/reef-a-tui/reef-a-tui-logo.txt
+/usr/bin/dr_freshinstall
+/usr/bin/dr_tui
+
+$ sudo dnf -y install …/dr-tools-0.17.10-*.rpm
+$ dr_freshinstall          # underscore alias works
+usage: DR_freshinstall.py …
+
+$ dr_tui --version          # underscore alias works
+…
+```
 
 ---
 

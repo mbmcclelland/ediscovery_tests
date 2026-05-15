@@ -12,6 +12,15 @@
 
 %global py3 /usr/bin/python3
 %global drroot /opt/dr-tools
+# v0.17.10 — REEF-A-TUI ("Ratatouille") rebrand. The collection of
+# Digital-Reef ops tools (dr-tui, dr-load, DR_freshinstall.py, the
+# expect installer, cleandr) is collectively named REEF-A-TUI. The
+# Python venv stays at /opt/dr-tools/venv for backward compatibility
+# (it's where every existing wrapper / shebang points), but the
+# user-facing tool scripts also land under /opt/digitalreef/scripts/
+# reef-a-tui/ so admins can `cd` into one canonical place to read,
+# diff, or hand-edit them.
+%global reefroot /opt/digitalreef/scripts/reef-a-tui
 
 # Self-contained venv — disable auto-generated debuginfo subpackage
 # (only relevant for C source; our payload is Python + prebuilt wheels).
@@ -115,6 +124,44 @@ cat > %{buildroot}/usr/bin/dr-job-delete <<'EOF'
 #!/bin/sh
 exec /opt/dr-tools/venv/bin/dr-job-delete "$@"
 EOF
+
+# v0.17.10 — REEF-A-TUI ("Ratatouille") collection. Drop the
+# user-facing scripts into /opt/digitalreef/scripts/reef-a-tui/
+# so admins can read, diff, or hand-tweak them in one canonical
+# place. The Python venv stays at /opt/dr-tools/venv (every
+# shebang points there); these files are the orchestration layer
+# that the venv doesn't ship.
+mkdir -p %{buildroot}%{reefroot}
+install -m 0755 DR_freshinstall.py    %{buildroot}%{reefroot}/DR_freshinstall.py
+install -m 0755 DR_freshinstall.exp   %{buildroot}%{reefroot}/DR_freshinstall.exp
+install -m 0755 cleandr.sh            %{buildroot}%{reefroot}/cleandr.sh
+install -m 0644 reef-a-tui-logo.txt   %{buildroot}%{reefroot}/reef-a-tui-logo.txt
+install -m 0644 reef-a-tui-logo.go    %{buildroot}%{reefroot}/reef-a-tui-logo.go
+
+# v0.17.10 — REEF-A-TUI launchers.
+#
+# `dr_tui` (underscore) — alias for `dr-tui` (hyphen). Both naming
+# conventions live side-by-side because (a) the Python convention is
+# underscore, (b) the Unix CLI convention is hyphen, (c) the user
+# typed dr_tui in the v0.17.10 request, so we honour it.
+ln -sf dr-tui %{buildroot}/usr/bin/dr_tui
+
+# `dr-freshinstall` + `dr_freshinstall` — new entry points for the
+# end-to-end fresh-install driver. The script lives at
+# /opt/digitalreef/scripts/reef-a-tui/DR_freshinstall.py and uses
+# the venv's Python interpreter (which has Rich, requests, urllib3,
+# and the dr_tui.data helpers all pre-installed).
+cat > %{buildroot}/usr/bin/dr-freshinstall <<'EOF'
+#!/bin/sh
+# Launcher for the REEF-A-TUI ("Ratatouille") fresh-install driver.
+# Run with no args for help; --force for the full destructive
+# teardown + reinstall + 13 API-provisioning steps.
+exec /opt/dr-tools/venv/bin/python3 \
+    /opt/digitalreef/scripts/reef-a-tui/DR_freshinstall.py "$@"
+EOF
+chmod 0755 %{buildroot}/usr/bin/dr-freshinstall
+ln -sf dr-freshinstall %{buildroot}/usr/bin/dr_freshinstall
+
 chmod 0755 %{buildroot}/usr/bin/dr-tui \
             %{buildroot}/usr/bin/dr-load \
             %{buildroot}/usr/bin/dr-job-run \
@@ -134,16 +181,52 @@ install -m 0644 .env.example %{buildroot}%{drroot}/share/env.example
 %dir %{drroot}/share
 %{drroot}/venv
 %{drroot}/share/env.example
+# v0.17.10 — REEF-A-TUI script collection.
+%dir /opt/digitalreef
+%dir /opt/digitalreef/scripts
+%dir %{reefroot}
+%{reefroot}/DR_freshinstall.py
+%{reefroot}/DR_freshinstall.exp
+%{reefroot}/cleandr.sh
+%{reefroot}/reef-a-tui-logo.txt
+%{reefroot}/reef-a-tui-logo.go
 /usr/bin/dr-tui
 /usr/bin/dr-load
 /usr/bin/dr-job-run
 /usr/bin/dr-job-delete
+# v0.17.10 — aliases + new fresh-install entry points.
+/usr/bin/dr_tui
+/usr/bin/dr-freshinstall
+/usr/bin/dr_freshinstall
 
 %post
-echo "dr-tools installed to %{drroot}/venv"
-echo "  dr-tui, dr-load, dr-job-run, dr-job-delete are now on PATH"
-echo "  copy %{drroot}/share/env.example → ~/.env (or /etc/dr-tools/.env)"
-echo "  and edit the DR_HOST / DR_USER / DR_PASS values."
+cat <<'BANNER'
+
+  ╭──────────────────────────────────────────────────────────────╮
+  │  REEF-A-TUI installed — Digital Reef ops toolkit             │
+  ╰──────────────────────────────────────────────────────────────╯
+
+  On PATH:
+    dr-tui    /  dr_tui              Textual TUI dashboard
+    dr-load                          load-test CLI
+    dr-job-run / dr-job-delete       indexing-chain CLIs
+    dr-freshinstall  /  dr_freshinstall   end-to-end fresh-install
+                                          driver (run with no args
+                                          for help)
+
+  Scripts:    /opt/digitalreef/scripts/reef-a-tui/
+  Venv:       /opt/dr-tools/venv
+  Sample env: /opt/dr-tools/share/env.example
+
+  Quick start:
+    cp /opt/dr-tools/share/env.example  ~/.env
+    $EDITOR ~/.env       # DR_HOST / DR_USER / DR_PASS
+    dr-tui
+
+  For a brand-new DR install from scratch:
+    sudo dr-freshinstall --force
+
+BANNER
 
 %postun
 # Nothing to clean up — the venv lives under our own /opt/dr-tools tree

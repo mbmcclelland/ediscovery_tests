@@ -1,16 +1,53 @@
-# eDiscovery API Test Suite
+# REEF-A-TUI — eDiscovery API Test Suite
 
-**Version 0.15.3**
+**Version 0.17.10**
+
+> **REEF-A-TUI** (pronounced *Reef-a-too-ee* — a homophone of *Ratatouille*)
+> is the umbrella name for this collection of Digital Reef ops tools.
+> The pun fuses the product name (**Reef**) with the technical class
+> (**TUI** — Text User Interface) into a tribute to the Pixar rat-chef.
 
 Automated API tests, load tests, a Textual TUI for live monitoring, and a
-reinstall toolchain for the Digital Reef eDiscovery REST API. Includes:
+one-shot REST-based fresh-install driver for the Digital Reef eDiscovery
+platform. The whole collection ships as a single RPM (`dr-tools`) with a
+self-contained venv:
 
-- `dr-load` — headless load-test CLI with preflight, background monitoring, merged CSV reports
-- `dr-tui` — lazygit-style Textual TUI with tabbed hierarchical Tree + drill-down detail pane
-- `playwright_fresh_install.py` / `playwright_fresh_init.py` — Playwright-driven post-install setup
-- `cleandr.sh` + `DR_freshinstall.exp` — destructive uninstall + automated reinstall
+| On PATH | Purpose |
+|---|---|
+| `dr-tui`   / `dr_tui`            | Textual TUI dashboard — live License, Realm Node Status, system metrics, log stream, per-org CRUD on storage depots, system users, system groups |
+| `dr-load`                        | Headless load-test CLI — preflight, background monitoring, merged CSV reports |
+| `dr-job-run` / `dr-job-delete`   | Indexing-chain CLIs (createDataArea → createCorpus → createRepresentation → poll) |
+| `dr-freshinstall` / `dr_freshinstall` | End-to-end **REST-based** fresh-install driver — cleandr → InstallAnywhere expect → 13 API-provisioning steps, with Rich progress bar pinned at the bottom of the live region |
 
-Built with **pytest + requests** for functional tests, **Locust** for load testing, **Textual** for the TUI, **Playwright** + **mitmproxy** for UI automation and endpoint capture.
+Both naming conventions (hyphen and underscore) work for every tool —
+the underscore form is a symlink to the hyphen form. Pick whichever
+matches your muscle memory.
+
+Built with **pytest + requests** for functional tests, **Locust** for
+load testing, **Textual** + **Rich** for the TUI and the fresh-install
+driver's progress UX, **Playwright** + **mitmproxy** for UI automation
+and endpoint capture (development only — production installs use the
+REST-based `dr-freshinstall`, no Chromium).
+
+### Install paths
+
+```
+/opt/digitalreef/scripts/reef-a-tui/      ← orchestration scripts
+  DR_freshinstall.py        the fresh-install driver
+  DR_freshinstall.exp       expect wrapper for the InstallAnywhere .bin
+  cleandr.sh                teardown shell (drops postgres + FS state)
+  reef-a-tui-logo.{txt,go}  logo source + bit-generated reference
+
+/opt/dr-tools/venv/                       ← bundled Python venv
+  bin/dr-tui  bin/dr-load  bin/dr-job-run  bin/dr-job-delete
+  bin/python3 (+ Rich, requests, urllib3, textual, …)
+
+/usr/bin/                                 ← launchers on PATH
+  dr-tui      dr_tui
+  dr-load
+  dr-job-run  dr-job-delete
+  dr-freshinstall  dr_freshinstall
+```
 
 ---
 
