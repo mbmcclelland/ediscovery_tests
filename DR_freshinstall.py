@@ -517,6 +517,59 @@ def _phase_banner(num: int, name: str) -> None:
     ))
 
 
+# v0.17.9 — phase-subtotal timing. Tracks the wall clock for each of
+# Phase 1 / Phase 2 / Phase 3 so the file log carries a per-phase
+# breakdown that complements the per-step `(N.Ns)` annotations and the
+# overall `total wall clock` line. The `with _phase(N, "name")` form
+# keeps entry-banner and exit-summary visually paired in main().
+class _phase:
+    """Context manager: print the banner on entry, log + display the
+    phase wall clock on exit (whether the phase succeeded or raised).
+    Falls back gracefully if the body re-raises — the elapsed line
+    goes out before the exception propagates so the user can see
+    *which* phase failed and how long it ran before dying."""
+
+    def __init__(self, num: int, name: str) -> None:
+        self.num = num
+        self.name = name
+        self.started_at: float = 0.0
+
+    def __enter__(self) -> "_phase":
+        self.started_at = time.time()
+        _phase_banner(self.num, self.name)
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        elapsed = time.time() - self.started_at
+        verdict = "OK" if exc_type is None else "FAIL"
+        # File log: machine-readable subtotal line, easy to grep for
+        # later (`grep "phase wall clock" *.log`).
+        log.info(
+            "phase wall clock: Phase %d — %s — %s — %.1fs",
+            self.num, self.name, verdict, elapsed,
+        )
+        # Console: dim one-liner so the user sees the subtotal scroll
+        # by between phases. Don't render on the failure path; the
+        # FATAL panel main() emits already includes the elapsed-since-
+        # start total. We still log the subtotal to the file though,
+        # which is the whole point.
+        if exc_type is None:
+            console.print(
+                f"    [dim]⏱  Phase {self.num} took "
+                f"{elapsed:.1f}s ({_fmt_minsec(elapsed)})[/]",
+                highlight=False,
+            )
+        # False → don't swallow the exception; let main()'s except
+        # blocks handle it as before.
+        return False
+
+
+def _fmt_minsec(secs: float) -> str:
+    """Render a duration as `Xm YYs` for the human-readable subtotal."""
+    m, s = divmod(int(secs + 0.5), 60)
+    return f"{m}m {s:02d}s" if m else f"{s}s"
+
+
 def _confirm_destruction(args: argparse.Namespace) -> bool:
     """Interactive y/n gate for the destructive phases.
 
@@ -1305,20 +1358,20 @@ def main() -> int:
         ctx = progress if progress is not None else _NullContext()
         with ctx:
             if not args.skip_clean:
-                _phase_banner(1, "Teardown (cleandr.sh)")
-                phase_clean(args)
+                with _phase(1, "Teardown (cleandr.sh)"):
+                    phase_clean(args)
             else:
                 _skip("Phase 1 (teardown)")
 
             if not args.skip_installer:
-                _phase_banner(2, "DR installer (DR_freshinstall.exp)")
-                phase_installer(args)
+                with _phase(2, "DR installer (DR_freshinstall.exp)"):
+                    phase_installer(args)
             else:
                 _skip("Phase 2 (installer)")
 
             if not args.skip_api:
-                _phase_banner(3, f"API provisioning ({len(STEPS)} steps)")
-                phase_api(args)
+                with _phase(3, f"API provisioning ({len(STEPS)} steps)"):
+                    phase_api(args)
             else:
                 _skip("Phase 3 (API provisioning)")
     except (APIError, RuntimeError, TimeoutError, FileNotFoundError) as e:

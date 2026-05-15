@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.17.9](#v0179--2026-05-14) | 2026-05-14 | Per-phase wall-clock subtotals — file log gets one `phase wall clock:` line per phase + a console one-liner between phases |
 | [v0.17.8](#v0178--2026-05-14) | 2026-05-14 | DR_freshinstall.exp — installer now spawned with `LAX_DEBUG=true` and `_JAVA_OPTIONS` for verbose InstallAnywhere diagnostics |
 | [v0.17.7](#v0177--2026-05-14) | 2026-05-14 | DR_freshinstall.exp — `dr_ctl.sh status` path uses forward slashes (was backslashes; bash stripped them to `homeaurariaAHSbindr_ctl.sh`) |
 | [v0.17.6](#v0176--2026-05-14) | 2026-05-14 | Logo swapped to user-supplied 7-line gradient; phase banner re-coloured bright-blue border + bold-yellow text |
@@ -51,6 +52,67 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.17.9 — 2026-05-14
+
+### Added: per-phase wall-clock subtotals
+
+`DR_freshinstall.py` now records the elapsed time of each phase
+individually, in addition to the existing per-step `(N.Ns)` annotations
+and the overall `total wall clock` summary.
+
+Implemented as a small context-manager class `_phase` that wraps
+each phase block in `main()`:
+
+```python
+with _phase(1, "Teardown (cleandr.sh)"):
+    phase_clean(args)
+with _phase(2, "DR installer (DR_freshinstall.exp)"):
+    phase_installer(args)
+with _phase(3, f"API provisioning ({len(STEPS)} steps)"):
+    phase_api(args)
+```
+
+On `__enter__` it prints the existing bright-blue / yellow banner
+and starts the clock; on `__exit__` it emits TWO things:
+
+- **File log** — a single grep-friendly line per phase:
+  ```
+  INFO  phase wall clock: Phase 1 — Teardown (cleandr.sh) — OK — 32.4s
+  INFO  phase wall clock: Phase 2 — DR installer (DR_freshinstall.exp) — OK — 538.2s
+  INFO  phase wall clock: Phase 3 — API provisioning (13 steps) — OK — 30.0s
+  INFO  total wall clock: 600.6s (exit=0)
+  ```
+- **Console** — a dim one-liner between phases (so the user sees
+  subtotals scroll by, not just the final total):
+  ```
+      ⏱  Phase 2 took 538.2s (8m 58s)
+  ```
+
+The `verdict` field is `OK` on a clean run, `FAIL` on exception — the
+elapsed line goes out *before* the exception propagates, so the log
+shows exactly which phase failed and how long it ran. (The FATAL
+panel in main() then renders the final state; the per-phase
+breakdown sits in the log file for post-mortem.)
+
+Grep recipe:
+
+```bash
+grep -E "phase wall clock|total wall clock" /tmp/dr-freshinstall-*.log
+```
+
+→ four lines per run (three phases + one total), ideal for spotting
+regressions or runaway phase durations across builds.
+
+**Files:**
+
+- `DR_freshinstall.py` — new `_phase` context manager and
+  `_fmt_minsec` helper; `main()` switches from `_phase_banner(N, …)`
+  calls to `with _phase(N, …):` blocks.
+- `__version__.py` → 0.17.9
+- CHANGELOG.md (this entry).
 
 ---
 
