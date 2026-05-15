@@ -113,3 +113,115 @@ Tried during the v0.19.3 QA cycle:
 
 The TUI itself is unaffected for any workflow that doesn't require fresh-org project creation — every other feature (System Settings CRUD, Job Scheduler for existing projects, Connector view, F3 Jobs Monitor) works correctly.
 
+---
+
+## 2026-05-15 capture pass — System Settings Web UI
+
+User drove a System Settings exploration session through mitmproxy
+reverse-proxy on :8091. 195 calls, 56 unique endpoints, ~749 KB
+captured. Permanent artefact: `misc/syssettings-capture-20260515.json`.
+
+### Did the capture close QA-v019-4?
+
+**Partial.** The user's clicks did NOT trigger
+`updateMetaTemplateProfileEntries` with a real payload — every
+`getMetaTemplateProfileEntries` response in the capture is still
+empty. So the entry-shape mystery is unresolved.
+
+**However**, the capture DID confirm the `createTemplate` body shape
+for META_TEMPLATE_PROFILE creation (matches what we already inferred)
+and gave us the supporting endpoints (`copyToTemplate`,
+`copyFromTemplate`, `exportTemplates`, `updateTemplate`,
+`deleteTemplate`) that surround a complete template-management
+workflow.
+
+To fully close QA-v019-4, one more capture is still needed: drive
+the Web UI through "add an entry to a meta-template profile and
+save" so we see the populated `updateMetaTemplateProfileEntries`
+body. Or alternatively: capture a successful end-to-end project
+creation (which IS the lazy template-bootstrap path).
+
+### 36 new endpoints captured — feature mapping
+
+These body shapes are now available verbatim in
+`misc/syssettings-capture-20260515.json` for future wrapping. Grouped
+by what feature they'd enable.
+
+#### A. Service management (system-wide compute resources)
+
+| Endpoint | Body | Enables |
+|---|---|---|
+| `realmManager/listServices` | `{startIndex, count, descending, sortByFilter:"NAME"}` | Already wrapped at the helper level; can lift to dr_tui System Settings tree |
+| `realmManager/createService` | `{serviceName, serviceDescription, serviceExpressNodes:[], serviceOcrNodes:[], serviceRealmNodes:[]}` | dr_tui System Settings → Services → New |
+| `realmManager/deleteService` | `{handle}` | dr_tui System Settings → Services → F8 delete |
+| `serviceManager/listProjectsForService` | (capture available) | Surface "which projects use this service" |
+
+#### B. Template administration
+
+| Endpoint | Body | Enables |
+|---|---|---|
+| `orgManager/createTemplate` | `{name, type, description, defaultTemplate, scope, ownerHandle, systemScope}` | Programmatic creation of any template type — needed for the QA-v019-4 fix |
+| `orgManager/updateTemplate` | `{handle, name, description, defaultTemplate, type, systemScope}` | Rename / edit a template's metadata |
+| `orgManager/deleteTemplate` | `{handle, taskDescription, systemScope}` | dr_tui template-delete |
+| `templateManager/copyToTemplate` | `{fromHandle, toHandle, systemScope}` | Replicate an existing template into a fresh handle (the foundation of "Create from default") |
+| `templateManager/copyFromTemplate` | `{fromHandle, toHandle, systemScope}` | Inverse direction |
+| `templateManager/exportTemplates` | `{handles:[], templateType, allTemplates, projectHandle}` | Backup / migrate templates between realms |
+
+#### C. Group + role administration
+
+| Endpoint | Body | Enables |
+|---|---|---|
+| `adminOrgManager/createGroup` | `{name, description, roleHandles:[...], organizationName, systemScope:true}` | System Groups CRUD (we have list+delete, this completes the loop) |
+| `adminOrgManager/addSystemGroupToOrg` | `{systemObjectName, orgNameRoleHandles:{<org>:<roleHandle>}}` | Bulk-attach a system group to an org with a role |
+| `groupManager/listUsers` | (capture available) | Show members of a system group |
+| `groupManager/setUsers` | `{groupHandle, userHandles:[...], systemScope:true}` | Add/remove members of a system group |
+| `orgManager/deleteGroup` | (capture available) | Remove an org-level group |
+| `orgManager/getRole` / `permissionManager/getSecureObjectGroups` | Inspect a role's permission grants | A "View role permissions" detail pane |
+
+#### D. Connector validation + NFS mount discovery
+
+| Endpoint | Body | Enables |
+|---|---|---|
+| `connectorManager/validateNFSConnector` | `{mountedConnectorMode:"CLASSIC", remoteHost, remotePath, readOnly, systemScope}` | Pre-create validation in NewConnectorModal — currently we skip this |
+| `orgManager/getNfsMounts` | `{remoteHost, timeoutSeconds}` | Auto-populate a "share picker" dropdown when entering a new NFS connector |
+
+#### E. Project-level features (handle from later — captured against project 1086 / 1119)
+
+| Endpoint | Body | Enables |
+|---|---|---|
+| `projectManager/createTag` | `{name, description, displayValue:"#9900FF", projectHandle, enabled, systemScope}` | dr_tui per-project tag CRUD with a colour-picker |
+| `projectManager/deleteTag` | (capture available) | Delete a project tag |
+| `projectManager/listTags` | (capture available) | Display per-project tags |
+| `projectManager/getAnalyticalSettings` | `{handle, systemScope}` | Read project analytical-settings template binding |
+| `projectManager/listBillingReportSettings` | (capture available) | Billing-report UI |
+
+#### F. Misc + legal/EULA + LDAP
+
+| Endpoint | Use case |
+|---|---|
+| `userManager/acceptEula` | Accept the EULA on a first login (we currently bypass this by setting it server-side; this would let dr_tui's first-login flow handle it cleanly) |
+| `realmManager/getAllFileTypes` | "What file types does DR understand?" — useful for indexing-config UIs |
+| `orgManager/listLdapDomains` | Read configured LDAP integrations |
+| `realmManager/listImportedCustomerUsersByUserName` | LDAP-imported user search |
+| `realmManager/listImportedGroupsByGroupName` | LDAP-imported group search |
+| `realmManager/listSystemUserOrgs` | Cross-org membership view for a given system user |
+| `realmManager/listDeletedProjects` / `listDeletePendingProjects` | Project recycle-bin UIs |
+| `realmManager/listCustomersForStorageFacility` / `storageAreaManager/countCustomersForFacility` | "Where is this storage used?" reverse lookup |
+| `viewManager/validateName` | Server-side name-uniqueness check (used inline by the Web UI) |
+
+### Suggested wrapper sweep (Dev next pass)
+
+Add these helpers to `dr_tui/data.py` in priority order:
+
+1. `create_org_group(client, *, org_name, name, description, role_handles)` — closes the group-CRUD circle
+2. `validate_nfs_connector(client, *, org_name, host, path, read_only)` — let NewConnectorModal pre-validate
+3. `get_nfs_mounts(client, *, host)` — populate a share-picker dropdown
+4. `create_project_tag(client, *, project_handle, name, description, color, enabled=True)` — opens the door to per-project tag management
+5. `list_realm_services()` + `create_realm_service()` + `delete_realm_service()` — adds Services to the System Settings tree
+
+Each is a single ~15-line function. None blocks v0.20; they're each a discrete future ticket.
+
+---
+
+
+
