@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.19.3](#v0193--2026-05-14) | 2026-05-14 | Extend the underscore-canonical sweep to `dr_load`, `dr_job_run`, `dr_job_delete` — every command now has the same hyphen/underscore alias layout |
 | [v0.19.2](#v0192--2026-05-14) | 2026-05-14 | Standardise on `dr_tui` / `dr_freshinstall` (underscore) as the canonical command names — hyphen forms become legacy symlinks |
 | [v0.19.1](#v0191--2026-05-14) | 2026-05-14 | cleandr.sh now disables SELinux as Phase 0 — runtime `setenforce 0` + persistent `SELINUX=disabled` in `/etc/selinux/config` |
 | [v0.19.0](#v0190--2026-05-14) | 2026-05-14 | Organizations tab — **Create Project** via F7 on the Projects view (`ecaManager/createCase` + clear error when org has no default templates yet) |
@@ -57,6 +58,98 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.19.3 — 2026-05-14
+
+### Changed: same naming sweep applied to `dr_load`, `dr_job_run`, `dr_job_delete`
+
+v0.19.2 standardised on `dr_tui` and `dr_freshinstall` as the
+canonical command names with the hyphen forms as legacy symlinks.
+This release extends that policy to the remaining three commands.
+
+| Layer | Before | After |
+|---|---|---|
+| `/usr/bin/dr_load` | did not exist | **real wrapper** |
+| `/usr/bin/dr-load` | real wrapper | **symlink → dr_load** |
+| `/usr/bin/dr_job_run` | did not exist | **real wrapper** |
+| `/usr/bin/dr-job-run` | real wrapper | **symlink → dr_job_run** |
+| `/usr/bin/dr_job_delete` | did not exist | **real wrapper** |
+| `/usr/bin/dr-job-delete` | real wrapper | **symlink → dr_job_delete** |
+
+After this release `/usr/bin/` has 10 entries — 5 underscored
+canonical wrappers + 5 hyphenated legacy alias symlinks:
+
+```
+$ ls -la /usr/bin/dr_*
+-rwxr-xr-x  /usr/bin/dr_tui              ← real wrapper
+-rwxr-xr-x  /usr/bin/dr_load             ← real wrapper
+-rwxr-xr-x  /usr/bin/dr_job_run          ← real wrapper
+-rwxr-xr-x  /usr/bin/dr_job_delete       ← real wrapper
+-rwxr-xr-x  /usr/bin/dr_freshinstall     ← real wrapper
+
+$ ls -la /usr/bin/dr-*
+lrwxrwxrwx  /usr/bin/dr-tui          -> dr_tui
+lrwxrwxrwx  /usr/bin/dr-load         -> dr_load
+lrwxrwxrwx  /usr/bin/dr-job-run      -> dr_job_run
+lrwxrwxrwx  /usr/bin/dr-job-delete   -> dr_job_delete
+lrwxrwxrwx  /usr/bin/dr-freshinstall -> dr_freshinstall
+```
+
+**Not touched (same rationale as v0.19.2):**
+
+- `setup.cfg::console_scripts` — `dr-load`, `dr-job-run`,
+  `dr-job-delete` are the venv-internal binary names at
+  `/opt/dr-tools/venv/bin/`. The user-facing `/usr/bin/dr_*`
+  wrappers consume them as an implementation detail.
+- Historical CHANGELOG entries — left as-is.
+- Python module names — `dr_tui.cli_jobrun` / `dr_tui.cli_jobdel`
+  were already underscored per Python convention.
+
+### Files swept (`dr-load` / `dr-job-run` / `dr-job-delete` → underscore forms in prose / strings)
+
+- **Docs:** README.md (31 swaps), DR_Workflow_Guide.md (6),
+  docs/RUNBOOK.md (17), docs/QA_TEST_PLAN.md (15),
+  docs/DR_ROLE_SETUP.md (1), packaging/README.md (5)
+- **Beta + QA artefacts:** BETA_USER_README.md (12),
+  BETA-Marcus-Chen-20260514.md (10),
+  QA-v0.14.4-handover-*.md (18), PLAN.md (11)
+- **Python source (strings + comments + docstrings):**
+  dr_tui/app.py (10), dr_tui/scheduler.py (7),
+  dr_tui/cli_jobrun.py (7), dr_tui/cli_jobdel.py (7),
+  cli.py (4), helpers/preflight.py (1),
+  playwright_fresh_init.py (1)
+- **Packaging:** packaging/dr-tools.spec (flipped 3 wrapper
+  declarations + 3 symlink declarations + %files manifest +
+  %post banner + 4 cosmetic comments); packaging/install.sh
+  (flipped dr-load wrapper + added symlink + uninstall sweep)
+
+### Verified
+
+```bash
+$ sudo dnf -y install …/dr-tools-0.19.3-1.el9.x86_64.rpm
+$ ls -la /usr/bin/dr_load /usr/bin/dr-load /usr/bin/dr_job_run \
+        /usr/bin/dr-job-run /usr/bin/dr_job_delete /usr/bin/dr-job-delete
+-rwxr-xr-x  /usr/bin/dr_load            ← real wrapper (55 bytes)
+lrwxrwxrwx  /usr/bin/dr-load -> dr_load (7-byte symlink)
+-rwxr-xr-x  /usr/bin/dr_job_run         ← real wrapper (58 bytes)
+lrwxrwxrwx  /usr/bin/dr-job-run -> dr_job_run (10-byte symlink)
+-rwxr-xr-x  /usr/bin/dr_job_delete      ← real wrapper (61 bytes)
+lrwxrwxrwx  /usr/bin/dr-job-delete -> dr_job_delete (13-byte symlink)
+```
+
+17/17 pilot tests pass. `bash -n cleandr.sh && bash -n
+packaging/install.sh` clean.
+
+**Files:** README.md, CHANGELOG.md (this entry +
+release-index row), DR_Workflow_Guide.md, docs/RUNBOOK.md,
+docs/QA_TEST_PLAN.md, docs/DR_ROLE_SETUP.md, packaging/README.md,
+packaging/dr-tools.spec, packaging/install.sh, BETA_USER_README.md,
+BETA-Marcus-Chen-20260514.md, QA-v0.14.4-handover-*.md, PLAN.md,
+dr_tui/app.py, dr_tui/scheduler.py, dr_tui/cli_jobrun.py,
+dr_tui/cli_jobdel.py, cli.py, helpers/preflight.py,
+playwright_fresh_init.py, __version__.py → 0.19.3.
 
 ---
 

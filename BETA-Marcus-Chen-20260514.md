@@ -30,9 +30,9 @@ $ which dr_tui
 $ rpm -q dr-tools
 dr-tools-0.15.0-1.el9.x86_64
 $ ls /usr/bin/dr-*
-/usr/bin/dr-job-delete
-/usr/bin/dr-job-run
-/usr/bin/dr-load
+/usr/bin/dr_job_delete
+/usr/bin/dr_job_run
+/usr/bin/dr_load
 /usr/bin/dr_tui
 ```
 
@@ -140,7 +140,7 @@ Marcus fills in:
 - Schedule: "Run on demand only"
 - Clicks **Run now**.
 
-Status bar shows: `running: marcus-immediate-1 via /usr/bin/dr-job-run`
+Status bar shows: `running: marcus-immediate-1 via /usr/bin/dr_job_run`
 
 Run History sub-view: new row appears with status `RUNNING`.
 F3 Jobs Monitor: new task visible with operationState=RUNNING.
@@ -178,7 +178,7 @@ WantedBy=timers.target
 
 > **Marcus:** "Persistent=true is the right call — Rocky boxes get
 > rebooted; missed fires should catch up. Service path absolute and
-> points at /usr/bin/dr-job-run. Clean."
+> points at /usr/bin/dr_job_run. Clean."
 
 **PASS** on use case "every day, 3 times a day."
 
@@ -237,16 +237,16 @@ Landing Dashboard:
 > — but I want a chart of 'jobs completed per hour' over the last
 > 24h. **Filing FR-3 for the volumes-over-time chart.**"
 
-### Step 12 — `dr-load indexing` synthetic load
+### Step 12 — `dr_load indexing` synthetic load
 
 ```bash
-$ dr-load indexing --users 5 --duration 300s
+$ dr_load indexing --users 5 --duration 300s
 ```
 
 Locust drives 5 parallel users through the indexing chain.
 Streamed stats; merged CSV at `dr_report.csv` at the end.
 
-> **Marcus:** "dr-load is a separate beast and that's appropriate
+> **Marcus:** "dr_load is a separate beast and that's appropriate
 > — heavy load-gen shouldn't live in the TUI. Good separation."
 
 **PASS.**
@@ -378,7 +378,7 @@ know it exists.
   Sparkline or rich.bar.Bar)
 - Bytes indexed per day (would require DR to expose corpus size,
   or we count rows in `datamining_corpus_representation` from
-  Postgres — same source dr-load monitor already uses)
+  Postgres — same source dr_load monitor already uses)
 - Per-org or per-project breakdown toggle
 
 This is the "Traffic Control station at a glance" feature that
@@ -447,6 +447,6 @@ clicking each template individually.
 After v0.15.1 ships: Marcus has working daily-driver functionality
 with traffic-control visibility, scheduled jobs (with retention),
 job control (cancel/priority), and load-test integration via
-`dr-load`.
+`dr_load`.
 
 [2026-05-14T07:00:00Z]

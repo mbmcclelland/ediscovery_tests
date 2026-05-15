@@ -3,7 +3,7 @@ Focused post-install initial-setup driver for Digital Reef.
 
 Run this AFTER `cleandr.sh` + `DR_freshinstall.exp` and once `drd` is up. It
 drives the DR web UI through the minimum steps needed for the dr_tui /
-dr-load test suite to function — nothing more.
+dr_load test suite to function — nothing more.
 
 Scope (subset of playwright_fresh_install.py):
   • Phase A — first login as DRSysAdmin (accepts initial `DRSysAdmin` pw)

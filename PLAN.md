@@ -1,7 +1,7 @@
 # CLI Load Tester — Implementation Plan
 
 ## Goal
-Wrap Locust load tests in a `dr-load` CLI so the team can run tests without knowing Locust syntax.
+Wrap Locust load tests in a `dr_load` CLI so the team can run tests without knowing Locust syntax.
 Includes preflight checks, background log monitoring, job polling, and structured reporting.
 
 ---
@@ -17,12 +17,12 @@ Includes preflight checks, background log monitoring, job polling, and structure
 | 9  | Determine representation_state enum values                             | ✅ done — 0=NONE, 1=COMPLETE (encoded in `helpers/monitor.py:8-11`). Obsoleted for per-workflow polling by v0.03's REST approach. |
 | 2  | Phase 1: Add CLI config to config.py                                   | ✅ done (v0.02) |
 | 3  | Phase 2: Build preflight checks (helpers/preflight.py)                 | ✅ done (v0.02) |
-| 12 | Add orphan project cleanup to preflight and post-run                   | ✅ done (v0.02) — `run_orphan_sweep` invoked from `dr-load indexing` |
+| 12 | Add orphan project cleanup to preflight and post-run                   | ✅ done (v0.02) — `run_orphan_sweep` invoked from `dr_load indexing` |
 | 4  | Phase 3: Build log watcher + job poller (helpers/monitor.py)           | ✅ done (v0.02) — `LogWatcher` + SQL `JobPoller` |
-| 11 | Create setup.cfg with dr-load entry point                              | ✅ done (v0.02) |
+| 11 | Create setup.cfg with dr_load entry point                              | ✅ done (v0.02) |
 | 5  | Phase 4: Build CLI entry point (cli.py)                                | ✅ done (v0.02) |
 | 6  | Update .env.example and README                                         | ✅ done (v0.03) — added `DR_INDEX_POLL_INTERVAL`/`DR_INDEX_POLL_TIMEOUT`; documented auto-resolution in README; preserved pytest-only handles |
-| 13 | Smoke-test `dr-load indexing -u 1 -d 90s` end-to-end against live box  | ✅ done (2026-05-11) — 3 workflows, 50 reqs, 0 failures; report at `/tmp/dr_smoke.csv` |
+| 13 | Smoke-test `dr_load indexing -u 1 -d 90s` end-to-end against live box  | ✅ done (2026-05-11) — 3 workflows, 50 reqs, 0 failures; report at `/tmp/dr_smoke.csv` |
 
 ---
 
@@ -194,7 +194,7 @@ Both write to a shared `MonitorResult` for the final report.
 
 ---
 
-## Task 11 — `setup.cfg` with `dr-load` entry point
+## Task 11 — `setup.cfg` with `dr_load` entry point
 
 Create `setup.cfg` in `ediscovery_tests/`:
 
@@ -210,10 +210,10 @@ install_requires =
 
 [options.entry_points]
 console_scripts =
-    dr-load = cli:app
+    dr_load = cli:app
 ```
 
-After Phase 4 is complete: `pip install -e .` registers `dr-load` in the venv.
+After Phase 4 is complete: `pip install -e .` registers `dr_load` in the venv.
 
 ---
 
@@ -224,13 +224,13 @@ Blocked by: tasks 2, 3, 4, 11.
 Typer CLI entry point. Commands:
 
 ```
-dr-load preflight
+dr_load preflight
     Run preflight checks only and report results.
 
-dr-load indexing [--users N] [--duration Ns] [--spawn-rate N] [--report FILE]
+dr_load indexing [--users N] [--duration Ns] [--spawn-rate N] [--report FILE]
     Preflight → orphan sweep → locustfile_indexing.py headless → monitor → report.
 
-dr-load browsing [--users N] [--duration Ns] [--spawn-rate N] [--report FILE]
+dr_load browsing [--users N] [--duration Ns] [--spawn-rate N] [--report FILE]
     Preflight → locustfile.py headless → report.
 ```
 
@@ -252,5 +252,5 @@ Execution flow (indexing/browsing):
 Blocked by: task 5.
 
 - `.env.example`: add all new `DR_PG_*`, `DR_LOG_DIR`, `DR_POLL_INTERVAL`, `DR_REPORT_OUTPUT`
-- `README.md`: add "CLI Usage" section with `dr-load` examples, venv setup instructions,
+- `README.md`: add "CLI Usage" section with `dr_load` examples, venv setup instructions,
   preflight requirements

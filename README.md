@@ -15,14 +15,15 @@ self-contained venv:
 | On PATH | Purpose |
 |---|---|
 | `dr_tui`              | Textual TUI dashboard — live License, Realm Node Status, system metrics, log stream, per-org CRUD on storage depots, system users, system groups |
-| `dr-load`             | Headless load-test CLI — preflight, background monitoring, merged CSV reports |
-| `dr-job-run` / `dr-job-delete` | Indexing-chain CLIs (createDataArea → createCorpus → createRepresentation → poll) |
+| `dr_load`             | Headless load-test CLI — preflight, background monitoring, merged CSV reports |
+| `dr_job_run` / `dr_job_delete` | Indexing-chain CLIs (createDataArea → createCorpus → createRepresentation → poll) |
 | `dr_freshinstall`     | End-to-end **REST-based** fresh-install driver — cleandr → InstallAnywhere expect → 13 API-provisioning steps, with Rich progress bar pinned at the bottom of the live region |
 
-The canonical command name is the underscore form (`dr_tui`,
-`dr_freshinstall`). Legacy hyphen aliases (`dr-tui`, `dr-freshinstall`)
-remain installed as compatibility symlinks for muscle memory and any
-existing scripts that call them.
+The canonical command names are the underscore forms (`dr_tui`,
+`dr_load`, `dr_job_run`, `dr_job_delete`, `dr_freshinstall`). The
+legacy hyphen forms (`dr-tui`, `dr-load`, …) remain installed as
+compatibility symlinks for muscle memory and any existing scripts
+that call them.
 
 Built with **pytest + requests** for functional tests, **Locust** for
 load testing, **Textual** + **Rich** for the TUI and the fresh-install
@@ -40,14 +41,16 @@ REST-based `dr-freshinstall`, no Chromium).
   reef-a-tui-logo.{txt,go}  logo source + bit-generated reference
 
 /opt/dr-tools/venv/                       ← bundled Python venv
-  bin/dr_tui  bin/dr-load  bin/dr-job-run  bin/dr-job-delete
+  bin/dr-tui  bin/dr-load  bin/dr-job-run  bin/dr-job-delete
   bin/python3 (+ Rich, requests, urllib3, textual, …)
+  ↑ internal entry-point names from setup.cfg — not user-facing
 
-/usr/bin/                                 ← launchers on PATH
-  dr_tui            (canonical) + dr-tui (legacy alias symlink)
-  dr-load
-  dr-job-run        dr-job-delete
-  dr_freshinstall   (canonical) + dr-freshinstall (legacy alias symlink)
+/usr/bin/                                 ← launchers on PATH (canonical = underscore)
+  dr_tui             + dr-tui              (legacy alias symlink)
+  dr_load            + dr-load             (legacy alias symlink)
+  dr_job_run         + dr-job-run          (legacy alias symlink)
+  dr_job_delete      + dr-job-delete       (legacy alias symlink)
+  dr_freshinstall    + dr-freshinstall     (legacy alias symlink)
 ```
 
 ---
@@ -58,12 +61,12 @@ REST-based `dr-freshinstall`, no Chromium).
 
 - Python 3.9+
 - Access to the Digital Reef eDiscovery server
-- For `dr-load` full monitoring: Postgres peer auth (`sudo -u auraria psql`) and a readable log directory
+- For `dr_load` full monitoring: Postgres peer auth (`sudo -u auraria psql`) and a readable log directory
 
 ### Distribution (production / lab hosts) — RPM
 
 For Rocky/RHEL/Fedora hosts, build a self-contained RPM that drops a
-venv at `/opt/dr-tools/` and launchers at `/usr/bin/{dr_tui,dr-load}`.
+venv at `/opt/dr-tools/` and launchers at `/usr/bin/{dr_tui,dr_load}`.
 Full build + install instructions in
 [`packaging/README.md`](packaging/README.md). TL;DR:
 
@@ -107,7 +110,7 @@ Verify:
 
 ```bash
 dr_tui --help        # launches the Textual login screen
-dr-load --help
+dr_load --help
 ```
 
 ### Install for pytest only (no CLI entry point)
@@ -130,19 +133,19 @@ cp .env.example .env
 ### Run preflight checks
 
 ```bash
-dr-load preflight
+dr_load preflight
 ```
 
 ### Run a browsing load test
 
 ```bash
-dr-load browsing --users 5 --duration 60s
+dr_load browsing --users 5 --duration 60s
 ```
 
 ### Run the full indexing workflow load test
 
 ```bash
-dr-load indexing --users 1 --duration 120s
+dr_load indexing --users 1 --duration 120s
 ```
 
 ### Run the pytest functional test suite
@@ -342,7 +345,7 @@ persistent and re-runnable.
 | **Running Jobs** | Tasks across the realm with `operationState=RUNNING` | Pause / Resume / Cancel / Priority / Refresh |
 | **Saved Templates** | Persisted JobDefinitions; `longterm` substring renders yellow-bold | New Job / Run / Edit / View Log / Delete / Refresh |
 | **Retention Timers** | Active `dr-tools-retention-*` systemd user timers (next fire + time left) | Toggle / Cancel timer / Refresh |
-| **Run History** | One row per `dr-job-run` execution, colour-coded by status | View Log / Refresh |
+| **Run History** | One row per `dr_job_run` execution, colour-coded by status | View Log / Refresh |
 
 A **lingering banner** (v0.14.0) appears at the top of the tab when
 retention timers exist *and* `loginctl enable-linger` is off — without
@@ -375,7 +378,7 @@ Field defaults:
 
 - **Cancel** — discard, return None
 - **Schedule** — save the JobDefinition as a reusable template
-- **Run now** — save *and* immediately invoke `dr-job-run`
+- **Run now** — save *and* immediately invoke `dr_job_run`
 - **Close** — same as Cancel (both labels for habit-compatibility)
 
 **Folder navigator extras:**
@@ -392,7 +395,7 @@ Field defaults:
 ~/.dr-tools/
   jobs/<slug>.json       saved JobDefinition (template)
   runs/<slug>.jsonl      append-only run history (one JSON per line)
-  logs/<slug>-<ts>.log   tee'd stdout/stderr of one dr-job-run
+  logs/<slug>-<ts>.log   tee'd stdout/stderr of one dr_job_run
 ```
 
 Override the state root via `DR_TOOLS_STATE_DIR=<path>` (tests use this;
@@ -407,7 +410,7 @@ systemd user timer** at:
 ~/.config/systemd/user/dr-tools-retention-<slug>-<run_id>.{service,timer}
 ```
 
-The timer fires `dr-job-delete <slug> <run_id>` at the retention
+The timer fires `dr_job_delete <slug> <run_id>` at the retention
 horizon (an absolute UTC `OnCalendar=` time, `RemainAfterElapse=false`
 so the unit GCs itself after firing).
 
@@ -432,40 +435,40 @@ when there are retention timers active *and* lingering is off.
 
 | Command | Purpose | Invoked by |
 |---|---|---|
-| `dr-job-run <slug-or-name>` | Run one saved job: log in → submit indexing chain → append RunRecord → schedule retention timer | The TUI's Run / Run Now buttons; also runnable from a shell |
-| `dr-job-delete <slug> <run-id>` | Retention cleanup: delete corpus + data area created by one run | The retention `.service` unit fires this; runnable manually to expire a run early |
+| `dr_job_run <slug-or-name>` | Run one saved job: log in → submit indexing chain → append RunRecord → schedule retention timer | The TUI's Run / Run Now buttons; also runnable from a shell |
+| `dr_job_delete <slug> <run-id>` | Retention cleanup: delete corpus + data area created by one run | The retention `.service` unit fires this; runnable manually to expire a run early |
 
-Both CLIs read `~/.env` for credentials (same as `dr_tui` / `dr-load`),
+Both CLIs read `~/.env` for credentials (same as `dr_tui` / `dr_load`),
 respect `DR_TOOLS_STATE_DIR`, and tee stdout/stderr to a per-run log
 file under `~/.dr-tools/logs/`.
 
 ---
 
-## CLI Usage (`dr-load`)
+## CLI Usage (`dr_load`)
 
-`dr-load` wraps the Locust load tests with preflight checks, orphan cleanup,
+`dr_load` wraps the Locust load tests with preflight checks, orphan cleanup,
 background monitoring, and a merged report.
 
 ### Commands
 
 ```bash
 # Verify environment before running a test
-dr-load preflight
+dr_load preflight
 
 # Run the full indexing workflow load test
-dr-load indexing --users 3 --duration 120s --spawn-rate 1
+dr_load indexing --users 3 --duration 120s --spawn-rate 1
 
 # Run the browsing load test
-dr-load browsing --users 10 --duration 60s --spawn-rate 2
+dr_load browsing --users 10 --duration 60s --spawn-rate 2
 
 # Override the output report path
-dr-load indexing --report /tmp/my_report.csv
+dr_load indexing --report /tmp/my_report.csv
 ```
 
 All options fall back to `.env` values (`DR_LOAD_TEST_USERS`, `DR_LOAD_TEST_DURATION`, etc.)
 when not specified on the command line.
 
-### What `dr-load indexing` does
+### What `dr_load indexing` does
 
 1. Runs preflight checks (app reachable, auth, Postgres, NFS, log dir, connector UUID)
 2. Sweeps for orphaned `load-test-*` projects and deletes them
@@ -546,7 +549,7 @@ indexing load test against the same host you must:
    `.env` to the freshly-generated values (only needed for pytest — `locustfile_indexing.py`
    resolves them at runtime).
 
-Symptom if you skip step 1: `dr-load preflight` reports `connector_uuid: Expecting value:
+Symptom if you skip step 1: `dr_load preflight` reports `connector_uuid: Expecting value:
 line 1 column 1 (char 0)` — the org user login returns HTTP 500 with an HTML error body
 that preflight tries to parse as JSON.
 
@@ -633,7 +636,7 @@ grep -E "ERROR|FATAL|prompt|chooser"        /tmp/LAX*.txt
 |        | `--verbose`, `-v`        | shortcut for `--log-level=DEBUG` |
 
 End state: `DRSysAdmin` / `password`, `admin@training` / `password`,
-fully-stocked training org ready for `dr_tui` or `dr-load`.
+fully-stocked training org ready for `dr_tui` or `dr_load`.
 
 > ⚠️ **Destructive and unrecoverable** without `--skip-clean`. The default
 > teardown wipes `/home/auraria/AHS*`, `/data/docstorage/*`,
@@ -699,7 +702,7 @@ All phases skip-if-exists, so re-running is safe. Captures API traffic to
 `/tmp/dr_api_capture.json` and (via mitmproxy on `:8090`)
 `/tmp/dr_proxy_capture.json`.
 
-After step 3 completes: `dr-load preflight` should return all-green; the
+After step 3 completes: `dr_load preflight` should return all-green; the
 pytest suite and `dr_tui` work without further configuration.
 
 ### What if step 2's expect script hangs?
@@ -731,7 +734,7 @@ ediscovery_tests/
 ├── setup.cfg                 # Package config + dr-{load,tui,job-run,job-delete}
 ├── setup.py                  # setuptools shim for editable install
 │
-├── cli.py                    # dr-load CLI entry point (typer)
+├── cli.py                    # dr_load CLI entry point (typer)
 ├── locustfile.py             # Locust load test: status/reports/browsing
 ├── locustfile_indexing.py    # Locust load test: full indexing workflow
 │
@@ -748,8 +751,8 @@ ediscovery_tests/
 │   ├── help.py               # Loader for the F2 documentation side-pane
 │   ├── metrics.py            # CPU / mem / IOPS / log-tail helpers
 │   ├── scheduler.py          # v0.13+ JobDefinition / RunRecord + systemd timers
-│   ├── cli_jobrun.py         # `dr-job-run <slug>` entry point
-│   ├── cli_jobdel.py         # `dr-job-delete <slug> <run-id>` entry point
+│   ├── cli_jobrun.py         # `dr_job_run <slug>` entry point
+│   ├── cli_jobdel.py         # `dr_job_delete <slug> <run-id>` entry point
 │   ├── help_content/         # PDF-extracted help markdown (one per view)
 │   └── app.tcss              # Textual stylesheet
 │

@@ -3,8 +3,8 @@
 **Audience:** QA Engineer taking ownership of the dr-tools test
 plan from the development team.
 
-**Scope:** `dr_tui` (Textual TUI), `dr-load` (load-test CLI), and the
-two scheduler companion CLIs (`dr-job-run`, `dr-job-delete`). Pytest
+**Scope:** `dr_tui` (Textual TUI), `dr_load` (load-test CLI), and the
+two scheduler companion CLIs (`dr_job_run`, `dr_job_delete`). Pytest
 functional suite (`tests/*`) is the regression net beneath all of it.
 
 **Version covered:** v0.14.3 (last shipped 2026-05-13).
@@ -21,7 +21,7 @@ functional suite (`tests/*`) is the regression net beneath all of it.
 | Persistent state | `~/.dr-tools/{jobs,runs,logs}/` | Override with `DR_TOOLS_STATE_DIR=<path>` (tests use this) |
 | systemd timers | `~/.config/systemd/user/dr-tools-retention-*.{service,timer}` | Need `loginctl enable-linger $USER` for cross-logout survival |
 | AHS log dir | `/home/auraria/AHS/output/*.log` | Tailed by the Landing Dashboard |
-| Postgres (for dr-load) | `auraria_mgmt` db, peer auth via `sudo -u auraria psql` | Optional — only used by Locust monitor |
+| Postgres (for dr_load) | `auraria_mgmt` db, peer auth via `sudo -u auraria psql` | Optional — only used by Locust monitor |
 
 **Before testing anything**, make sure the lab is in a known-good
 state. The fastest path is:
@@ -31,7 +31,7 @@ state. The fastest path is:
 bash cleandr.sh
 expect -f DR_freshinstall.exp
 python playwright_fresh_init.py
-dr-load preflight              # All-green = ready
+dr_load preflight              # All-green = ready
 ```
 
 You can skip the fresh install if you trust the current state and just
@@ -52,7 +52,7 @@ them means **don't certify the release**; chase the root cause.
 
 | # | Step | Pass | Fail |
 |---|---|---|---|
-| 1 | `dr-load preflight` | All checks green | Anything red → see RUNBOOK §1 |
+| 1 | `dr_load preflight` | All checks green | Anything red → see RUNBOOK §1 |
 | 2 | `pytest -m smoke` | All pass | Failure → flag the failing test for the dev team |
 | 3 | `pytest tests/test_dr_tui_dashboard_layout.py tests/test_dr_tui_depot_modal.py tests/test_dr_tui_scheduler.py` | 19/19 green | Pilot regression — TUI is broken at the structural level |
 | 4 | `dr_tui` → DRSysAdmin → password | Landing Dashboard appears with metrics scrolling | Login error / blank screen → RUNBOOK §2 |
@@ -61,7 +61,7 @@ them means **don't certify the release**; chase the root cause.
 | 7 | Organizations → training → Connectors | **Green** "N connector(s) for training" status line + 1 row | Yellow "no connectors" or red error → RUNBOOK §3 |
 | 8 | Job Scheduler → New Job → name = "qa-smoke-001" → click Schedule (no folder picked yet) | Specific error: "Folder to index not selected. Click a folder in the tree on the right, then try again." | Generic / no error → validation regressed |
 | 9 | Same modal: pick a folder → Schedule | Modal closes; row appears in Saved Templates | No row → save path broken |
-| 10 | Saved Templates → select row → Run | Status bar shows "running: qa-smoke-001 via /opt/dr-tools/venv/bin/dr-job-run"; new row appears in Run History within a few seconds | No new run row → dr-job-run not invoked or failing |
+| 10 | Saved Templates → select row → Run | Status bar shows "running: qa-smoke-001 via /opt/dr-tools/venv/bin/dr_job_run"; new row appears in Run History within a few seconds | No new run row → dr_job_run not invoked or failing |
 
 If all 10 pass: smoke test PASSED for v0.14.3.
 
@@ -87,7 +87,7 @@ modal / CLI surface, and the test files that cover it.
 | PuTTY terminal compat (now obsolete — use Tabby) | v0.10.2 | `/usr/bin/dr_tui` launcher | (manual) | v0.10.2 |
 | Jobs Monitor v2: listRealmTasks + type filter + per-task log | v0.11 | F3 — type Select, `L` shortcut | `test_jobs_monitor_modal` | v0.11.0 |
 | Realm Settings edit modals | v0.12 | System Settings → Realm Settings → Edit button or F4 | `test_settings_modal_paths` | v0.12.0 |
-| Job Scheduler tab (templates + systemd timers + CLIs) | v0.13 | Job Scheduler tab; `dr-job-run`, `dr-job-delete` | `test_dr_tui_scheduler.py` | v0.13.0 |
+| Job Scheduler tab (templates + systemd timers + CLIs) | v0.13 | Job Scheduler tab; `dr_job_run`, `dr_job_delete` | `test_dr_tui_scheduler.py` | v0.13.0 |
 | NewJobModal auto-flow fix | v0.13.1 | New Job dialog | `test_newjob_modal_auto_picks_org_connector_project` | v0.13.1 |
 | Dashboard log markup escape | v0.13.2 | Landing log pane | (manual reproduction) | v0.13.2 |
 | Job Scheduler per-view actions + log viewer + timer toggle + lingering banner | v0.14.0 | All four scheduler sub-views | `test_unit_parse_regex`, `test_log_viewer_modal_mount` | v0.14.0 |
@@ -174,7 +174,7 @@ Pilot: `test_jobs_monitor_modal` (offline) + manual lab run.
 the indexing load test for 30 s:
 
 ```bash
-dr-load indexing --users 1 --duration 30s
+dr_load indexing --users 1 --duration 30s
 ```
 
 **Steps:**
@@ -227,7 +227,7 @@ the live connector-browse endpoint.
 6. Modal closes. Saved Templates view shows the new row with retention
    "5d", org training, path correct.
 7. Select the row → click **Run**. Status bar: "running: qa-newjob-001
-   via /opt/dr-tools/venv/bin/dr-job-run". Within ~5 s, a row appears
+   via /opt/dr-tools/venv/bin/dr_job_run". Within ~5 s, a row appears
    in **Run History** with status `RUNNING`.
 8. Wait for the run to complete (Realm-wide F3 jobs view confirms).
    Run History row flips to `SUCCESS`.
@@ -318,9 +318,9 @@ connector for `training`.
 
 ---
 
-### 4.7 dr-load — Functional + indexing
+### 4.7 dr_load — Functional + indexing
 
-**Setup:** Fresh install + `playwright_fresh_init.py` done. `dr-load
+**Setup:** Fresh install + `playwright_fresh_init.py` done. `dr_load
 preflight` all-green.
 
 **Functional smoke:**
@@ -330,7 +330,7 @@ pytest -m smoke --html=report.html --self-contained-html
 
 **Browsing load test:**
 ```bash
-dr-load browsing --users 5 --duration 60s
+dr_load browsing --users 5 --duration 60s
 ```
 
 **Expected:** Locust headless run, then a summary table; merged CSV
@@ -338,7 +338,7 @@ written to `dr_report.csv`. No 5xx errors in the response stats.
 
 **Indexing load test:**
 ```bash
-dr-load indexing --users 2 --duration 120s
+dr_load indexing --users 2 --duration 120s
 ```
 
 **Expected:** Each Locust user runs the full chain (createDataArea →
@@ -362,7 +362,7 @@ preflight surfaces "connector_uuid: Expecting value: line 1 column
 | Retention timer didn't fire after retention period | systemd-user units die at logout unless lingering is enabled. | `sudo loginctl enable-linger $USER`. The TUI surfaces a yellow banner when this applies. |
 | Dashboard log pane crashed with `MarkupError` | (v0.13.1 and earlier) Log lines containing literal `[/…]` brackets were parsed as markup. | Upgrade to v0.13.2+. |
 | PuTTY box-drawing chunky, keys don't reach app | PuTTY's defaults don't match Textual. | Use **Tabby**, Windows Terminal, or Alacritty. |
-| `dr-load preflight` reports `connector_uuid: Expecting value` | Stale handles in `.env` after a `playwright_fresh_install.py` rebuild. | Re-sync the `DR_*_HANDLE` values; or just use the locust load-test directly (resolves handles at runtime). |
+| `dr_load preflight` reports `connector_uuid: Expecting value` | Stale handles in `.env` after a `playwright_fresh_install.py` rebuild. | Re-sync the `DR_*_HANDLE` values; or just use the locust load-test directly (resolves handles at runtime). |
 
 ---
 
@@ -397,7 +397,7 @@ Order matters — items higher up are touched more often:
 |---|---|
 | `~/.env` | Login credentials, base URL, timeouts. |
 | `~/.dr-tools/jobs/<slug>.json` | Saved job template. Hand-editable if you need to bulk-rewrite. |
-| `~/.dr-tools/runs/<slug>.jsonl` | One JSON per dr-job-run execution. Newest at the end. |
+| `~/.dr-tools/runs/<slug>.jsonl` | One JSON per dr_job_run execution. Newest at the end. |
 | `~/.dr-tools/logs/<slug>-<ts>.log` | tee'd stdout+stderr from one run. |
 | `~/.config/systemd/user/dr-tools-retention-*.{service,timer}` | One pair per pending retention deletion. |
 | `/tmp/dr_proxy_capture*.json` | Captured DR REST traffic from mitmproxy sessions. Useful when reproducing endpoint shape bugs. |

@@ -103,7 +103,7 @@ columns = action checkboxes (View, Add/Edit, Delete, …).
    Run Now or Schedule. Per DR PDF "Add or Edit a Project Data
    Area": *"Requires Organization - Project Data Areas - Add/Edit
    Permissions"*.
-5. *(Optional, for retention deletes via `dr-job-delete`)* enable
+5. *(Optional, for retention deletes via `dr_job_delete`)* enable
    **Corpora** → **Add/Edit** + **Delete**.
 6. Click **Save** / **Apply** at the bottom of the matrix.
 

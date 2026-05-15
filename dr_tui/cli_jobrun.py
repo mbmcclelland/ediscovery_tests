@@ -1,11 +1,11 @@
-"""dr-job-run — fire a saved JobDefinition's indexing chain end-to-end.
+"""dr_job_run — fire a saved JobDefinition's indexing chain end-to-end.
 
 Same code path is used for "Run Now" from the TUI and for any future
 cron / systemd-timer driven launches; that's why it's a separate CLI
 rather than an inline DashboardScreen worker.
 
 Usage:
-    dr-job-run <job-name-or-slug>
+    dr_job_run <job-name-or-slug>
 
 Side effects, in order:
   1. Resolves the JobDefinition from `~/.dr-tools/jobs/<slug>.json`.
@@ -14,7 +14,7 @@ Side effects, in order:
      createRepresentation), capturing the trio of handles it returns.
   4. Appends a RunRecord to `~/.dr-tools/runs/<slug>.jsonl`.
   5. If `retention_seconds > 0`, schedules a one-shot systemd user
-     timer that will invoke `dr-job-delete <slug> <run_id>` at the
+     timer that will invoke `dr_job_delete <slug> <run_id>` at the
      retention horizon.
   6. Tee'd stdout/stderr also lands in `~/.dr-tools/logs/<slug>-<ts>.log`
      so the TUI's "View Log" action has something to show.
@@ -50,7 +50,7 @@ class _Tee:
     """Tee writes to both an underlying stream and an open file.
 
     Used to capture stdout/stderr into the log file *and* keep them
-    visible on the terminal/journal — `dr-job-run` may be invoked
+    visible on the terminal/journal — `dr_job_run` may be invoked
     interactively from the TUI, so we don't want to silently swallow
     output.
     """
@@ -104,12 +104,12 @@ def _login_for_job(job_org: str) -> EDiscoveryClient:
 def main() -> int:
     argv = sys.argv[1:]
     if len(argv) != 1 or argv[0] in ("-h", "--help"):
-        print("usage: dr-job-run <job-name-or-slug>", file=sys.stderr)
+        print("usage: dr_job_run <job-name-or-slug>", file=sys.stderr)
         return 2
     name = argv[0]
     job = drsch.get_job(name)
     if job is None:
-        print(f"dr-job-run: no saved job named {name!r}", file=sys.stderr)
+        print(f"dr_job_run: no saved job named {name!r}", file=sys.stderr)
         return 1
 
     run_id = _stamp()
@@ -118,7 +118,7 @@ def main() -> int:
     sys.stdout = _Tee(sys.__stdout__, log_fh)
     sys.stderr = _Tee(sys.__stderr__, log_fh)
 
-    print(f"=== dr-job-run {job.name} run_id={run_id} "
+    print(f"=== dr_job_run {job.name} run_id={run_id} "
           f"started={drsch._now_iso()} ===")
     print(f"org={job.org} project_handle={job.project_handle} "
           f"connector={job.connector_name} path={job.path}")

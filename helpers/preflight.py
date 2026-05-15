@@ -1,5 +1,5 @@
 """
-Preflight checks for dr-load.
+Preflight checks for dr_load.
 
 Runs before any load test to confirm the environment is ready:
   1. App reachable  — POST realmManager/getVersion

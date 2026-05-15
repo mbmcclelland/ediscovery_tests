@@ -1,12 +1,12 @@
-"""dr-job-delete — retention cleanup for one RunRecord.
+"""dr_job_delete — retention cleanup for one RunRecord.
 
-Invoked by the systemd `.service` that's wired up by `dr-job-run` when
+Invoked by the systemd `.service` that's wired up by `dr_job_run` when
 a JobDefinition has a non-zero `retention_seconds`. Deletes the corpus
 and data area that were created during that run; marks the RunRecord
 as `DELETED` so the UI can show "expired" runs without re-attempting.
 
 Usage:
-    dr-job-delete <job-slug> <run-id>
+    dr_job_delete <job-slug> <run-id>
 
 Exits 0 on success (including when the data was already gone — e.g.
 deleted manually) and 1 on any unrecoverable error.
@@ -54,13 +54,13 @@ def _rewrite_run_status(slug: str, run_id: str, status: str, notes: str = "") ->
 def main() -> int:
     argv = sys.argv[1:]
     if len(argv) != 2 or argv[0] in ("-h", "--help"):
-        print("usage: dr-job-delete <job-slug> <run-id>", file=sys.stderr)
+        print("usage: dr_job_delete <job-slug> <run-id>", file=sys.stderr)
         return 2
     slug, run_id = argv
 
     job = drsch.get_job(slug)
     if job is None:
-        print(f"dr-job-delete: no saved job named {slug!r}", file=sys.stderr)
+        print(f"dr_job_delete: no saved job named {slug!r}", file=sys.stderr)
         return 1
     # Find the matching RunRecord.
     target = None
@@ -69,14 +69,14 @@ def main() -> int:
             target = r
             break
     if target is None:
-        print(f"dr-job-delete: no run {run_id!r} for job {slug!r}", file=sys.stderr)
+        print(f"dr_job_delete: no run {run_id!r} for job {slug!r}", file=sys.stderr)
         return 1
     if target.status == "DELETED":
         print(f"already DELETED; nothing to do")
         return 0
 
     # Log in as the org admin. `deleteCorpus` / `deleteDataArea` are
-    # the inverse of the create chain that `dr-job-run` invokes — same
+    # the inverse of the create chain that `dr_job_run` invokes — same
     # org-scoped permission requirement, so we need an org-admin token
     # too. (DR's official docs put data-area + corpus permissions under
     # "Organization - ..." roles. DRSysAdmin gets denied with HTTP 500.)

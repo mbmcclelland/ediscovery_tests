@@ -1,10 +1,10 @@
 """
-dr-load CLI — Digital Reef eDiscovery load tester.
+dr_load CLI — Digital Reef eDiscovery load tester.
 
 Commands:
-  dr-load preflight            Run preflight checks only.
-  dr-load indexing [options]   Full indexing load test with monitoring.
-  dr-load browsing [options]   Full browsing load test with monitoring.
+  dr_load preflight            Run preflight checks only.
+  dr_load indexing [options]   Full indexing load test with monitoring.
+  dr_load browsing [options]   Full browsing load test with monitoring.
 """
 
 from __future__ import annotations

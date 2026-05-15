@@ -696,7 +696,7 @@ each playwright rebuild.
 
 ### Smoke test (2026-05-11)
 
-`dr-load indexing -u 1 -d 90s` against 192.168.58.128 — 50 requests, 0 failures, 3
+`dr_load indexing -u 1 -d 90s` against 192.168.58.128 — 50 requests, 0 failures, 3
 complete project lifecycles, 4 indexing jobs reached `COMPLETE`. See CHANGELOG v0.03.
 
 ---
@@ -912,11 +912,11 @@ run are the source material for `docs/endpoints_v0.06.md`.
 
 ### 5.4 — Verification
 
-After step 3 the system should be ready for `dr-load`, `dr_tui`, and the
+After step 3 the system should be ready for `dr_load`, `dr_tui`, and the
 pytest suite without further configuration:
 
 ```bash
-dr-load preflight                      # 6 checks, all green
+dr_load preflight                      # 6 checks, all green
 dr_tui                                 # log in either role
 pytest -m smoke                        # quick health
 .venv/bin/python -c "
@@ -1082,7 +1082,7 @@ down:
 |---|---|
 | `/opt/dr-tools/venv` | Self-contained Python 3 venv with every runtime dep |
 | `/opt/dr-tools/share/env.example` | Sample `.env` for `cp` + edit |
-| `/usr/bin/dr_tui` `/usr/bin/dr-load` | Launcher scripts (`exec /opt/dr-tools/venv/bin/<tool>`) |
+| `/usr/bin/dr_tui` `/usr/bin/dr_load` | Launcher scripts (`exec /opt/dr-tools/venv/bin/<tool>`) |
 | `/usr/share/doc/dr-tools/` | README + CHANGELOG + endpoint docs |
 | `/usr/share/licenses/dr-tools/__version__.py` | Version stamp |
 
@@ -1217,7 +1217,7 @@ section for full UX. Architecture notes:
   Field set: name, org, project_handle (auto-picked), connector_*,
   remote_host, remote_path, path (subfolder), retention_seconds,
   description.
-- **Run lifecycle.** "Run" button shells out to `dr-job-run <slug>`.
+- **Run lifecycle.** "Run" button shells out to `dr_job_run <slug>`.
   Same CLI is invokable from cron / systemd, so behaviour is identical
   in interactive and unattended runs. The CLI:
   1. Logs in via `Config()` (DR_PASS env or `OrgUserConfig().password`).
@@ -1232,7 +1232,7 @@ section for full UX. Architecture notes:
      The timer's `OnCalendar=` is an absolute UTC time;
      `RemainAfterElapse=false` means the unit GCs itself after firing.
 - **Retention deletion.** The timer's `.service` invokes
-  `dr-job-delete <slug> <run-id>`, which reads the RunRecord, looks up
+  `dr_job_delete <slug> <run-id>`, which reads the RunRecord, looks up
   the `corpus_handle` + `data_area_handle` it stored, and deletes both
   via `orgManager/deleteCorpus` + `orgManager/deleteDataArea`.
 - **Linger.** systemd-user units die at logout. The TUI surfaces a

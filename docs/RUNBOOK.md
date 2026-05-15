@@ -28,7 +28,7 @@ index storage @ /data/indexstorage → system depot → virus update →
 RW archive) → PROJECT + EXPORT data areas.
 
 End state: DRSysAdmin / password, admin@training / password,
-fully-stocked training org ready for dr_tui or dr-load.
+fully-stocked training org ready for dr_tui or dr_load.
 
 Useful flags:
 
@@ -49,7 +49,7 @@ If anything goes wrong during the API phase, see §4g / §4h.
 
 ---
 
-## §1 — `dr-load preflight` is red
+## §1 — `dr_load preflight` is red
 
 ### `connector_uuid: Expecting value: line 1 column 1 (char 0)`
 
@@ -68,7 +68,7 @@ python playwright_fresh_init.py
 # The values you need are printed at the end of the playwright script.
 ```
 
-**Verify.** `dr-load preflight` returns all-green.
+**Verify.** `dr_load preflight` returns all-green.
 
 ### `Postgres peer auth failed`
 
@@ -76,7 +76,7 @@ python playwright_fresh_init.py
 Either `auraria` doesn't exist or sudo isn't passwordless for it.
 
 **Fix.** Add `auraria ALL=(ALL) NOPASSWD: /usr/bin/psql` to `/etc/sudoers.d/`,
-or run dr-load as `auraria` directly.
+or run dr_load as `auraria` directly.
 
 ---
 
@@ -217,7 +217,7 @@ systemctl --user list-timers --all | grep dr-tools-retention
 # 3. Did the .service fire?
 journalctl --user -u dr-tools-retention-<slug>-<run_id>.service --no-pager
 
-# 4. Did dr-job-delete succeed?
+# 4. Did dr_job_delete succeed?
 cat ~/.dr-tools/runs/<slug>.jsonl | tail -1 | jq .
 # status should be DELETED on success, DELETE_FAILED on error.
 ```
@@ -228,7 +228,7 @@ cat ~/.dr-tools/runs/<slug>.jsonl | tail -1 | jq .
 |---|---|
 | Lingering off | `sudo loginctl enable-linger $USER` |
 | Unit file removed / corrupt | Delete the run's RunRecord (edit the JSONL), re-run, fresh timer fires. |
-| `dr-job-delete` raised `PERMISSION_DENIED` | Session in the dr-job-delete process didn't switch to the right org. Same root cause as §3 — but for the delete path. Verify `DR_PASS` is set in the env passed to the systemd service. |
+| `dr_job_delete` raised `PERMISSION_DENIED` | Session in the dr_job_delete process didn't switch to the right org. Same root cause as §3 — but for the delete path. Verify `DR_PASS` is set in the env passed to the systemd service. |
 
 ---
 
@@ -357,10 +357,10 @@ or create a project in DR's Web UI first.
 
 ---
 
-## §4c — *(HISTORICAL — pre-v0.15.2)* `dr-job-run` / `dr-job-delete` fails with `permission to perform createDataArea`
+## §4c — *(HISTORICAL — pre-v0.15.2)* `dr_job_run` / `dr_job_delete` fails with `permission to perform createDataArea`
 
 > **As of v0.15.2 this is fixed by the systemScope auto-inject
-> removal (see §4f).** The dr-job-run / dr-job-delete CLIs now
+> removal (see §4f).** The dr_job_run / dr_job_delete CLIs now
 > work for both DRSysAdmin and org-admin sessions. The historical
 > entry below is preserved for context.
 
@@ -391,7 +391,7 @@ must be performed by an Org admin (e.g. `admin@training`).
 
 ### Fix
 
-v0.14.6 changed `dr-job-run` and `dr-job-delete` to log in via
+v0.14.6 changed `dr_job_run` and `dr_job_delete` to log in via
 `OrgUserConfig` (`DR_ORG_USERNAME` / `DR_ORG_PASSWORD` /
 `DR_ORG_ORGANIZATION` from `~/.env`) instead of `Config` (DRSysAdmin).
 If you're on an older build, upgrade.
@@ -406,16 +406,16 @@ If you're on v0.14.6+ and still hit this:
 
 ---
 
-## §4b — `dr-job-run` or `dr-job-delete` "not found"
+## §4b — `dr_job_run` or `dr_job_delete` "not found"
 
 ### Symptom
 
-- TUI status bar shows `dr-job-run binary missing — re-run pip install -e .`
-- Or shell error `bash: dr-job-run: command not found`
+- TUI status bar shows `dr_job_run binary missing — re-run pip install -e .`
+- Or shell error `bash: dr_job_run: command not found`
 
 ### Root cause
 
-The `dr-job-run` / `dr-job-delete` console-script entry points were
+The `dr_job_run` / `dr_job_delete` console-script entry points were
 added to `setup.cfg` in v0.13.0. An **editable install** (`pip install -e .`)
 done *before* that change won't have the binaries — pip only generates
 console scripts at install time, not lazily on import.
@@ -558,7 +558,7 @@ the pattern in `dr_tui/app.py:NewJobModal` compose() (v0.13.1+).
 
 | Want to see… | Look in… |
 |---|---|
-| Last `dr-job-run` invocation | `~/.dr-tools/logs/<slug>-<latest>.log` |
+| Last `dr_job_run` invocation | `~/.dr-tools/logs/<slug>-<latest>.log` |
 | Run history for a job | `~/.dr-tools/runs/<slug>.jsonl` (one JSON per line) |
 | What endpoints dr_tui hit | Start `mitmdump -s proxy_logger.py --listen-port 8090 --set ssl_insecure=true` before launching dr_tui; capture lands in `/tmp/dr_proxy_capture.json`. |
 | Server-side errors | `/home/auraria/AHS/output/server-*.log` — the dashboard log pane tails these. |
@@ -579,7 +579,7 @@ the pattern in `dr_tui/app.py:NewJobModal` compose() (v0.13.1+).
     tests/test_dr_tui_scheduler.py
 
 # Drive the smoke test in 10 minutes (see QA_TEST_PLAN.md §2).
-dr-load preflight && pytest -m smoke && dr_tui
+dr_load preflight && pytest -m smoke && dr_tui
 
 # Capture the next dr_tui session's API calls.
 mitmdump -s proxy_logger.py \
@@ -595,10 +595,10 @@ expect -f DR_freshinstall.exp
 python playwright_fresh_init.py
 
 # Manually expire a retention run early.
-dr-job-delete <slug> <run-id>
+dr_job_delete <slug> <run-id>
 
 # Manually run a saved job (same code path as the Run button).
-dr-job-run <slug-or-name>
+dr_job_run <slug-or-name>
 
 # Inspect all saved templates.
 ls ~/.dr-tools/jobs/

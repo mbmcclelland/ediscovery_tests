@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# install.sh — single-command installer for dr-tools (dr_tui + dr-load).
+# install.sh — single-command installer for dr-tools (dr_tui + dr_load).
 #
 # Usage:
 #   curl -sSL https://github.com/mbmcclelland/ediscovery_tests/raw/v0.06/packaging/install.sh | bash
@@ -9,7 +9,7 @@
 #   bash packaging/install.sh uninstall # remove
 #
 # Creates /opt/dr-tools/venv with all runtime deps and drops launcher
-# scripts at /usr/local/bin/{dr_tui,dr-load}. Requires Python 3.9+ and
+# scripts at /usr/local/bin/{dr_tui,dr_load}. Requires Python 3.9+ and
 # sudo. For an air-gapped install build the RPM instead — see
 # packaging/Makefile.
 set -euo pipefail
@@ -92,18 +92,21 @@ export TERM TEXTUAL_FEATURES
 # facing wrapper above is the canonical name.
 exec /opt/dr-tools/venv/bin/dr-tui "$@"
 EOF
-    cat <<'EOF' | $SUDO tee "$BIN_DIR/dr-load" >/dev/null
+    cat <<'EOF' | $SUDO tee "$BIN_DIR/dr_load" >/dev/null
 #!/bin/sh
 exec /opt/dr-tools/venv/bin/dr-load "$@"
 EOF
-    $SUDO chmod 0755 "$BIN_DIR/dr_tui" "$BIN_DIR/dr-load"
-    # Legacy alias for muscle memory + back-compat with shell scripts
-    # that already call `dr-tui`.
-    $SUDO ln -sf dr_tui "$BIN_DIR/dr-tui"
+    $SUDO chmod 0755 "$BIN_DIR/dr_tui" "$BIN_DIR/dr_load"
+    # v0.19.3 — legacy hyphen aliases as symlinks to the canonical
+    # underscored wrappers. Muscle-memory + scripts that already
+    # call `dr-tui` / `dr-load` keep working.
+    $SUDO ln -sf dr_tui  "$BIN_DIR/dr-tui"
+    $SUDO ln -sf dr_load "$BIN_DIR/dr-load"
 
     log "done."
-    log "  Launchers:    $BIN_DIR/dr_tui  $BIN_DIR/dr-load"
+    log "  Launchers:    $BIN_DIR/dr_tui  $BIN_DIR/dr_load"
     log "                ($BIN_DIR/dr-tui → dr_tui legacy symlink)"
+    log "                ($BIN_DIR/dr-load → dr_load legacy symlink)"
     log "  Venv:         $VENV"
     log "  Next step:    cp /path/to/checkout/.env.example ~/.env  (and edit it)"
     log "                then run \`dr_tui\` to launch the TUI."
@@ -113,7 +116,8 @@ uninstall_dr_tools() {
     need_sudo
     log "removing $INSTALL_ROOT and launcher scripts"
     $SUDO rm -rf "$INSTALL_ROOT"
-    $SUDO rm -f "$BIN_DIR/dr_tui" "$BIN_DIR/dr-tui" "$BIN_DIR/dr-load"
+    $SUDO rm -f "$BIN_DIR/dr_tui" "$BIN_DIR/dr-tui" \
+                "$BIN_DIR/dr_load" "$BIN_DIR/dr-load"
     log "done."
 }
 

@@ -1,4 +1,4 @@
-# RPM spec for `dr-tools` — bundles dr_tui + dr-load and their deps into
+# RPM spec for `dr-tools` — bundles dr_tui + dr_load and their deps into
 # a self-contained venv under /opt/dr-tools.
 #
 # Build flow:
@@ -13,7 +13,7 @@
 %global py3 /usr/bin/python3
 %global drroot /opt/dr-tools
 # v0.17.10 — REEF-A-TUI ("Ratatouille") rebrand. The collection of
-# Digital-Reef ops tools (dr_tui, dr-load, DR_freshinstall.py, the
+# Digital-Reef ops tools (dr_tui, dr_load, DR_freshinstall.py, the
 # expect installer, cleandr) is collectively named REEF-A-TUI. The
 # Python venv stays at /opt/dr-tools/venv for backward compatibility
 # (it's where every existing wrapper / shebang points), but the
@@ -57,7 +57,7 @@ dr-tools packages two Digital Reef eDiscovery utilities into a single
 self-contained Python venv at /opt/dr-tools/venv with launcher scripts
 on PATH:
 
-  dr-load   Headless load-test CLI — preflight, background monitoring,
+  dr_load   Headless load-test CLI — preflight, background monitoring,
             merged CSV reports for the eDiscovery REST API.
   dr_tui    Textual TUI dashboard — landing page with live License,
             Realm Node Status, system metrics, log stream, and top
@@ -94,7 +94,7 @@ mkdir -p %{buildroot}%{drroot}
 find %{buildroot}%{drroot}/venv/bin -type f \
     -exec sed -i 's|%{buildroot}%{drroot}|%{drroot}|g' {} \;
 
-# Drop launcher scripts in /usr/bin so dr_tui / dr-load are on PATH.
+# Drop launcher scripts in /usr/bin so dr_tui / dr_load are on PATH.
 # v0.19.2 — the canonical (underscore) wrapper is `dr_tui`; the
 # legacy hyphen form `dr-tui` is now a symlink to it. Reverses the
 # v0.17.10 layout where `dr-tui` was canonical and `dr_tui` the
@@ -121,19 +121,30 @@ export TERM TEXTUAL_FEATURES
 # /opt/dr-tools/venv/bin/anything.
 exec /opt/dr-tools/venv/bin/dr-tui "$@"
 EOF
-cat > %{buildroot}/usr/bin/dr-load <<'EOF'
+# v0.19.3 — canonical (underscore) wrappers + legacy hyphen symlinks
+# for dr-load / dr-job-run / dr-job-delete (same pattern as v0.19.2
+# applied to dr-tui / dr-freshinstall). The venv binary names at
+# /opt/dr-tools/venv/bin/ stay hyphenated because setup.cfg's
+# `console_scripts` defines them that way and the wrappers consume
+# them as an internal implementation detail.
+cat > %{buildroot}/usr/bin/dr_load <<'EOF'
 #!/bin/sh
 exec /opt/dr-tools/venv/bin/dr-load "$@"
 EOF
-# v0.15 — also ship the Job Scheduler CLIs (added in v0.13).
-cat > %{buildroot}/usr/bin/dr-job-run <<'EOF'
+cat > %{buildroot}/usr/bin/dr_job_run <<'EOF'
 #!/bin/sh
 exec /opt/dr-tools/venv/bin/dr-job-run "$@"
 EOF
-cat > %{buildroot}/usr/bin/dr-job-delete <<'EOF'
+cat > %{buildroot}/usr/bin/dr_job_delete <<'EOF'
 #!/bin/sh
 exec /opt/dr-tools/venv/bin/dr-job-delete "$@"
 EOF
+# Legacy hyphen aliases — symlinks to the underscored canonical
+# wrappers. Kept for muscle memory + shell scripts that already
+# call `dr-load` / `dr-job-run` / `dr-job-delete` directly.
+ln -sf dr_load       %{buildroot}/usr/bin/dr-load
+ln -sf dr_job_run    %{buildroot}/usr/bin/dr-job-run
+ln -sf dr_job_delete %{buildroot}/usr/bin/dr-job-delete
 
 # v0.17.10 — REEF-A-TUI ("Ratatouille") collection. Drop the
 # user-facing scripts into /opt/digitalreef/scripts/reef-a-tui/
@@ -172,9 +183,9 @@ chmod 0755 %{buildroot}/usr/bin/dr_freshinstall
 ln -sf dr_freshinstall %{buildroot}/usr/bin/dr-freshinstall
 
 chmod 0755 %{buildroot}/usr/bin/dr_tui \
-            %{buildroot}/usr/bin/dr-load \
-            %{buildroot}/usr/bin/dr-job-run \
-            %{buildroot}/usr/bin/dr-job-delete
+            %{buildroot}/usr/bin/dr_load \
+            %{buildroot}/usr/bin/dr_job_run \
+            %{buildroot}/usr/bin/dr_job_delete
 
 # Drop a sample .env so a fresh install has something to copy from.
 mkdir -p %{buildroot}%{drroot}/share
@@ -199,15 +210,17 @@ install -m 0644 .env.example %{buildroot}%{drroot}/share/env.example
 %{reefroot}/cleandr.sh
 %{reefroot}/reef-a-tui-logo.txt
 %{reefroot}/reef-a-tui-logo.go
-# v0.19.2 — `dr_tui` + `dr_freshinstall` are the canonical underscore
-# wrappers; `dr-tui` + `dr-freshinstall` are legacy alias symlinks.
-# `dr-load`, `dr-job-run`, `dr-job-delete` have no underscore form
-# (the entry points were always hyphenated and there's no name
-# collision to resolve).
+# v0.19.3 — every user-facing command has an underscored canonical
+# wrapper and a hyphenated legacy-alias symlink. The underscore
+# form is what every doc and banner mentions; the hyphen form is
+# kept for muscle memory + scripts that already call it.
 /usr/bin/dr_tui
 /usr/bin/dr-tui
+/usr/bin/dr_load
 /usr/bin/dr-load
+/usr/bin/dr_job_run
 /usr/bin/dr-job-run
+/usr/bin/dr_job_delete
 /usr/bin/dr-job-delete
 /usr/bin/dr_freshinstall
 /usr/bin/dr-freshinstall
@@ -220,11 +233,11 @@ cat <<'BANNER'
   ╰──────────────────────────────────────────────────────────────╯
 
   On PATH (canonical names; hyphenated forms are aliases):
-    dr_tui                       Textual TUI dashboard
-    dr_freshinstall              End-to-end fresh-install driver
-                                 (run with no args for help)
-    dr-load                      Load-test CLI
-    dr-job-run / dr-job-delete   Indexing-chain CLIs
+    dr_tui                          Textual TUI dashboard
+    dr_freshinstall                 End-to-end fresh-install driver
+                                    (run with no args for help)
+    dr_load                         Load-test CLI
+    dr_job_run / dr_job_delete      Indexing-chain CLIs
 
   Scripts:    /opt/digitalreef/scripts/reef-a-tui/
   Venv:       /opt/dr-tools/venv

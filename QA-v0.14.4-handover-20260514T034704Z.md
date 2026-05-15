@@ -66,7 +66,7 @@ test_longterm_substring_match                            PASS
 
 [2026-05-14T03:49:30Z]
 
-## QA-3 — dr-load preflight — **PARTIAL PASS / ENV FINDING**
+## QA-3 — dr_load preflight — **PARTIAL PASS / ENV FINDING**
 
 ```
 [PASS] app_reachable
@@ -93,7 +93,7 @@ This is the documented RUNBOOK §1 failure mode. Fix (per RUNBOOK):
 python playwright_fresh_init.py
 ```
 
-**Decision:** the org-user missing only blocks the `dr-load indexing`
+**Decision:** the org-user missing only blocks the `dr_load indexing`
 load-test scenario (QA-7 in my plan, equivalent to QA Test Plan §4.7).
 Every other feature under test uses DRSysAdmin, which works fine.
 
@@ -175,14 +175,14 @@ All four strings match the QA Test Plan §4.4 spec verbatim.
 
 [2026-05-14T04:00:30Z]
 
-## QA-8 — dr-job-run end-to-end — **FIXED (2 bugs) + BLOCKED on env**
+## QA-8 — dr_job_run end-to-end — **FIXED (2 bugs) + BLOCKED on env**
 
-Drove dr-job-run with a saved JobDefinition. Two real bugs surfaced;
+Drove dr_job_run with a saved JobDefinition. Two real bugs surfaced;
 both fixed in-session. End-to-end success still blocked on the
 QA-3 environmental finding (admin@training user missing).
 
-### Bug 1 — `dr-job-run` / `dr-job-delete` binaries not installed
-- Symptom: `bash: .venv/bin/dr-job-run: No such file or directory`.
+### Bug 1 — `dr_job_run` / `dr_job_delete` binaries not installed
+- Symptom: `bash: .venv/bin/dr_job_run: No such file or directory`.
 - Root cause: editable install predated the v0.13.0 setup.cfg entry
   points; `pip install -e .` only generates console scripts at
   install time.
@@ -191,7 +191,7 @@ QA-3 environmental finding (admin@training user missing).
 - Shipped as **v0.14.5** (commit `493f719`).
 
 ### Bug 2 — DRSysAdmin lacks permission for the indexing chain
-- Symptom: dr-job-run logs in (DRSysAdmin) but HTTP 500 on
+- Symptom: dr_job_run logs in (DRSysAdmin) but HTTP 500 on
   `orgManager/createDataArea`.
 - AHS server log: `User drsysadmin does not have permission to
   perform createDataArea operation`.
@@ -199,7 +199,7 @@ QA-3 environmental finding (admin@training user missing).
   "Requires Organization - Project Data Areas - Add/Edit Permissions"
   — i.e. the indexing chain is org-scoped, not system-scoped.
   `locustfile_indexing.py` (the reference implementation) already uses
-  an org token for these calls; the new dr-job-run / dr-job-delete
+  an org token for these calls; the new dr_job_run / dr_job_delete
   CLIs did not.
 - Fix: both CLIs now log in via `OrgUserConfig()` (admin@<org>) and
   surface a specific actionable error pointing at
@@ -209,7 +209,7 @@ QA-3 environmental finding (admin@training user missing).
 
 ### Remaining blocker
 
-After both fixes, dr-job-run now logs in correctly as the org admin
+After both fixes, dr_job_run now logs in correctly as the org admin
 — but the org admin user (`admin@training`) doesn't exist in this DR
 install (the documented RUNBOOK §1 environmental issue, also surfaced
 in QA-3).
@@ -354,8 +354,8 @@ missing — QA-3). Bundled with the QA-8/9/10 follow-up: re-run
 
 | Version | Commit | Headline |
 |---|---|---|
-| v0.14.5 | `493f719` | dr-job-run pre-flight + actionable "binary missing" error |
-| v0.14.6 | `197d7b7` | dr-job-run / dr-job-delete use org-admin login |
+| v0.14.5 | `493f719` | dr_job_run pre-flight + actionable "binary missing" error |
+| v0.14.6 | `197d7b7` | dr_job_run / dr_job_delete use org-admin login |
 | v0.14.7 | `2b4b073` | set_* fetchers re-read after write |
 | v0.14.8 | `8823395` | NewJobModal file tree uses org-admin client; surface PERMISSION_DENIED |
 
@@ -365,14 +365,14 @@ missing — QA-3). Bundled with the QA-8/9/10 follow-up: re-run
 |---|---|---|
 | QA-1: Environment | PASS | drd active, .env populated, DRSysAdmin login works |
 | QA-2: Pilot suite | PASS | 19/19 in 13.97s |
-| QA-3: dr-load preflight | PARTIAL | 5/6 green; 1 env finding (admin@training missing) |
+| QA-3: dr_load preflight | PARTIAL | 5/6 green; 1 env finding (admin@training missing) |
 | QA-4: TUI launch + login | PASS | All four tabs mount |
 | QA-5: Connectors view | PASS | 1 row for training (`import-training-nfs-local`) |
 | QA-6: NewJobModal connector dropdown | PASS | Pre-populated after v0.14.3 fix |
 | QA-7: NewJobModal validation | PASS | All four error strings match spec verbatim |
-| QA-8: dr-job-run E2E | FIXED + BLOCKED | 2 bugs fixed; full E2E needs admin user |
+| QA-8: dr_job_run E2E | FIXED + BLOCKED | 2 bugs fixed; full E2E needs admin user |
 | QA-9: Retention timer | BLOCKED | downstream of QA-8 |
-| QA-10: dr-job-delete E2E | BLOCKED | downstream of QA-8 |
+| QA-10: dr_job_delete E2E | BLOCKED | downstream of QA-8 |
 | QA-11: Realm Settings edits | FIXED + PASS | 1 bug fixed; round-trip verified |
 | QA-12: F3 Jobs Monitor | PASS | 2 tasks, 98 op types, modal opens/closes cleanly |
 | QA-13: longterm visual rule | PASS | Yellow-bold markup applied case-insensitively |
@@ -382,10 +382,10 @@ missing — QA-3). Bundled with the QA-8/9/10 follow-up: re-run
 
 ### Bugs found and fixed (all shipped)
 
-1. **v0.14.5** — `dr-job-run`/`dr-job-delete` entry points missing in
+1. **v0.14.5** — `dr_job_run`/`dr_job_delete` entry points missing in
    editable installs that predate the v0.13.0 setup.cfg additions.
    Pre-flight + actionable error added; RUNBOOK §4b documents.
-2. **v0.14.6** — `dr-job-run` used DRSysAdmin's session for the
+2. **v0.14.6** — `dr_job_run` used DRSysAdmin's session for the
    indexing chain. DR's permission model gates `createDataArea` on
    org-admin role (confirmed via RTFM of the DR PDF "Add or Edit a
    Project Data Area"). Both CLIs switched to OrgUserConfig; RUNBOOK
@@ -538,7 +538,7 @@ Dev/QA → Deployment → Beta User.
 - 19/19 pilot tests green after the changes.
 - Smoke test of unit-file generation: `schedule_recurring_job` against
   preset `3x-day` produces an `OnCalendar=*-*-* 03,11,19:00:00` timer
-  with the right ExecStart pointing at /opt/dr-tools/venv/bin/dr-job-run.
+  with the right ExecStart pointing at /opt/dr-tools/venv/bin/dr_job_run.
 
 ### Live verification (deferred)
 Full live verification of Schedule + Run Now still needs the
@@ -546,7 +546,7 @@ Full live verification of Schedule + Run Now still needs the
 Areas** + **Corpora** permissions, which requires a one-time DR Web
 UI role grant (documented in `docs/DR_ROLE_SETUP.md`). With the v0.15
 modal pivot the wizard ITSELF is unblocked, but the indexing-chain
-endpoints invoked by `dr-job-run` still need the org-admin role to
+endpoints invoked by `dr_job_run` still need the org-admin role to
 have those permissions. Beta user will perform the role grant per
 the doc.
 

@@ -1329,7 +1329,7 @@ class LogViewerModal(ModalScreen[None]):
     """v0.14 — read-only viewer for a `~/.dr-tools/logs/*.log` file.
 
     Different from TaskLogModal (which tails AE log lines via the REST
-    API) — this one reads a local file produced by `dr-job-run`. Used
+    API) — this one reads a local file produced by `dr_job_run`. Used
     by the Saved Templates "View Log" button (latest log for the
     template) and the Run History "View Log" button (log for a
     specific run_id).
@@ -1854,7 +1854,7 @@ class NewJobModal(ModalScreen[Optional[dict]]):
                         value=(self._existing.schedule if self._existing else ""),
                     )
                     yield Static(
-                        "[dim]Recurring jobs fire `dr-job-run` via a "
+                        "[dim]Recurring jobs fire `dr_job_run` via a "
                         "systemd user timer. Requires "
                         "`loginctl enable-linger $USER` to survive logout.[/]",
                         classes="modal-hint",
@@ -2403,7 +2403,7 @@ class NewJobModal(ModalScreen[Optional[dict]]):
         """Validate every field; on success dismiss with the payload.
 
         `action` is "schedule" (save the template only) or "run" (save
-        + immediately invoke dr-job-run). The parent screen reads the
+        + immediately invoke dr_job_run). The parent screen reads the
         `_action` key from the returned dict to decide which path to
         take — keeps the modal itself free of any execution side
         effects.
@@ -4173,7 +4173,7 @@ class DashboardScreen(Screen):
         # Refresh the Saved Templates view if we're on it.
         if self.selected_kind == "sch-saved":
             self._load_view("sch-saved", "")
-        # On "Run now", shell out to dr-job-run immediately — same code
+        # On "Run now", shell out to dr_job_run immediately — same code
         # path the Run button on the Saved Templates view uses.
         if action == "run":
             self._sch_run_now(job)
@@ -4207,7 +4207,7 @@ class DashboardScreen(Screen):
             self._load_view("sch-saved", "")
 
     def _sch_run_now(self, job: "drsch.JobDefinition") -> None:
-        """Shell out to dr-job-run in a background thread.
+        """Shell out to dr_job_run in a background thread.
 
         Same code path as cron / systemd would use — we deliberately
         don't replicate the submit-chain inline so there's exactly one
@@ -4221,14 +4221,14 @@ class DashboardScreen(Screen):
         """
         import shutil, os, subprocess
         bin_path = (
-            shutil.which("dr-job-run")
-            or "/opt/dr-tools/venv/bin/dr-job-run"
+            shutil.which("dr_job_run")
+            or "/opt/dr-tools/venv/bin/dr_job_run"
         )
         if not os.path.exists(bin_path):
             # Pre-flight: surface a specific, actionable error before
             # even spawning the worker.
             self._post_status(
-                f"dr-job-run binary missing — re-run `pip install -e .` "
+                f"dr_job_run binary missing — re-run `pip install -e .` "
                 f"(or `make rpm` + reinstall). Looked at {bin_path}."
             )
             return
@@ -4245,7 +4245,7 @@ class DashboardScreen(Screen):
             except FileNotFoundError:
                 self.app.call_from_thread(
                     self._post_status,
-                    f"dr-job-run not found at {bin_path} — "
+                    f"dr_job_run not found at {bin_path} — "
                     f"re-run `pip install -e .`",
                 )
             except Exception as e:
@@ -4456,7 +4456,7 @@ class DashboardScreen(Screen):
         # the slug into the log filename in cli_jobrun.
         slug = drsch.slugify(job_name)
         from pathlib import Path
-        # Log filenames are slug-<run_id>.log when run_id is dr-job-run's
+        # Log filenames are slug-<run_id>.log when run_id is dr_job_run's
         # UTC stamp. Fall back to the newest matching file for that slug.
         target = drsch.LOGS_DIR / f"{slug}-{rec.run_id}.log"
         if not target.exists():

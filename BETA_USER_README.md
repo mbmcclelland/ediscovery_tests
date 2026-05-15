@@ -17,9 +17,9 @@ console scripts on `$PATH`:
 | Command | What it does |
 |---|---|
 | `dr_tui` | Textual TUI — your traffic-control station |
-| `dr-load` | Headless load-test CLI |
-| `dr-job-run` | Run one saved job (used by the TUI's Run / Run-Now and by recurring systemd timers) |
-| `dr-job-delete` | Retention cleanup — deletes the corpus + data area created by one run |
+| `dr_load` | Headless load-test CLI |
+| `dr_job_run` | Run one saved job (used by the TUI's Run / Run-Now and by recurring systemd timers) |
+| `dr_job_delete` | Retention cleanup — deletes the corpus + data area created by one run |
 
 State lives under `~/.dr-tools/` (your home dir):
 
@@ -94,8 +94,8 @@ sudo dnf install -y \
   ./packaging/rpmbuild/RPMS/x86_64/dr-tools-0.15.0-1.el9.x86_64.rpm
 ```
 
-After this completes, `dr_tui`, `dr-load`, `dr-job-run`, and
-`dr-job-delete` are all on your `$PATH`.
+After this completes, `dr_tui`, `dr_load`, `dr_job_run`, and
+`dr_job_delete` are all on your `$PATH`.
 
 ### 6. Configure your `.env`
 
@@ -171,7 +171,7 @@ Press **F3** anywhere to pop the **realm-wide Jobs Monitor**:
    - **Keep indexed data for:** `5` `days` (default)
    - **Schedule (recurring):** `Run on demand only (no schedule)`
 3. Click **Run now**. The TUI saves the template AND immediately
-   invokes `dr-job-run`. Watch the **Run History** sub-view for the
+   invokes `dr_job_run`. Watch the **Run History** sub-view for the
    row to flip from RUNNING to SUCCESS.
 
 ### Create a job that runs every day, 3 times a day
@@ -185,7 +185,7 @@ Same flow as above, but pick:
 The saved template now has a green `3x-day` cell in the Schedule
 column. A systemd user timer
 `~/.config/systemd/user/dr-tools-recur-daily-payroll-import.timer`
-gets created and enabled. It fires `dr-job-run daily-payroll-import`
+gets created and enabled. It fires `dr_job_run daily-payroll-import`
 at 03:00, 11:00, 19:00 every day.
 
 To see all your active timers:
@@ -220,15 +220,15 @@ different folder targets:
 | `loadtest-large`     | `/data/import/testload/LargeFiles`  | tens of GB |
 | `loadtest-longterm`  | `/data/import/testload/LargeFiles`  | same as above but retention=365 days; UI highlights with a `*` marker |
 
-Run them in parallel with `dr-job-run` from a shell, or one at a
+Run them in parallel with `dr_job_run` from a shell, or one at a
 time from the TUI's Run button. The F3 Jobs Monitor + the dashboard
 metrics together give you the "volumes over time" view: queue depth,
 running count, and disk IOPS.
 
-You can also drive the synthetic load test from `dr-load`:
+You can also drive the synthetic load test from `dr_load`:
 
 ```bash
-dr-load indexing --users 5 --duration 300s
+dr_load indexing --users 5 --duration 300s
 ```
 
 That runs the full createDataArea → createCorpus →
@@ -249,10 +249,10 @@ tail -f $(ls -t ~/.dr-tools/logs/*.log | head -1)   # latest run log
 systemctl --user list-timers --all | grep dr-tools
 
 # Manually expire a retention run early
-dr-job-delete <slug> <run-id>
+dr_job_delete <slug> <run-id>
 
 # Manually run a saved job
-dr-job-run <slug>
+dr_job_run <slug>
 
 # Re-cycle the DR backend (PRESERVES the dr-tools RPM)
 sudo bash cleandr.sh --keeprpm

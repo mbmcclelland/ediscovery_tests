@@ -5,7 +5,7 @@ State layout under `~/.dr-tools/`:
     jobs/<slug>.json        — saved JobDefinition (template; persists)
     runs/<slug>.jsonl       — append-only run log (corpus/data-area handles
                               + task handle + timestamps per execution)
-    logs/<slug>-<ts>.log    — captured stdout/stderr of one dr-job-run
+    logs/<slug>-<ts>.log    — captured stdout/stderr of one dr_job_run
 
 Retention deletes are scheduled as systemd user units under
 `~/.config/systemd/user/`:
@@ -14,7 +14,7 @@ Retention deletes are scheduled as systemd user units under
     dr-tools-retention-<slug>-<run_id>.timer
 
 The `.timer` fires once via `OnCalendar=` at the absolute time the
-retention window elapses; the `.service` invokes `dr-job-delete`. Both
+retention window elapses; the `.service` invokes `dr_job_delete`. Both
 unit names include the run_id so a single saved job can have multiple
 in-flight runs with independent retention clocks.
 
@@ -114,7 +114,7 @@ class JobDefinition:
 
 @dataclass
 class RunRecord:
-    """One execution of a JobDefinition (created by dr-job-run)."""
+    """One execution of a JobDefinition (created by dr_job_run)."""
     run_id: str                    # 14-char UTC stamp, eg "20260513T0300"
     started_at: str                # ISO-8601
     task_handle: str               # from createRepresentation
@@ -317,7 +317,7 @@ def schedule_retention_delete(
     seconds_from_now: int,
     job_name: str = "",
 ) -> tuple[str, Optional[str]]:
-    """Write + start a one-shot user timer that fires `dr-job-delete`.
+    """Write + start a one-shot user timer that fires `dr_job_delete`.
 
     Returns `(unit_base, error)` — `unit_base` is the unit name without
     the `.service` / `.timer` suffix, `error` is None on success or a
@@ -346,7 +346,7 @@ Description=dr-tools retention cleanup for {job_name or job_slug} run {run_id}
 
 [Service]
 Type=oneshot
-ExecStart={_runtime_bin('dr-job-delete')} {job_slug} {run_id}
+ExecStart={_runtime_bin('dr_job_delete')} {job_slug} {run_id}
 """
     timer_body = f"""[Unit]
 Description=dr-tools retention timer for {job_name or job_slug} run {run_id}
@@ -480,7 +480,7 @@ def schedule_recurring_job(
 
     `on_calendar` is either a key in `RECUR_PRESETS` or a raw
     OnCalendar= expression (see systemd.time(7)). The timer's
-    `.service` invokes `dr-job-run <slug>`. Unlike retention one-shots,
+    `.service` invokes `dr_job_run <slug>`. Unlike retention one-shots,
     `Persistent=true` here ensures missed runs (e.g. host was off) fire
     at the next opportunity.
 
@@ -504,7 +504,7 @@ Description=dr-tools recurring run for {job_name or job_slug}
 
 [Service]
 Type=oneshot
-ExecStart={_runtime_bin('dr-job-run')} {job_slug}
+ExecStart={_runtime_bin('dr_job_run')} {job_slug}
 """
     timer_body = f"""[Unit]
 Description=dr-tools recurring timer for {job_name or job_slug}
