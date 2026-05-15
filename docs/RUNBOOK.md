@@ -17,7 +17,7 @@ the API endpoint shapes see `endpoints_v0.05.md` / `endpoints_v0.06.md`
 than the legacy Playwright path:
 
 ```bash
-sudo .venv/bin/python DR_freshinstall.py
+sudo .venv/bin/python dr_freshinstall.py
 ```
 
 What it does (13 API-level steps mirroring the user's spec):
@@ -40,8 +40,8 @@ Useful flags:
 | `--hostname HOST` | override the default `192.168.58.128` |
 
 The legacy three-script sequence (`cleandr.sh` → `expect -f
-DR_freshinstall.exp` → `python playwright_fresh_init.py`) still
-works and the shell + expect pieces are what `DR_freshinstall.py`
+dr_freshinstall.exp` → `python playwright_fresh_init.py`) still
+works and the shell + expect pieces are what `dr_freshinstall.py`
 invokes for phases 1+2 internally — but you almost never need to
 run them manually anymore.
 
@@ -441,7 +441,7 @@ quietly fell into "run error: …".
 
 ---
 
-## §4g — `DR_freshinstall.py` step 8 fails with `PERMISSION_DENIED ... listRoles` (v0.17.0)
+## §4g — `dr_freshinstall.py` step 8 fails with `PERMISSION_DENIED ... listRoles` (v0.17.0)
 
 ### Symptom
 
@@ -474,7 +474,7 @@ Two parts, both shipped in v0.17.0:
 1. `dr_tui/data.py::list_org_roles()` now accepts `sys_scope=True`
    → uses `adminOrgManager/listRoles` (sys-scoped, works without
    membership).
-2. `DR_freshinstall.py::phase_api()` reordered: step 9 (add
+2. `dr_freshinstall.py::phase_api()` reordered: step 9 (add
    DRSysAdmin to the org) now runs **before** step 8 (create
    admin@training). The user-spec step *numbers* are preserved in
    the headers so the script's structure still matches the spec.
@@ -482,12 +482,12 @@ Two parts, both shipped in v0.17.0:
 To resume a partially-completed install:
 
 ```bash
-sudo .venv/bin/python DR_freshinstall.py --skip-clean --skip-installer --keep-existing
+sudo .venv/bin/python dr_freshinstall.py --skip-clean --skip-installer --keep-existing
 ```
 
 ---
 
-## §4h — `DR_freshinstall.py` step 1 dies with `FrozenInstanceError: cannot assign to field 'password'`
+## §4h — `dr_freshinstall.py` step 1 dies with `FrozenInstanceError: cannot assign to field 'password'`
 
 ### Symptom
 
@@ -591,7 +591,7 @@ dr_tui
 
 # Full destructive reset (preserves /root/license.lic).
 bash cleandr.sh
-expect -f DR_freshinstall.exp
+expect -f dr_freshinstall.exp
 python playwright_fresh_init.py
 
 # Manually expire a retention run early.

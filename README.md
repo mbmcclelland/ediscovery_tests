@@ -35,8 +35,8 @@ REST-based `dr-freshinstall`, no Chromium).
 
 ```
 /opt/digitalreef/scripts/reef-a-tui/      ← orchestration scripts
-  DR_freshinstall.py        the fresh-install driver
-  DR_freshinstall.exp       expect wrapper for the InstallAnywhere .bin
+  dr_freshinstall.py        the fresh-install driver
+  dr_freshinstall.exp       expect wrapper for the InstallAnywhere .bin
   cleandr.sh                teardown shell (drops postgres + FS state)
   reef-a-tui-logo.{txt,go}  logo source + bit-generated reference
 
@@ -557,7 +557,7 @@ that preflight tries to parse as JSON.
 
 ## Fresh-Install / Reinstall Toolchain
 
-### One-shot driver: `DR_freshinstall.py` (v0.17.9 — recommended)
+### One-shot driver: `dr_freshinstall.py` (v0.17.9 — recommended)
 
 A single Python entry point replaces the legacy 3-script sequence
 (cleandr → expect → playwright). REST-based, no Chromium, ~5× faster.
@@ -565,8 +565,8 @@ Help-by-default — running with no args prints help and exits so the
 destructive default flow never starts by accident.
 
 ```bash
-sudo .venv/bin/python DR_freshinstall.py --force        # full destructive
-sudo .venv/bin/python DR_freshinstall.py                # prints help, exits 0
+sudo .venv/bin/python dr_freshinstall.py --force        # full destructive
+sudo .venv/bin/python dr_freshinstall.py                # prints help, exits 0
 ```
 
 What it does — 13 API-level steps in order:
@@ -647,8 +647,8 @@ fully-stocked training org ready for `dr_tui` or `dr_load`.
 
 ### Legacy 3-script chain (still works)
 
-Kept for auditability — `DR_freshinstall.py` actually invokes
-`cleandr.sh` + `DR_freshinstall.exp` internally for phases 1 + 2.
+Kept for auditability — `dr_freshinstall.py` actually invokes
+`cleandr.sh` + `dr_freshinstall.exp` internally for phases 1 + 2.
 
 > ⚠️ **Destructive and unrecoverable.** Step 1 wipes `/home/auraria/AHS*`,
 > `/data/docstorage/*`, `/data/indexstorage/*`, and the InstallAnywhere
@@ -667,7 +667,7 @@ Reads either the live `/home/auraria/AHS/conf/license.lic` (preferred) or
 a copy in CWD; falls back to any pre-existing `/root/license.lic` if both
 sources are missing.
 
-### Step 2 — `DR_freshinstall.exp`
+### Step 2 — `dr_freshinstall.exp`
 
 Expect script that drives the InstallAnywhere console installer
 (`/tmp/5.5.3.2.bin -i console`), accepts the license, picks Full node /
@@ -676,7 +676,7 @@ at the end.
 
 ```bash
 cd /tmp
-expect -f /home/auraria/scripts/ediscovery_tests/DR_freshinstall.exp
+expect -f /home/auraria/scripts/ediscovery_tests/dr_freshinstall.exp
 ```
 
 Typical wall-clock time: ~5–7 minutes (most of it is the bundled JRE
@@ -708,7 +708,7 @@ pytest suite and `dr_tui` work without further configuration.
 ### What if step 2's expect script hangs?
 
 Autoexpect scripts are fragile about bash prompts. The current
-`DR_freshinstall.exp` was hand-cleaned to match installer text (which is
+`dr_freshinstall.exp` was hand-cleaned to match installer text (which is
 deterministic) and avoid bash-prompt expectations entirely. If you
 regenerate it via autoexpect on a different host, watch for prompt
 mismatches in the bash bracketed-paste sequences and switch
@@ -739,7 +739,7 @@ ediscovery_tests/
 ├── locustfile_indexing.py    # Locust load test: full indexing workflow
 │
 ├── cleandr.sh                # Destructive uninstall (preserves license)
-├── DR_freshinstall.exp       # Expect: drives InstallAnywhere console installer
+├── dr_freshinstall.exp       # Expect: drives InstallAnywhere console installer
 ├── playwright_fresh_install.py # Full Playwright fresh-install + lifecycle
 ├── playwright_fresh_init.py    # Focused post-install setup
 ├── proxy_logger.py           # mitmproxy addon — records DR REST traffic to /tmp
@@ -988,6 +988,6 @@ the body + response shapes for every captured endpoint.
 above. The API Programming Guide is the file to load first.
 
 **I need a working DR install from scratch** → at the repo root,
-run `sudo .venv/bin/python DR_freshinstall.py`. See the
+run `sudo .venv/bin/python dr_freshinstall.py`. See the
 [Fresh-Install Toolchain](#fresh-install--reinstall-toolchain) section
 above and RUNBOOK §0 for the quick reference.

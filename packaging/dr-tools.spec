@@ -13,7 +13,7 @@
 %global py3 /usr/bin/python3
 %global drroot /opt/dr-tools
 # v0.17.10 — REEF-A-TUI ("Ratatouille") rebrand. The collection of
-# Digital-Reef ops tools (dr_tui, dr_load, DR_freshinstall.py, the
+# Digital-Reef ops tools (dr_tui, dr_load, dr_freshinstall.py, the
 # expect installer, cleandr) is collectively named REEF-A-TUI. The
 # Python venv stays at /opt/dr-tools/venv for backward compatibility
 # (it's where every existing wrapper / shebang points), but the
@@ -153,8 +153,8 @@ ln -sf dr_job_delete %{buildroot}/usr/bin/dr-job-delete
 # shebang points there); these files are the orchestration layer
 # that the venv doesn't ship.
 mkdir -p %{buildroot}%{reefroot}
-install -m 0755 DR_freshinstall.py    %{buildroot}%{reefroot}/DR_freshinstall.py
-install -m 0755 DR_freshinstall.exp   %{buildroot}%{reefroot}/DR_freshinstall.exp
+install -m 0755 dr_freshinstall.py    %{buildroot}%{reefroot}/dr_freshinstall.py
+install -m 0755 dr_freshinstall.exp   %{buildroot}%{reefroot}/dr_freshinstall.exp
 install -m 0755 cleandr.sh            %{buildroot}%{reefroot}/cleandr.sh
 install -m 0644 reef-a-tui-logo.txt   %{buildroot}%{reefroot}/reef-a-tui-logo.txt
 install -m 0644 reef-a-tui-logo.go    %{buildroot}%{reefroot}/reef-a-tui-logo.go
@@ -167,7 +167,7 @@ ln -sf dr_tui %{buildroot}/usr/bin/dr-tui
 
 # `dr_freshinstall` (canonical, v0.19.2) — entry point for the
 # end-to-end fresh-install driver. The script lives at
-# /opt/digitalreef/scripts/reef-a-tui/DR_freshinstall.py and uses
+# /opt/digitalreef/scripts/reef-a-tui/dr_freshinstall.py and uses
 # the venv's Python interpreter (which has Rich, requests, urllib3,
 # and the dr_tui.data helpers all pre-installed). The hyphen form
 # `dr-freshinstall` is kept as a back-compat symlink.
@@ -177,7 +177,7 @@ cat > %{buildroot}/usr/bin/dr_freshinstall <<'EOF'
 # Run with no args for help; --force for the full destructive
 # teardown + reinstall + 13 API-provisioning steps.
 exec /opt/dr-tools/venv/bin/python3 \
-    /opt/digitalreef/scripts/reef-a-tui/DR_freshinstall.py "$@"
+    /opt/digitalreef/scripts/reef-a-tui/dr_freshinstall.py "$@"
 EOF
 chmod 0755 %{buildroot}/usr/bin/dr_freshinstall
 ln -sf dr_freshinstall %{buildroot}/usr/bin/dr-freshinstall
@@ -205,8 +205,8 @@ install -m 0644 .env.example %{buildroot}%{drroot}/share/env.example
 %dir /opt/digitalreef
 %dir /opt/digitalreef/scripts
 %dir %{reefroot}
-%{reefroot}/DR_freshinstall.py
-%{reefroot}/DR_freshinstall.exp
+%{reefroot}/dr_freshinstall.py
+%{reefroot}/dr_freshinstall.exp
 %{reefroot}/cleandr.sh
 %{reefroot}/reef-a-tui-logo.txt
 %{reefroot}/reef-a-tui-logo.go

@@ -29,7 +29,7 @@ state. The fastest path is:
 ```bash
 # Full destructive reset — takes ~7 minutes.
 bash cleandr.sh
-expect -f DR_freshinstall.exp
+expect -f dr_freshinstall.exp
 python playwright_fresh_init.py
 dr_load preflight              # All-green = ready
 ```

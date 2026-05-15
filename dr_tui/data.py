@@ -1197,7 +1197,7 @@ def delete_storage_depot(client: EDiscoveryClient, *, handle: str) -> None:
 
 # ----------------------------------------------------------------------------- v0.17.0 fresh-install helpers
 #
-# These functions are used by `DR_freshinstall.py` to drive a brand-new
+# These functions are used by `dr_freshinstall.py` to drive a brand-new
 # DR install from a freshly-rebuilt drd through to a fully-provisioned
 # `training` org. They're kept in data.py (not the driver script) so
 # the TUI can reuse them later if we ever build a "Reset DR" feature.
@@ -1318,7 +1318,7 @@ def list_org_roles(
     * `sys_scope=True` — `adminOrgManager/listRoles` with
       `contextHandle=<org>, organizationName=<org>, systemScope=true`.
       This works for DRSysAdmin even **before** it's been added as
-      a member — needed by `DR_freshinstall.py` step 8 (look up the
+      a member — needed by `dr_freshinstall.py` step 8 (look up the
       Organization Administrator role on a brand-new empty org).
     """
     if sys_scope:

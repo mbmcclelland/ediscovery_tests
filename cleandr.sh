@@ -66,7 +66,7 @@ fi
 # ---- 1. Stop drd --------------------------------------------------------
 SYSTEMD_LOG_LEVEL=debug systemctl stop drd 2>/dev/null || true
 
-# ---- 2. License preservation (DR_freshinstall.exp expects it here) ------
+# ---- 2. License preservation (dr_freshinstall.exp expects it here) ------
 \cp -v /home/auraria/AHS/conf/license.lic /root/license.lic 2>/dev/null \
   || \cp -v license.lic /root/license.lic 2>/dev/null \
   || echo "[cleandr] warning: no license.lic found to preserve"
@@ -157,7 +157,7 @@ done
 
 echo
 echo "[cleandr] done. To rebuild DR:"
-echo "    expect -f DR_freshinstall.exp"
+echo "    expect -f dr_freshinstall.exp"
 echo "    python playwright_fresh_init.py"
 echo "    python qa_create_org_admin.py    # if admin@training got dropped"
 if [ "$KEEPRPM" = "true" ]; then

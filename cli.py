@@ -28,7 +28,13 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 
-app = typer.Typer(no_args_is_help=True, help="Digital Reef eDiscovery load tester.")
+app = typer.Typer(
+    name="dr_load",  # QA-v019-1: surface the underscore canonical name in
+                     # --help. Typer defaults to argv[0] which is "dr-load"
+                     # (the venv binary from setup.cfg's console_scripts).
+    no_args_is_help=True,
+    help="Digital Reef eDiscovery load tester (REEF-A-TUI).",
+)
 
 _HERE = Path(__file__).parent
 

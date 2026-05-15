@@ -19,7 +19,7 @@
 
 11 versions worth of changes. Roughly three buckets:
 
-### Bucket A — UX evolution on `DR_freshinstall.py` (v0.17.3 → v0.17.9)
+### Bucket A — UX evolution on `dr_freshinstall.py` (v0.17.3 → v0.17.9)
 
 | Version | Change |
 |---|---|
@@ -27,7 +27,7 @@
 | v0.17.4 | Reef-a-TUI logo, ocean-depth gradient, bright-yellow subtitle, `_stream_subprocess()` routes cleandr / installer / drd output through Rich so the progress bar stays pinned at the bottom of the live region |
 | v0.17.5 | Logo regenerated at `bit -font fivebyfive -scale 0 "Reef-A-TUI"` for legibility (5-line letters fully readable at 110 cols) |
 | v0.17.6 | User-supplied 7-line logo + blue→light-grey gradient; phase banner border `bright_blue`, title `bold yellow` |
-| v0.17.7 | `DR_freshinstall.exp` — `dr_ctl.sh status` path uses forward slashes (was `\\home\\auraria\\...` rendering to `homeauraria...` and 'command not found') |
+| v0.17.7 | `dr_freshinstall.exp` — `dr_ctl.sh status` path uses forward slashes (was `\\home\\auraria\\...` rendering to `homeauraria...` and 'command not found') |
 | v0.17.8 | InstallAnywhere debug flags (`LAX_DEBUG=true`, `_JAVA_OPTIONS="-Dlax.debug.level=3 -Dlax.debug.all=true"`) set before `spawn` — emits `/tmp/LAX*.txt` |
 | v0.17.9 | Per-phase wall-clock subtotals — log line per phase + dim `⏱  Phase N took X.Ys (Mm SSs)` between-phase console one-liners |
 
@@ -171,7 +171,7 @@ grep -E "phase wall clock|total wall clock" /tmp/dr-freshinstall-*.log | tail -1
 **Expected in log file (exactly 4 lines):**
 ```
 INFO  phase wall clock: Phase 1 — Teardown (cleandr.sh) — OK — 32.4s
-INFO  phase wall clock: Phase 2 — DR installer (DR_freshinstall.exp) — OK — 538.2s
+INFO  phase wall clock: Phase 2 — DR installer (dr_freshinstall.exp) — OK — 538.2s
 INFO  phase wall clock: Phase 3 — API provisioning (13 steps) — OK — 30.0s
 INFO  total wall clock: 600.6s (exit=0)
 ```
@@ -242,7 +242,7 @@ echo "dr_tui:"; timeout 2 dr_tui </dev/null >/dev/null 2>&1; echo "exit=$?"
 
 **Expected:**
 - `dr_load`, `dr_job_run`, `dr_job_delete` each print their `--help` and exit 0
-- `dr_freshinstall` (no args) prints `usage: DR_freshinstall.py …` and exits 0
+- `dr_freshinstall` (no args) prints `usage: dr_freshinstall.py …` and exits 0
 - `dr_tui` times out at 2 s (login screen needs interaction) — exit 124 is acceptable
 
 **Evidence:**
@@ -440,9 +440,9 @@ they haven't regressed across the v0.18 → v0.19.3 work.
 **Steps:**
 
 ```bash
-.venv/bin/python /home/auraria/scripts/ediscovery_tests/DR_freshinstall.py \
+.venv/bin/python /home/auraria/scripts/ediscovery_tests/dr_freshinstall.py \
     --skip-installer --skip-api < /dev/null 2>&1 | grep -c "✗"
-.venv/bin/python /home/auraria/scripts/ediscovery_tests/DR_freshinstall.py \
+.venv/bin/python /home/auraria/scripts/ediscovery_tests/dr_freshinstall.py \
     --skip-installer --skip-api < /dev/null 2>&1 | grep -c "ERROR: FAIL"
 ```
 
@@ -464,7 +464,7 @@ duplicate stderr-handler output).
 .venv/bin/python -c "
 import warnings; warnings.filterwarnings('ignore')
 import sys; sys.path.insert(0,'/home/auraria/scripts/ediscovery_tests')
-from DR_freshinstall import _drd_api_ready
+from dr_freshinstall import _drd_api_ready
 print('ready:', _drd_api_ready('192.168.58.128'))
 "
 ```
@@ -563,11 +563,11 @@ project create failed: NO_TEMPLATES — Org 'training' has no default templates 
 
 → TC24 should *confirm the error message is clean* (no stack trace), not flag this as a bug.
 
-### KNOWN_LIMITATION-2 — Stale `DR_freshinstall.exp` copies in /tmp /root/scripts
+### KNOWN_LIMITATION-2 — Stale `dr_freshinstall.exp` copies in /tmp /root/scripts
 
 **Where:** `DR_Workflow_Guide.md` §5.0c.
-**Symptom:** If `expect -f /tmp/DR_freshinstall.exp` is invoked manually with a pre-v0.17.7 copy of the .exp, the dr_ctl.sh path uses backslashes that bash silently strips. Fix is to delete the dupes: `\rm -fv /tmp/DR_freshinstall.exp /root/scripts/DR_freshinstall.exp` and rely on the repo copy.
-**Status:** The DR_freshinstall.py driver always invokes the repo copy, so the trap only fires on manual `expect -f` invocations. Not a bug.
+**Symptom:** If `expect -f /tmp/dr_freshinstall.exp` is invoked manually with a pre-v0.17.7 copy of the .exp, the dr_ctl.sh path uses backslashes that bash silently strips. Fix is to delete the dupes: `\rm -fv /tmp/dr_freshinstall.exp /root/scripts/dr_freshinstall.exp` and rely on the repo copy.
+**Status:** The dr_freshinstall.py driver always invokes the repo copy, so the trap only fires on manual `expect -f` invocations. Not a bug.
 
 → QA verifies the stale-copy trap is mentioned in the docs but does NOT need to reproduce.
 

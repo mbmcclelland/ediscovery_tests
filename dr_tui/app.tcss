@@ -5,18 +5,25 @@ Screen {
 }
 
 /* ---------------------------------------------------------- login */
+/* v0.19.4 UX polish — bright-blue border + bold-yellow title, mirroring
+   the REEF-A-TUI brand palette (Blue / White / Yellow) used everywhere
+   else (Reef-a-TUI logo, dr_freshinstall phase banners, reef_tool
+   STYLE_PHASE_BORDER / STYLE_PHASE_TITLE constants). The previous
+   `$accent`-based styling rendered ok on Textual's default theme but
+   blended into other accent colours — the explicit `bright_blue` makes
+   the login card pop. */
 #login-card {
     width: 60;
     height: auto;
     padding: 1 2;
-    border: round $accent;
+    border: round ansi_bright_blue;
     background: $panel;
     align: center middle;
 }
 
 #login-title {
     content-align: center middle;
-    color: $accent;
+    color: ansi_bright_yellow;
     text-style: bold;
     margin-bottom: 1;
 }

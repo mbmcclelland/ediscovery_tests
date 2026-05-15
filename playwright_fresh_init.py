@@ -1,7 +1,7 @@
 """
 Focused post-install initial-setup driver for Digital Reef.
 
-Run this AFTER `cleandr.sh` + `DR_freshinstall.exp` and once `drd` is up. It
+Run this AFTER `cleandr.sh` + `dr_freshinstall.exp` and once `drd` is up. It
 drives the DR web UI through the minimum steps needed for the dr_tui /
 dr_load test suite to function — nothing more.
 

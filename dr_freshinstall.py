@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""DR_freshinstall.py — end-to-end fresh-install driver for Digital Reef.
+"""dr_freshinstall.py — end-to-end fresh-install driver for Digital Reef.
 
 Replaces the three-script sequence:
 
     bash cleandr.sh
-    expect -f DR_freshinstall.exp
+    expect -f dr_freshinstall.exp
     python playwright_fresh_init.py        # browser-driven, slow
 
 with a single Python entry point that talks to DR over REST. The
@@ -17,10 +17,10 @@ without a GUI.
 
 Usage:
 
-    sudo .venv/bin/python DR_freshinstall.py             # full sequence
-    sudo .venv/bin/python DR_freshinstall.py --dry-run   # print only
-    sudo .venv/bin/python DR_freshinstall.py --skip-clean --skip-installer
-    sudo .venv/bin/python DR_freshinstall.py --keep-existing
+    sudo .venv/bin/python dr_freshinstall.py             # full sequence
+    sudo .venv/bin/python dr_freshinstall.py --dry-run   # print only
+    sudo .venv/bin/python dr_freshinstall.py --skip-clean --skip-installer
+    sudo .venv/bin/python dr_freshinstall.py --keep-existing
 
 Flags:
 
@@ -41,7 +41,7 @@ The 13 API-level steps are documented in the top-level user request
 that produced this script and mirrored in the `STEPS` list below.
 
 This script is destructive when run without `--skip-clean`. Hold on
-to /root/license.lic — both this script and DR_freshinstall.exp
+to /root/license.lic — both this script and dr_freshinstall.exp
 expect it there.
 """
 from __future__ import annotations
@@ -99,7 +99,7 @@ from rich.text import Text                                          # noqa: E402
 
 _DEFAULT_LOG_DIR = Path("/tmp")
 _LOG_TS = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-_DEFAULT_LOG_PATH = _DEFAULT_LOG_DIR / f"dr-freshinstall-{_LOG_TS}.log"
+_DEFAULT_LOG_PATH = _DEFAULT_LOG_DIR / f"dr_freshinstall-{_LOG_TS}.log"
 
 
 # ---------- Reef-a-TUI logo ----------------------------------------------------
@@ -171,26 +171,26 @@ def _build_parser() -> argparse.ArgumentParser:
     """Build the argparse parser separately so `--help` and the
     no-args-shows-help path share one source of truth."""
     ap = argparse.ArgumentParser(
-        prog="DR_freshinstall.py",
+        prog="dr_freshinstall",
         description=(
             "End-to-end fresh-install driver for Digital Reef. Runs "
-            "teardown (cleandr.sh) → installer (DR_freshinstall.exp) "
+            "teardown (cleandr.sh) → installer (dr_freshinstall.exp) "
             "→ 13 REST provisioning steps in one shot."
         ),
         epilog=(
             "Examples:\n"
             "  # Full destructive teardown + reinstall + provisioning:\n"
-            "  sudo .venv/bin/python DR_freshinstall.py --force\n"
+            "  sudo .venv/bin/python dr_freshinstall.py --force\n"
             "\n"
             "  # Idempotent recovery (drd already up, /data intact):\n"
-            "  sudo .venv/bin/python DR_freshinstall.py "
+            "  sudo .venv/bin/python dr_freshinstall.py "
             "--skip-clean --skip-installer --keep-existing\n"
             "\n"
             "  # See what it would do, no API calls or shelling out:\n"
-            "  .venv/bin/python DR_freshinstall.py --dry-run "
+            "  .venv/bin/python dr_freshinstall.py --dry-run "
             "--skip-clean --skip-installer\n"
             "\n"
-            "Logs every run to /tmp/dr-freshinstall-<TIMESTAMP>.log by "
+            "Logs every run to /tmp/dr_freshinstall-<TIMESTAMP>.log by "
             "default; override with --log-file. The destructive phases "
             "(clean + installer) require --force or an interactive "
             "y/n confirmation."
@@ -203,7 +203,7 @@ def _build_parser() -> argparse.ArgumentParser:
     phases.add_argument("--skip-clean", action="store_true",
                         help="skip the cleandr.sh teardown phase")
     phases.add_argument("--skip-installer", action="store_true",
-                        help="skip DR_freshinstall.exp (assume drd is "
+                        help="skip dr_freshinstall.exp (assume drd is "
                              "already up)")
     phases.add_argument("--skip-api", action="store_true",
                         help="skip the 13-step REST provisioning phase")
@@ -247,7 +247,7 @@ def _build_parser() -> argparse.ArgumentParser:
     logf = ap.add_argument_group("Logging")
     logf.add_argument("--log-file", default=str(_DEFAULT_LOG_PATH),
                       help=f"log file path (default: "
-                           f"/tmp/dr-freshinstall-<TIMESTAMP>.log)")
+                           f"/tmp/dr_freshinstall-<TIMESTAMP>.log)")
     logf.add_argument("--log-level", default="INFO",
                       choices=["DEBUG", "INFO", "WARNING", "ERROR"],
                       help="logger verbosity (default: INFO)")
@@ -311,7 +311,7 @@ def _setup_logging(log_path: Path, level: str, verbose: bool) -> None:
     ))
     log.addHandler(fh)
 
-    log.info("dr-freshinstall starting — log file: %s", log_path)
+    log.info("dr_freshinstall starting — log file: %s", log_path)
 
 
 def _setup_progress(total_steps: int, disabled: bool) -> Optional[Progress]:
@@ -640,7 +640,7 @@ def phase_clean(args: argparse.Namespace) -> None:
     _ok("teardown complete")
 
 
-# ---------- Phase 2: installer via DR_freshinstall.exp -------------------------
+# ---------- Phase 2: installer via dr_freshinstall.exp -------------------------
 
 def phase_installer(args: argparse.Namespace) -> None:
     """Run the expect script that drives the InstallAnywhere .bin.
@@ -650,14 +650,14 @@ def phase_installer(args: argparse.Namespace) -> None:
     appended inside the expect file itself (it copies /root/license.lic
     back to /home/auraria/AHS/conf/ and restarts drd).
     """
-    if not (_REPO / "DR_freshinstall.exp").is_file():
-        raise FileNotFoundError("DR_freshinstall.exp not found")
+    if not (_REPO / "dr_freshinstall.exp").is_file():
+        raise FileNotFoundError("dr_freshinstall.exp not found")
     if not Path("/tmp/5.5.3.2.bin").is_file():
         raise FileNotFoundError(
             "/tmp/5.5.3.2.bin not found — copy the DR installer there "
             "before running."
         )
-    cmd = ["expect", "-f", str(_REPO / "DR_freshinstall.exp")]
+    cmd = ["expect", "-f", str(_REPO / "dr_freshinstall.exp")]
     if args.dry_run:
         _info(f"DRY-RUN: would run: {' '.join(cmd)}")
         return
@@ -671,7 +671,7 @@ def phase_installer(args: argparse.Namespace) -> None:
     # competing with it. Replaces the v0.17.3 pause/resume hack.
     rc = _stream_subprocess(cmd, cwd="/tmp")
     if rc != 0:
-        raise RuntimeError(f"DR_freshinstall.exp exited with {rc}")
+        raise RuntimeError(f"dr_freshinstall.exp exited with {rc}")
     _ok("installer finished")
 
 
@@ -1364,7 +1364,7 @@ def main() -> int:
                 _skip("Phase 1 (teardown)")
 
             if not args.skip_installer:
-                with _phase(2, "DR installer (DR_freshinstall.exp)"):
+                with _phase(2, "DR installer (dr_freshinstall.exp)"):
                     phase_installer(args)
             else:
                 _skip("Phase 2 (installer)")

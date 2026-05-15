@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.19.4](#v0194--2026-05-15) | 2026-05-15 | Multi-persona pass — `DR_freshinstall.py` → `dr_freshinstall.py`, new `dr_tui.reef_tool` harness, login screen brand-aligned (bright-blue + bright-yellow), QA tickets QA-v019-1..4 logged & dispositioned |
 | [v0.19.3](#v0193--2026-05-14) | 2026-05-14 | Extend the underscore-canonical sweep to `dr_load`, `dr_job_run`, `dr_job_delete` — every command now has the same hyphen/underscore alias layout |
 | [v0.19.2](#v0192--2026-05-14) | 2026-05-14 | Standardise on `dr_tui` / `dr_freshinstall` (underscore) as the canonical command names — hyphen forms become legacy symlinks |
 | [v0.19.1](#v0191--2026-05-14) | 2026-05-14 | cleandr.sh now disables SELinux as Phase 0 — runtime `setenforce 0` + persistent `SELINUX=disabled` in `/etc/selinux/config` |
@@ -58,6 +59,142 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.19.4 — 2026-05-15
+
+### Multi-persona pass — script rename, reusable harness, brand-aligned login, 4 QA tickets
+
+Multi-persona unattended run kicked off by the user with "as the QA
+Persona, unit test each feature on each tab and dialog … as Developer
+… Code Librarian … UI/UX Expert … Deployment Engineer". One commit
+captures everyone's work.
+
+### QA (Jordan Park) — tickets opened in `QA-execution-v0.19.3.md`
+
+- **QA-v019-1** (Low, WONTFIX) — `dr_load --help` shows `Usage: dr-load`
+  because Typer/Click reads prog name from `argv[0]` and the venv
+  binary is `/opt/dr-tools/venv/bin/dr-load` (setup.cfg
+  `console_scripts`). Cosmetic; help works. Added `name="dr_load"` to
+  the Typer constructor — affects sub-app routing but not the visible
+  `Usage:` line. Future: set `argv[0]` in the /usr/bin wrapper if it
+  becomes important.
+- **QA-v019-2** (Low, CLOSED) — `dr_freshinstall --help` showed
+  `usage: DR_freshinstall.py`. Closed by Dev's rename.
+- **QA-v019-3** (Low, CLOSED) — default log path was hyphenated
+  (`/tmp/dr-freshinstall-…log`). Closed by Dev's `_DEFAULT_LOG_PATH`
+  edit to `/tmp/dr_freshinstall-<TS>.log`.
+- **QA-v019-4** (Critical, DEFERRED — external dependency) — user's
+  CRITICAL end-to-end test (`login as DRSysAdmin and index
+  192.168.58.128:/data/import/drmanual`) is blocked on a fresh-install
+  state by a two-stage limitation: 0 templates → can't create project
+  → exploreConnector returns `PROJECT_NOT_ACTIVATED`. Investigation
+  documented in QA-execution-v0.19.3.md — the
+  `templateManager/copyMetaTemplateProfileEntriesToOrganizations`
+  endpoint exists but the `ownerHandle` source needs further
+  JS-bundle / mitmproxy capture. Documented in v0.19.0's
+  KNOWN_LIMITATION-1. Workaround: open DR Web UI's "New Project" once
+  per org to lazily bootstrap templates.
+
+QA test results otherwise: TC19–TC22 PASS, TC25 PASS (code review),
+REG1–REG4 all PASS (v0.17.1's tickets still hold). TC23/TC24 covered
+by the new pilot tests; live demo blocked by QA-v019-4.
+
+### Dev — script rename + reusable harness
+
+- **`DR_freshinstall.py` → `dr_freshinstall.py`** (and `.exp` to match)
+  — closes QA-v019-2 + brings the destructive driver in line with
+  the lowercase / underscore-separator naming policy. argparse `prog=`
+  updated → `usage: dr_freshinstall …`. Default log path
+  `_DEFAULT_LOG_PATH` → `dr_freshinstall-<TS>.log` (QA-v019-3).
+- **`dr_tui/reef_tool.py`** NEW — reusable wrapper template for future
+  `dr_*` CLI tools. Encapsulates the v0.17.x UX patterns from
+  `dr_freshinstall.py`:
+  - Reef-a-TUI logo + bright-yellow product subtitle at startup
+  - Cyan run-config panel
+  - Rich progress bar pinned at the bottom of the live region
+  - Bright-blue / bold-yellow phase banners (`STYLE_PHASE_BORDER` /
+    `STYLE_PHASE_TITLE` constants)
+  - Per-step `(N.Ns)` elapsed + `phase wall clock:` summaries
+  - File log at `/tmp/<tool>-<TS>.log` with `--log-file` override
+  - Help-by-default — no-args invocations print `--help`, never
+    start a destructive default flow
+  - `--force` confirmation gate for `destructive=True` tools
+  - Green SUCCESS / red FAILURE end panel
+  - `tool.stream_subprocess()` helper for subprocess line-by-line
+    rendering (same pattern as
+    `dr_freshinstall._stream_subprocess`)
+
+  Usage from a new tool: `from dr_tui.reef_tool import ReefTool;
+  ReefTool(prog_name="dr_example", description="...",
+  phases=[("Phase A", phase_a), ...]).run()`. Naming validated at
+  construction time — `prog_name` must start with `dr_`.
+
+  Self-demos when invoked as `python -m dr_tui.reef_tool` — runs a
+  2-phase fake-work demo so you can see the harness's full UX
+  without writing a tool.
+
+### Librarian — naming + brand sweep
+
+- `misc/fullWorkflow.py` → `misc/full_workflow.py` (lowercase /
+  underscore-separator policy). Only callers were doc references in
+  `PLAN.md`; no code imports.
+- Noted brand-asset duplication: `_LOGO_COLORS`, `_LOGO_PATH`,
+  `_render_logo` are defined in both `dr_freshinstall.py` AND the
+  new `reef_tool.py`. Future `dr_freshinstall.py` rewrite should
+  use the harness; out of scope for v0.19.4 (would risk regressing
+  the v0.17.x QA-closed bugs).
+- `_stream_subprocess` lifted into the `ReefTool` class as
+  `tool.stream_subprocess()` so any future tool gets it for free.
+- No duplicate JSON / time / dict-access helpers found across
+  `data.py`, `scheduler.py`, `cli_jobrun.py`, `cli_jobdel.py`.
+
+### UI/UX — login screen brand alignment
+
+- `dr_tui/app.tcss` — `#login-card` border switched from `$accent`
+  (Textual default theme variable) to `ansi_bright_blue`; title
+  colour from `$accent` to `ansi_bright_yellow`. Mirrors the
+  REEF-A-TUI brand palette (Blue / White / Yellow) used by the
+  Reef-a-TUI logo + dr_freshinstall phase banners +
+  `reef_tool.STYLE_PHASE_*` constants.
+- CSS regression note: an earlier attempt used `bright_blue` /
+  `bright_yellow` (rejected by Textual CSS parser — must be
+  `ansi_bright_*` or hex/rgb). Caught by the
+  `test_dr_tui_dashboard_layout` pilot tests; fixed in-pass.
+
+### Deploy — RPM rebuild + clean install
+
+- RPM `dr-tools-0.19.4-1.el9.x86_64.rpm` built and installed.
+- Confirmed layout: 5 underscored canonical wrappers + 5 hyphenated
+  legacy alias symlinks. 5 files under
+  `/opt/digitalreef/scripts/reef-a-tui/` (now including the
+  renamed `dr_freshinstall.py` + `dr_freshinstall.exp`).
+- `dr_freshinstall` no-args banner prints the new lowercase name.
+
+### Tests
+
+- 22/22 pilot tests pass (4 dashboard layout + 11 scheduler + 7
+  depot). Pre-pass before fix was 17/22 — the bright_blue/yellow
+  CSS regression was caught by `test_dashboard_layout` immediately,
+  fixed in-pass.
+
+### Files
+
+- **Renamed:** `DR_freshinstall.py` → `dr_freshinstall.py`;
+  `DR_freshinstall.exp` → `dr_freshinstall.exp`; `misc/fullWorkflow.py`
+  → `misc/full_workflow.py`
+- **NEW:** `dr_tui/reef_tool.py` (~430 lines — harness + example)
+- **Updated:** `dr_tui/app.tcss` (login-card colours),
+  `cli.py` (Typer `name="dr_load"`),
+  `packaging/dr-tools.spec` (filename refs),
+  `packaging/install.sh` (filename refs),
+  README.md / RUNBOOK / Workflow_Guide / API_PROGRAMMING_GUIDE /
+  QA_TEST_PLAN / BETA_USER_README / DR_ROLE_SETUP / packaging/README
+  / QA-handover-v0.19.3.md / QA-execution-v0.19.3.md (sweep of the
+  capitalised script name)
+- `__version__.py` → 0.19.4
+- CHANGELOG.md (this entry).
 
 ---
 

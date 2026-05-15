@@ -660,7 +660,7 @@ unit, err = drsch.schedule_recurring_job(
 
 ### 8.8 Bootstrap a brand-new organization from scratch (v0.17.0)
 
-The full fresh-install flow that `DR_freshinstall.py` runs.
+The full fresh-install flow that `dr_freshinstall.py` runs.
 **Ordering matters** — see §10.9 for why step 4 must run before step 5.
 
 ```python
@@ -731,7 +731,7 @@ drdata.create_data_area(c,
 ```
 
 For a turnkey driver (including teardown + .bin installer), use
-`DR_freshinstall.py` at the repo root — same calls, plus
+`dr_freshinstall.py` at the repo root — same calls, plus
 `cleandr.sh` + expect orchestration.
 
 ---
@@ -923,7 +923,7 @@ client = EDiscoveryClient(Config(
 client.login()
 ```
 
-This bit `DR_freshinstall.py` step 1 on the very first end-to-end
+This bit `dr_freshinstall.py` step 1 on the very first end-to-end
 run: after `userManager/changeUserPassword`, we wanted to re-login
 with the new password to refresh the session token, and the
 unthinking `client.cfg.password = new` blew up. The keep-existing
@@ -932,7 +932,7 @@ hid until the true fresh-install destructive run.
 
 Same pattern applies anywhere you want to "switch users" on an
 existing client — make a fresh client. See
-`DR_freshinstall.py::_make_cfg()` for the helper that does this
+`dr_freshinstall.py::_make_cfg()` for the helper that does this
 cleanly.
 
 ---

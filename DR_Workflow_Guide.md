@@ -705,7 +705,7 @@ complete project lifecycles, 4 indexing jobs reached `COMPLETE`. See CHANGELOG v
 
 Added in v0.06 as a 3-script chain (cleandr → expect → playwright).
 **Consolidated in v0.17.0 into a single Python entry point** that
-talks to DR over REST — `DR_freshinstall.py`. Same destructive
+talks to DR over REST — `dr_freshinstall.py`. Same destructive
 effect, ~5× faster, no Chromium dependency.
 
 > ⚠️ **Destructive and unrecoverable.** The default flow deletes
@@ -714,11 +714,11 @@ effect, ~5× faster, no Chromium dependency.
 > intend to start over. License is preserved to `/root/license.lic`
 > automatically.
 
-### 5.0 — `DR_freshinstall.py` (v0.17.9+ — recommended)
+### 5.0 — `dr_freshinstall.py` (v0.17.9+ — recommended)
 
 ```bash
-sudo .venv/bin/python DR_freshinstall.py --force         # full destructive
-sudo .venv/bin/python DR_freshinstall.py                 # no args → help
+sudo .venv/bin/python dr_freshinstall.py --force         # full destructive
+sudo .venv/bin/python dr_freshinstall.py                 # no args → help
 ```
 
 Three internal phases, each toggleable:
@@ -726,7 +726,7 @@ Three internal phases, each toggleable:
 | Phase | Default | Skip with | What runs |
 |---|---|---|---|
 | 1. Teardown | yes | `--skip-clean` | shells out to `bash cleandr.sh` |
-| 2. Installer | yes | `--skip-installer` | shells out to `expect -f DR_freshinstall.exp` from `/tmp` |
+| 2. Installer | yes | `--skip-installer` | shells out to `expect -f dr_freshinstall.exp` from `/tmp` |
 | 3. API provisioning | yes | `--skip-api` | 13 REST calls via `dr_tui/data.py` helpers |
 
 The 13 API steps mirror the user spec verbatim. See README's
@@ -774,7 +774,7 @@ beta tester:
 | **v0.17.4** | Reef-a-TUI logo at startup; bold-yellow `Digital Reef Fresh Installer version X.Y.Z` subtitle; `_stream_subprocess()` routes cleandr / installer / drd subprocess output through `console.print()` so the progress bar stays pinned at the bottom of the live region while logs scroll above |
 | **v0.17.5** | Logo regenerated at `bit -font fivebyfive -scale 0 "Reef-A-TUI"` so each letter is ~10 cols wide and individually legible |
 | **v0.17.6** | User-supplied 7-line logo + Digital-Reef brand palette (blue → light-grey gradient); phase banner border `bright_blue` + bold yellow title |
-| **v0.17.7** | Fixed `dr_ctl.sh status` path in `DR_freshinstall.exp` (backslashes → forward slashes; cosmetic, install was not affected) |
+| **v0.17.7** | Fixed `dr_ctl.sh status` path in `dr_freshinstall.exp` (backslashes → forward slashes; cosmetic, install was not affected) |
 | **v0.17.8** | `LAX_DEBUG=true` + `_JAVA_OPTIONS="-Dlax.debug.level=3 -Dlax.debug.all=true"` set before `spawn ./5.5.3.2.bin -i console`; emits `/tmp/LAX*.txt` with verbose InstallAnywhere internals |
 | **v0.17.9** | Per-phase wall-clock subtotals — `with _phase(N, "name"):` wraps each phase block; file log gets `phase wall clock:` lines; console gets dim `⏱  Phase N took X.Ys (Mm SSs)` one-liners |
 
@@ -797,21 +797,21 @@ grep -E "ERROR|FATAL|prompt|chooser" /tmp/LAX*.txt | tail -30
 
 ### 5.0c — Stale-copy trap
 
-Only the canonical `DR_freshinstall.exp` at
+Only the canonical `dr_freshinstall.exp` at
 `/home/auraria/scripts/ediscovery_tests/` ships v0.17.7+'s
 forward-slash `dr_ctl.sh` path. If you've ever copied the file
 to `/tmp/` or `/root/scripts/` to invoke it directly with
-`expect -f /tmp/DR_freshinstall.exp`, that stale copy will still
-have the backslash bug. The DR_freshinstall.py driver always uses
+`expect -f /tmp/dr_freshinstall.exp`, that stale copy will still
+have the backslash bug. The dr_freshinstall.py driver always uses
 the repo copy, so the trap only fires for manual `expect -f`
 invocations. Delete the dupes:
 
 ```bash
-\rm -fv /tmp/DR_freshinstall.exp /root/scripts/DR_freshinstall.exp
+\rm -fv /tmp/dr_freshinstall.exp /root/scripts/dr_freshinstall.exp
 ```
 
 The legacy 3-script approach (§5.1–§5.3 below) still works and the
-shell + expect pieces are exactly what `DR_freshinstall.py` invokes
+shell + expect pieces are exactly what `dr_freshinstall.py` invokes
 internally. Manual invocation is only needed if you want to
 single-step the toolchain.
 
@@ -844,11 +844,11 @@ bash cleandr.sh
 licensing; without the `/root` copy you'd have to re-request the license
 file every reinstall.
 
-### 5.2 — `DR_freshinstall.exp`
+### 5.2 — `dr_freshinstall.exp`
 
 ```bash
 cd /tmp
-expect -f /home/auraria/scripts/ediscovery_tests/DR_freshinstall.exp
+expect -f /home/auraria/scripts/ediscovery_tests/dr_freshinstall.exp
 ```
 
 **What it does:**

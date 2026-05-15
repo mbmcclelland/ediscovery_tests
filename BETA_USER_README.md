@@ -53,7 +53,7 @@ upgrade without touching the tooling.)
 ```bash
 # Runs the InstallAnywhere installer; restores license; restarts drd.
 # Takes ~5-7 minutes.
-expect -f DR_freshinstall.exp
+expect -f dr_freshinstall.exp
 ```
 
 When this finishes, `systemctl status drd` should report `active`
@@ -256,7 +256,7 @@ dr_job_run <slug>
 
 # Re-cycle the DR backend (PRESERVES the dr-tools RPM)
 sudo bash cleandr.sh --keeprpm
-expect -f DR_freshinstall.exp
+expect -f dr_freshinstall.exp
 python qa_create_org_admin.py
 
 # Full reset (DR + dr-tools)
