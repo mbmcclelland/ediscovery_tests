@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.17.8](#v0178--2026-05-14) | 2026-05-14 | DR_freshinstall.exp — installer now spawned with `LAX_DEBUG=true` and `_JAVA_OPTIONS` for verbose InstallAnywhere diagnostics |
 | [v0.17.7](#v0177--2026-05-14) | 2026-05-14 | DR_freshinstall.exp — `dr_ctl.sh status` path uses forward slashes (was backslashes; bash stripped them to `homeaurariaAHSbindr_ctl.sh`) |
 | [v0.17.6](#v0176--2026-05-14) | 2026-05-14 | Logo swapped to user-supplied 7-line gradient; phase banner re-coloured bright-blue border + bold-yellow text |
 | [v0.17.5](#v0175--2026-05-14) | 2026-05-14 | Reef-a-TUI logo regenerated at fivebyfive scale 0 — readable as REEF-A-TUI, single-line render even on narrow terminals |
@@ -50,6 +51,45 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.17.8 — 2026-05-14
+
+### Added: LAX_DEBUG + `_JAVA_OPTIONS` set before the installer spawns
+
+`DR_freshinstall.exp` now pre-populates two environment variables
+before `spawn ./5.5.3.2.bin -i console`:
+
+```tcl
+set env(LAX_DEBUG) "true"
+set env(_JAVA_OPTIONS) "-Dlax.debug.level=3 -Dlax.debug.all=true"
+```
+
+**Why:** InstallAnywhere's wrapper (LAX) reads these on startup and
+emits a verbose debug log to `/tmp/LAX*.txt`. Level 3 + "all=true" is
+the most-detailed setting — every step the installer takes, every
+input it expects, every property file it reads. Painful but golden
+when an installer stalls / fires an unexpected dialog and the
+expect script's `expect -exact` patterns silently miss-match.
+
+Set via Tcl's `env` array rather than wrapping the spawn in
+`bash -c "export ... ; ./5.5.3.2.bin ..."`. Idiomatic expect, one
+fewer process in the chain, the PTY stays directly attached to the
+installer. End behaviour is identical to the shell-export form the
+user requested.
+
+**Files:**
+
+- `DR_freshinstall.exp` — `set env(LAX_DEBUG)` + `set env(_JAVA_OPTIONS)`
+  before line 15's `spawn`
+- `__version__.py` → 0.17.8
+- CHANGELOG.md (this entry).
+
+The next destructive run will produce a `/tmp/LAX*.txt` debug log
+alongside the existing `/tmp/dr-freshinstall-<TS>.log`. The Python
+log captures the orchestration; the LAX log captures the installer
+internals.
 
 ---
 

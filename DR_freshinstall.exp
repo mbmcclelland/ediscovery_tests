@@ -12,6 +12,14 @@ if {$force_conservative} {
 
 set timeout -1
 match_max 100000
+# v0.17.8 — LAX_DEBUG / _JAVA_OPTIONS pre-populated for the installer.
+# InstallAnywhere reads these on startup; level 3 + "all=true" emits a
+# verbose debug log to /tmp/LAX*.txt, useful for diagnosing installer
+# stalls or unexpected dialog prompts. Setting via Tcl's `env` array
+# is the expect-idiomatic way to inject environment without wrapping
+# the spawn in `bash -c`.
+set env(LAX_DEBUG) "true"
+set env(_JAVA_OPTIONS) "-Dlax.debug.level=3 -Dlax.debug.all=true"
 spawn ./5.5.3.2.bin -i console
 expect -exact "PRESS <ENTER> TO CONTINUE:"
 send -- "\r"
