@@ -516,13 +516,16 @@ that preflight tries to parse as JSON.
 
 ## Fresh-Install / Reinstall Toolchain
 
-### One-shot driver: `DR_freshinstall.py` (v0.17.0 — recommended)
+### One-shot driver: `DR_freshinstall.py` (v0.17.9 — recommended)
 
 A single Python entry point replaces the legacy 3-script sequence
 (cleandr → expect → playwright). REST-based, no Chromium, ~5× faster.
+Help-by-default — running with no args prints help and exits so the
+destructive default flow never starts by accident.
 
 ```bash
-sudo .venv/bin/python DR_freshinstall.py
+sudo .venv/bin/python DR_freshinstall.py --force        # full destructive
+sudo .venv/bin/python DR_freshinstall.py                # prints help, exits 0
 ```
 
 What it does — 13 API-level steps in order:
@@ -531,7 +534,7 @@ What it does — 13 API-level steps in order:
 2. Doc storage @ `/data/docstorage`
 3. Index storage @ `/data/indexstorage`
 4. Assign index storage as the system storage depot
-5. Trigger virus-definitions update
+5. Trigger virus-definitions update (120 s timeout — first-call sync)
 6. Inactivity timeout to 99 min (configurable via `--inactivity-minutes`)
 7. Create the `training` organization
 8. Create `admin@training` (Org Administrator, password `password`)
@@ -543,25 +546,63 @@ What it does — 13 API-level steps in order:
 12. Read-write NFS connector @ `/data/archive`
 13. PROJECT data area on archive + EXPORT data area on export
 
-Flags:
+#### On-screen UX (v0.17.4–v0.17.9)
 
-| Flag | Use case |
+Opens with the **Reef-a-TUI** logo (5–7 lines, blue → light-grey
+gradient) and a bold-yellow **Digital Reef Fresh Installer version
+X.Y.Z** subtitle, then a cyan run-config panel. During execution a
+Rich progress bar is pinned at the bottom of the live region while
+subprocess output (cleandr `rm -rfv`, the InstallAnywhere installer,
+drd systemd debug) streams above it prefixed with a dim `│`. Each
+phase opens with a bright-blue / bold-yellow banner. Successful
+phases close with a dim `⏱  Phase N took X.Ys (Mm SSs)` subtotal.
+
+End state: a green `SUCCESS` panel with credentials + log file path.
+A failed run shows a red `FAILURE` panel that points at
+`docs/RUNBOOK.md §4g/§4h/§5`.
+
+#### Log files
+
+| Path | Content |
 |---|---|
-| `--dry-run` | print every action without doing it |
-| `--skip-clean --skip-installer` | drd already up; just (re-)provision |
-| `--keep-existing` | idempotent recovery — every step skips if target exists |
-| `--keeprpm` | passed through to `cleandr.sh` |
-| `--hostname HOST` | override default `192.168.58.128` |
-| `--inactivity-minutes N` | session timeout (default 99) |
-| `--initial-password PW` / `--final-password PW` | override the DRSysAdmin pw transition |
+| `/tmp/dr-freshinstall-<TIMESTAMP>.log` | Driver orchestration — phases, steps, API responses, per-step elapsed, `phase wall clock:` subtotals, `total wall clock:` summary |
+| `/tmp/LAX*.txt` | InstallAnywhere internals — every installer step, expected input, property file read (v0.17.8: `LAX_DEBUG=true _JAVA_OPTIONS="-Dlax.debug.level=3 -Dlax.debug.all=true"` set before `spawn`) |
+
+Useful greps:
+
+```bash
+grep -E "phase wall clock|total wall clock" /tmp/dr-freshinstall-*.log
+grep -E "ERROR|FATAL|prompt|chooser"        /tmp/LAX*.txt
+```
+
+#### Flags (v0.17.9)
+
+| Group | Flag | Use |
+|---|---|---|
+| Phase  | `--skip-clean` / `--skip-installer` / `--skip-api` | toggle each phase |
+| Behav. | `--dry-run`               | print every action, no shells out, no API calls |
+|        | `--force`                | bypass the destructive-op y/n confirmation |
+|        | `--keep-existing`        | idempotent recovery — every step skips if target exists |
+|        | `--no-progress`          | disable the live progress bar (CI / non-TTY) |
+|        | `--keeprpm`              | passed through to `cleandr.sh` (keep dr-tools RPM) |
+| Target | `--hostname HOST`        | default `192.168.58.128` |
+|        | `--nfs-host HOST`        | default = same as `--hostname` |
+|        | `--inactivity-minutes N` | session timeout (default 99) |
+|        | `--initial-password PW`  | DRSysAdmin's first-install pw (default `DRSysAdmin`) |
+|        | `--final-password PW`    | DRSysAdmin's pw after the change (default `password`) |
+| Log    | `--log-file PATH`        | default `/tmp/dr-freshinstall-<TS>.log` |
+|        | `--log-level LEVEL`      | DEBUG / INFO / WARNING / ERROR (default INFO) |
+|        | `--verbose`, `-v`        | shortcut for `--log-level=DEBUG` |
 
 End state: `DRSysAdmin` / `password`, `admin@training` / `password`,
 fully-stocked training org ready for `dr-tui` or `dr-load`.
 
 > ⚠️ **Destructive and unrecoverable** without `--skip-clean`. The default
 > teardown wipes `/home/auraria/AHS*`, `/data/docstorage/*`,
-> `/data/indexstorage/*`, the dr-tools RPM, and per-user systemd timers.
-> Run with `--dry-run` first if unsure.
+> `/data/indexstorage/*`, the dr-tools RPM, the four DR postgres DBs
+> (v0.17.2 — root cause of QA-v0171-4), and per-user systemd timers.
+> Run with `--dry-run` first if unsure. Phase-1+2 ask for an
+> interactive `YES` (uppercase) unless `--force` is set.
 
 ### Legacy 3-script chain (still works)
 

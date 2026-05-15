@@ -714,10 +714,11 @@ effect, ~5× faster, no Chromium dependency.
 > intend to start over. License is preserved to `/root/license.lic`
 > automatically.
 
-### 5.0 — `DR_freshinstall.py` (v0.17.0+ — recommended)
+### 5.0 — `DR_freshinstall.py` (v0.17.9+ — recommended)
 
 ```bash
-sudo .venv/bin/python DR_freshinstall.py
+sudo .venv/bin/python DR_freshinstall.py --force         # full destructive
+sudo .venv/bin/python DR_freshinstall.py                 # no args → help
 ```
 
 Three internal phases, each toggleable:
@@ -736,17 +737,78 @@ choices in the API phase:
   — so DRSysAdmin must add itself (step 9) before it can create
   `admin@training` (step 8). The user-spec step *numbers* are
   preserved in the headers; only execution order swaps. See
-  API_PROGRAMMING_GUIDE §10.9.
+  API_PROGRAMMING_GUIDE §10.9 / `empty-org-permission-trap` memory.
 - **Sys-scoped `listRoles`.** The first role lookup uses
   `adminOrgManager/listRoles` (sys-scope), which works even before
   membership is established.
 - **Fresh `EDiscoveryClient` for re-login.** After
   `changeUserPassword`, the script builds a NEW client rather than
   mutating `client.cfg.password` (Config is `@dataclass(frozen=True)`
-  — see API_PROGRAMMING_GUIDE §10.10).
+  — see API_PROGRAMMING_GUIDE §10.10 / `frozen-config-gotcha` memory).
 - **`--keep-existing` matches by export-path, not name.** Idempotent
   recovery works even if a prior partial-failure left depots under
   different names — we check `(export, fqdn)` instead of `name`.
+- **`cleandr.sh` drops the 4 DR postgres DBs** (v0.17.2 fix for
+  QA-v0171-4): file-system teardown alone left the user table
+  schema present but empty, which caused `changeUserPassword` to
+  500 with `User does not exist` on the second install.
+- **REST-readiness probe in `wait_for_drd`** (v0.17.2 fix for
+  QA-v0171-2): TCP-listen on :8443 fires before wildfly finishes
+  deploying the eDiscovery webapp. We poll
+  `realmManager/createSession` and accept anything non-5xx OR a
+  5xx body that mentions `digitalreef` (= a structured DR error,
+  routing is alive).
+- **`trigger_virus_update` timeout = 120 s** (v0.17.2 fix for
+  QA-v0171-5): the first-ever virus-defs sync runs synchronously
+  before returning; the default 30 s `EDiscoveryClient.post`
+  timeout was too short.
+
+### 5.0a — UX (v0.17.4 → v0.17.9)
+
+The driver evolved a Rich-based UI in fast iteration with the
+beta tester:
+
+| | Element |
+|---|---|
+| **v0.17.1** | Rich progress bar, file logging, help-by-default, destructive-op confirmation gate (`--force` to bypass) |
+| **v0.17.4** | Reef-a-TUI logo at startup; bold-yellow `Digital Reef Fresh Installer version X.Y.Z` subtitle; `_stream_subprocess()` routes cleandr / installer / drd subprocess output through `console.print()` so the progress bar stays pinned at the bottom of the live region while logs scroll above |
+| **v0.17.5** | Logo regenerated at `bit -font fivebyfive -scale 0 "Reef-A-TUI"` so each letter is ~10 cols wide and individually legible |
+| **v0.17.6** | User-supplied 7-line logo + Digital-Reef brand palette (blue → light-grey gradient); phase banner border `bright_blue` + bold yellow title |
+| **v0.17.7** | Fixed `dr_ctl.sh status` path in `DR_freshinstall.exp` (backslashes → forward slashes; cosmetic, install was not affected) |
+| **v0.17.8** | `LAX_DEBUG=true` + `_JAVA_OPTIONS="-Dlax.debug.level=3 -Dlax.debug.all=true"` set before `spawn ./5.5.3.2.bin -i console`; emits `/tmp/LAX*.txt` with verbose InstallAnywhere internals |
+| **v0.17.9** | Per-phase wall-clock subtotals — `with _phase(N, "name"):` wraps each phase block; file log gets `phase wall clock:` lines; console gets dim `⏱  Phase N took X.Ys (Mm SSs)` one-liners |
+
+### 5.0b — Log files
+
+| Path | Contents |
+|---|---|
+| `/tmp/dr-freshinstall-<TS>.log` | Driver orchestration: phases, steps, API responses, per-step `(N.Ns)`, `phase wall clock:`, `total wall clock:` |
+| `/tmp/LAX*.txt` | InstallAnywhere internals — every installer step, every input it expects, every property file it reads. Large (multi-MB) but golden when an installer stalls and `expect -exact` silently miss-matches a pattern. |
+
+Quick grep recipes:
+
+```bash
+# Per-phase + total timing across all runs
+grep -E "phase wall clock|total wall clock" /tmp/dr-freshinstall-*.log
+
+# Hunt installer pain in the LAX log
+grep -E "ERROR|FATAL|prompt|chooser" /tmp/LAX*.txt | tail -30
+```
+
+### 5.0c — Stale-copy trap
+
+Only the canonical `DR_freshinstall.exp` at
+`/home/auraria/scripts/ediscovery_tests/` ships v0.17.7+'s
+forward-slash `dr_ctl.sh` path. If you've ever copied the file
+to `/tmp/` or `/root/scripts/` to invoke it directly with
+`expect -f /tmp/DR_freshinstall.exp`, that stale copy will still
+have the backslash bug. The DR_freshinstall.py driver always uses
+the repo copy, so the trap only fires for manual `expect -f`
+invocations. Delete the dupes:
+
+```bash
+\rm -fv /tmp/DR_freshinstall.exp /root/scripts/DR_freshinstall.exp
+```
 
 The legacy 3-script approach (§5.1–§5.3 below) still works and the
 shell + expect pieces are exactly what `DR_freshinstall.py` invokes
@@ -769,6 +831,14 @@ bash cleandr.sh
    (InstallAnywhere registry), `/tmp/cbe*`, `/tmp/cpuinfo.txt`,
    `/tmp/artemis*`, `/tmp/install.dir.*`, `/data/docstorage/*`,
    `/data/indexstorage/*`.
+4. **(v0.17.2)** `dropdb --if-exists` on the 4 DR postgres databases:
+   `auraria_mgmt`, `auraria_admin`, `auraria_activemq`, `dr_history`.
+   Without this step, the second-and-subsequent install on the same
+   host gets fresh code against stale (and now-empty) postgres
+   schemas — symptom: `userManager/changeUserPassword` returns 500
+   "User does not exist" because the schema is there but the row
+   isn't. See QA-DR_freshinstall-v0171.md ticket QA-v0171-4 for the
+   forensic.
 
 **Why the license dance:** the InstallAnywhere uninstall doesn't preserve
 licensing; without the `/root` copy you'd have to re-request the license
