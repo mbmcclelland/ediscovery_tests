@@ -13,7 +13,7 @@
 4. What Our Scripts Do vs. What the Browser Does
 5. Fresh-Install / Reinstall Toolchain
 6. Endpoint Capture Methodology (proxy + Playwright)
-7. The dr-tui Landing Dashboard
+7. The dr_tui Landing Dashboard
 8. Distribution / RPM Packaging
 9. Feature additions v0.08 → v0.14 (concise reference)
 10. The systemScope pitfall (v0.15.2) — and a reusable diagnostic recipe
@@ -912,12 +912,12 @@ run are the source material for `docs/endpoints_v0.06.md`.
 
 ### 5.4 — Verification
 
-After step 3 the system should be ready for `dr-load`, `dr-tui`, and the
+After step 3 the system should be ready for `dr-load`, `dr_tui`, and the
 pytest suite without further configuration:
 
 ```bash
 dr-load preflight                      # 6 checks, all green
-dr-tui                                 # log in either role
+dr_tui                                 # log in either role
 pytest -m smoke                        # quick health
 .venv/bin/python -c "
 import requests, uuid
@@ -996,7 +996,7 @@ and the response status. That's enough to write the table in
 
 ---
 
-## 7. The dr-tui Landing Dashboard (v0.07)
+## 7. The dr_tui Landing Dashboard (v0.07)
 
 ### 7.1 — What it shows
 
@@ -1011,8 +1011,8 @@ independently:
 | Logs | `tail -f /home/auraria/AHS/output/*.log` with INFO / WARN / ERROR filter toggles, rotation-safe | 1 s | local file poll |
 | Top processes | top 5 by CPU%, ps-aux style | 3 s | `psutil` (local) |
 
-The local panels (Metrics, Logs, Processes) assume `dr-tui` runs on the
-DR host itself — which is the lab setup. Running `dr-tui` from a
+The local panels (Metrics, Logs, Processes) assume `dr_tui` runs on the
+DR host itself — which is the lab setup. Running `dr_tui` from a
 separate machine still shows the License + Node panels (REST) but the
 local panels then reflect that machine, not DR.
 
@@ -1082,7 +1082,7 @@ down:
 |---|---|
 | `/opt/dr-tools/venv` | Self-contained Python 3 venv with every runtime dep |
 | `/opt/dr-tools/share/env.example` | Sample `.env` for `cp` + edit |
-| `/usr/bin/dr-tui` `/usr/bin/dr-load` | Launcher scripts (`exec /opt/dr-tools/venv/bin/<tool>`) |
+| `/usr/bin/dr_tui` `/usr/bin/dr-load` | Launcher scripts (`exec /opt/dr-tools/venv/bin/<tool>`) |
 | `/usr/share/doc/dr-tools/` | README + CHANGELOG + endpoint docs |
 | `/usr/share/licenses/dr-tools/__version__.py` | Version stamp |
 
@@ -1254,7 +1254,7 @@ is easy to repeat.
 | v0.14.3 | DRSysAdmin's session starts in `super_system_customer` context. `adminOrgManager/listConnectors` returns `[]` *silently* without a per-org `initializeOrganization` switch. | Call `drdata.ensure_org_context(client, org)` before every per-org list, in every code path that iterates orgs. |
 | **v0.15.2** | **`helpers/api_client.py` auto-injected `"systemScope": True` on every request, causing DR to check the call against super-system permissions instead of org-context permissions. Net effect: PERMISSION_DENIED on `exploreConnector`, `createDataArea`, the entire indexing chain — for both DRSysAdmin AND org users — even though the Web UI worked fine for the same user.** | **Removed the auto-inject. Endpoints that genuinely need `systemScope: true` (Realm Settings, listJobs, listRealmTasks, cancelTask, etc.) already pass it explicitly. 34 explicit call sites verified.** |
 
-### 9.7 — Markup safety rule (dr-tui)
+### 9.7 — Markup safety rule (dr_tui)
 
 Anywhere user-controlled text flows into a Textual `RichLog` or
 `Static` that has `markup=True` (the default), it must be wrapped in

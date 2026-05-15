@@ -1047,7 +1047,7 @@ def step_8_create_org_admin(
 
 def step_8b_change_org_admin_password(args, client: EDiscoveryClient) -> None:
     """Bonus: admin@training is forced to change pw on first login. The
-    dr-tui org-pinned login expects 'password' (env DR_ORG_PASSWORD).
+    dr_tui org-pinned login expects 'password' (env DR_ORG_PASSWORD).
     Log in once as admin@training, change the pw, log back out."""
     if args.dry_run:
         _info(f"DRY-RUN: would login admin@training and change pw → "
@@ -1267,7 +1267,7 @@ def phase_api(args: argparse.Namespace) -> None:
     step_9_add_drsysadmin_to_org(args, client, org_admin_role)
     step_8_create_org_admin(args, client, org_admin_role)
     # Bonus: log in once as admin@training to clear the forced-change.
-    # This keeps the dr-tui org login working with `password` afterwards.
+    # This keeps the dr_tui org login working with `password` afterwards.
     step_8b_change_org_admin_password(args, client)
     import_handle  = step_10_create_import_connector(args, client)
     export_handle  = step_11_create_export_connector(args, client)
@@ -1416,7 +1416,7 @@ def main() -> int:
                 f"DRSysAdmin     /  {args.final_password}\n"
                 f"admin@training /  {args.final_password}\n\n"
                 f"Log file:         {log_path}\n"
-                f"Run dr-tui:       .venv/bin/dr-tui",
+                f"Run dr_tui:       .venv/bin/dr_tui",
                 style="green",
             ),
             border_style="green",

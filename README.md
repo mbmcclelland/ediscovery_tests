@@ -14,14 +14,15 @@ self-contained venv:
 
 | On PATH | Purpose |
 |---|---|
-| `dr-tui`   / `dr_tui`            | Textual TUI dashboard — live License, Realm Node Status, system metrics, log stream, per-org CRUD on storage depots, system users, system groups |
-| `dr-load`                        | Headless load-test CLI — preflight, background monitoring, merged CSV reports |
-| `dr-job-run` / `dr-job-delete`   | Indexing-chain CLIs (createDataArea → createCorpus → createRepresentation → poll) |
-| `dr-freshinstall` / `dr_freshinstall` | End-to-end **REST-based** fresh-install driver — cleandr → InstallAnywhere expect → 13 API-provisioning steps, with Rich progress bar pinned at the bottom of the live region |
+| `dr_tui`              | Textual TUI dashboard — live License, Realm Node Status, system metrics, log stream, per-org CRUD on storage depots, system users, system groups |
+| `dr-load`             | Headless load-test CLI — preflight, background monitoring, merged CSV reports |
+| `dr-job-run` / `dr-job-delete` | Indexing-chain CLIs (createDataArea → createCorpus → createRepresentation → poll) |
+| `dr_freshinstall`     | End-to-end **REST-based** fresh-install driver — cleandr → InstallAnywhere expect → 13 API-provisioning steps, with Rich progress bar pinned at the bottom of the live region |
 
-Both naming conventions (hyphen and underscore) work for every tool —
-the underscore form is a symlink to the hyphen form. Pick whichever
-matches your muscle memory.
+The canonical command name is the underscore form (`dr_tui`,
+`dr_freshinstall`). Legacy hyphen aliases (`dr-tui`, `dr-freshinstall`)
+remain installed as compatibility symlinks for muscle memory and any
+existing scripts that call them.
 
 Built with **pytest + requests** for functional tests, **Locust** for
 load testing, **Textual** + **Rich** for the TUI and the fresh-install
@@ -39,14 +40,14 @@ REST-based `dr-freshinstall`, no Chromium).
   reef-a-tui-logo.{txt,go}  logo source + bit-generated reference
 
 /opt/dr-tools/venv/                       ← bundled Python venv
-  bin/dr-tui  bin/dr-load  bin/dr-job-run  bin/dr-job-delete
+  bin/dr_tui  bin/dr-load  bin/dr-job-run  bin/dr-job-delete
   bin/python3 (+ Rich, requests, urllib3, textual, …)
 
 /usr/bin/                                 ← launchers on PATH
-  dr-tui      dr_tui
+  dr_tui            (canonical) + dr-tui (legacy alias symlink)
   dr-load
-  dr-job-run  dr-job-delete
-  dr-freshinstall  dr_freshinstall
+  dr-job-run        dr-job-delete
+  dr_freshinstall   (canonical) + dr-freshinstall (legacy alias symlink)
 ```
 
 ---
@@ -62,7 +63,7 @@ REST-based `dr-freshinstall`, no Chromium).
 ### Distribution (production / lab hosts) — RPM
 
 For Rocky/RHEL/Fedora hosts, build a self-contained RPM that drops a
-venv at `/opt/dr-tools/` and launchers at `/usr/bin/{dr-tui,dr-load}`.
+venv at `/opt/dr-tools/` and launchers at `/usr/bin/{dr_tui,dr-load}`.
 Full build + install instructions in
 [`packaging/README.md`](packaging/README.md). TL;DR:
 
@@ -105,7 +106,7 @@ pip install -e .[dev]     # + pytest + playwright + mitmproxy
 Verify:
 
 ```bash
-dr-tui --help        # launches the Textual login screen
+dr_tui --help        # launches the Textual login screen
 dr-load --help
 ```
 
@@ -154,12 +155,12 @@ pytest --html=report.html --self-contained-html
 
 ---
 
-## TUI Usage (`dr-tui`)
+## TUI Usage (`dr_tui`)
 
 A lazygit-style Textual TUI for live monitoring. Launch it from any terminal:
 
 ```bash
-dr-tui            # or: python -m dr_tui
+dr_tui            # or: python -m dr_tui
 ```
 
 **Login screen** — pick `DRSysAdmin` or `admin@training`, type the password
@@ -279,7 +280,7 @@ in-app reference card.
 
 ### Terminal compatibility
 
-`dr-tui` is built on **Textual**, which uses modern terminal capabilities
+`dr_tui` is built on **Textual**, which uses modern terminal capabilities
 (true colour, kitty-keyboard protocol, UTF-8 box-drawing). Most modern
 terminals Just Work; a few legacy ones need a nudge.
 
@@ -298,14 +299,14 @@ terminals Just Work; a few legacy ones need a nudge.
 2. **`TERM=xterm-256color`** in your session — PuTTY advertises bare
    `xterm` by default, which lacks 256-color terminfo on RHEL/Rocky.
 
-The `/usr/bin/dr-tui` launcher (RPM v0.10.2+) sets these defensively, so
+The `/usr/bin/dr_tui` launcher (RPM v0.10.2+) sets these defensively, so
 on a clean install you just need to flip PuTTY's UTF-8 setting once.
 
 If the screen renders but **keystrokes don't reach the app**, run with
 the kitty-keyboard probe disabled:
 
 ```bash
-TERM=xterm-256color TEXTUAL_FEATURES= dr-tui
+TERM=xterm-256color TEXTUAL_FEATURES= dr_tui
 ```
 
 (PuTTY swallows the keyboard-enhancement query that Textual sends on
@@ -434,7 +435,7 @@ when there are retention timers active *and* lingering is off.
 | `dr-job-run <slug-or-name>` | Run one saved job: log in → submit indexing chain → append RunRecord → schedule retention timer | The TUI's Run / Run Now buttons; also runnable from a shell |
 | `dr-job-delete <slug> <run-id>` | Retention cleanup: delete corpus + data area created by one run | The retention `.service` unit fires this; runnable manually to expire a run early |
 
-Both CLIs read `~/.env` for credentials (same as `dr-tui` / `dr-load`),
+Both CLIs read `~/.env` for credentials (same as `dr_tui` / `dr-load`),
 respect `DR_TOOLS_STATE_DIR`, and tee stdout/stderr to a per-run log
 file under `~/.dr-tools/logs/`.
 
@@ -632,7 +633,7 @@ grep -E "ERROR|FATAL|prompt|chooser"        /tmp/LAX*.txt
 |        | `--verbose`, `-v`        | shortcut for `--log-level=DEBUG` |
 
 End state: `DRSysAdmin` / `password`, `admin@training` / `password`,
-fully-stocked training org ready for `dr-tui` or `dr-load`.
+fully-stocked training org ready for `dr_tui` or `dr-load`.
 
 > ⚠️ **Destructive and unrecoverable** without `--skip-clean`. The default
 > teardown wipes `/home/auraria/AHS*`, `/data/docstorage/*`,
@@ -699,7 +700,7 @@ All phases skip-if-exists, so re-running is safe. Captures API traffic to
 `/tmp/dr_proxy_capture.json`.
 
 After step 3 completes: `dr-load preflight` should return all-green; the
-pytest suite and `dr-tui` work without further configuration.
+pytest suite and `dr_tui` work without further configuration.
 
 ### What if step 2's expect script hangs?
 
@@ -963,7 +964,7 @@ Every markdown file in the repo, what it's for, and who should read it.
 
 ### Quick links by role
 
-**I just want to use dr-tui** → start with the [TUI Usage](#tui-usage-dr-tui)
+**I just want to use dr_tui** → start with the [TUI Usage](#tui-usage-dr_tui)
 section above. F1 inside the app gives you a keybinding card.
 
 **I'm doing QA on a release** → start with

@@ -12,7 +12,7 @@
 > actually has full connector access.
 >
 > **You do NOT need to perform this role grant for default installs.**
-> The Job Scheduler tab and all of dr-tui's connector-aware features
+> The Job Scheduler tab and all of dr_tui's connector-aware features
 > work out of the box for both DRSysAdmin and admin@training.
 >
 > This document is preserved for the rare case where someone DOES
@@ -26,7 +26,7 @@
 hardening, non-default access patterns, or supplementary roles beyond
 the defaults. **NOT needed** to make dr-tools work.
 
-**When the doc thought you needed it (historical):** the dr-tui Job
+**When the doc thought you needed it (historical):** the dr_tui Job
 Scheduler's New Job wizard reports `PERMISSION_DENIED` (or
 `PROJECT_NOT_ACTIVATED Project 0 not activated`) on Browse / Count
 / Save. *In v0.15.2+, the fix for that is `pip install -U dr-tools`
@@ -158,15 +158,15 @@ OK exploreConnector: 12 entries under /data/import
   🗀 drmanual
 ```
 
-If both lines print: **dr-tui's Job Scheduler will work end-to-end.**
+If both lines print: **dr_tui's Job Scheduler will work end-to-end.**
 The TUI's dual-login at startup will pick up `org_client` (because
 admin@training now exists and has the right role), so `Browse`,
 `Count files`, `Schedule`, and `Run now` will all succeed.
 
-## Step 7 — Verify from dr-tui
+## Step 7 — Verify from dr_tui
 
 ```bash
-.venv/bin/dr-tui
+.venv/bin/dr_tui
 ```
 
 - Log in as DRSysAdmin.

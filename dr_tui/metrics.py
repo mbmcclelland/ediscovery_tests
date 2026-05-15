@@ -1,8 +1,8 @@
 """
-Local-host metrics + log-tailing helpers for the dr-tui landing dashboard.
+Local-host metrics + log-tailing helpers for the dr_tui landing dashboard.
 
 These are pure Python (psutil + stdlib) and don't talk to the DR REST
-API — they read straight off the OS. dr-tui typically runs on the same
+API — they read straight off the OS. dr_tui typically runs on the same
 host as DR, so "local" metrics _are_ the DR node's metrics.
 
 Public surface:

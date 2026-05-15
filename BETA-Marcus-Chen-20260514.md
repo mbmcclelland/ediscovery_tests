@@ -3,7 +3,7 @@
 **Persona:**
 - Marcus Chen, Senior Linux Admin
 - Manages a Rocky 9 / RHEL 9 lab cluster
-- Wants `dr-tui` as a daily traffic-control station for the DR
+- Wants `dr_tui` as a daily traffic-control station for the DR
   cluster
 - Will load-test by submitting jobs of various folder sizes
 - **Colour-blind** (deuteranopia) — annoyed by colour-only state cues
@@ -22,27 +22,27 @@ different hat) addresses each one inline.
 
 ## Walking through the README
 
-### Step 1 — `dr-tui` from RPM launches?
+### Step 1 — `dr_tui` from RPM launches?
 
 ```
-$ which dr-tui
-/usr/bin/dr-tui
+$ which dr_tui
+/usr/bin/dr_tui
 $ rpm -q dr-tools
 dr-tools-0.15.0-1.el9.x86_64
 $ ls /usr/bin/dr-*
 /usr/bin/dr-job-delete
 /usr/bin/dr-job-run
 /usr/bin/dr-load
-/usr/bin/dr-tui
+/usr/bin/dr_tui
 ```
 
-**PASS.** Marcus appreciates that `dr-tui` is on `$PATH` with no
+**PASS.** Marcus appreciates that `dr_tui` is on `$PATH` with no
 activation step required — exactly what he expected from an RPM.
 All four binaries present.
 
 ### Step 2 — first launch (admin@training)
 
-`$ dr-tui` → login screen renders cleanly.
+`$ dr_tui` → login screen renders cleanly.
 
 Marcus picks **admin@training** per the README recommendation for
 Job Scheduler functionality. Lands on the dashboard within ~1s.
@@ -127,7 +127,7 @@ accepts that "do this once per DR install" is reasonable.
 He performs the role grant in the DR Web UI per the doc:
 copies "Organization Administrator" → `Org Admin + Connectors`,
 enables Connectors + Project Data Areas + Corpora, reassigns
-admin@training. Logs out + logs back into dr-tui.
+admin@training. Logs out + logs back into dr_tui.
 
 ### Step 7 — second attempt at New Job
 
@@ -280,7 +280,7 @@ RPM still installed; DR backend torn down. ✓
 1. Skip the `docs/DR_ROLE_SETUP.md` step (or be on a fresh DR
    install where admin@training lacks "Project Data Areas" / "Corpora"
    permissions).
-2. Log into dr-tui as admin@training.
+2. Log into dr_tui as admin@training.
 3. Job Scheduler → New Job.
 
 **Expected:** A specific message explaining that admin@training
@@ -355,7 +355,7 @@ or render `Indexing into project: (none — see TICKET-1 fix)`.
 
 ### FR-1 — First-launch wizard / welcome banner
 
-**Detail:** First time admin@training launches dr-tui, show a
+**Detail:** First time admin@training launches dr_tui, show a
 one-time banner (dismissable, stored in `~/.dr-tools/state/welcomed`)
 pointing at:
 - `docs/DR_ROLE_SETUP.md` (role grant)
@@ -382,7 +382,7 @@ know it exists.
 - Per-org or per-project breakdown toggle
 
 This is the "Traffic Control station at a glance" feature that
-distinguishes dr-tui from `kubectl get pods` style live views.
+distinguishes dr_tui from `kubectl get pods` style live views.
 
 ### FR-4 — i18n / foreign language support
 

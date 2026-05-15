@@ -1,7 +1,7 @@
 # dr-tools — Beta tester guide
 
 **For:** Senior Linux Admin running a Digital Reef lab; using
-`dr-tui` as a daily-driver traffic-control station.
+`dr_tui` as a daily-driver traffic-control station.
 **Tool version:** v0.15.0
 **You'll need:** a Rocky / RHEL / Fedora 9.x host, sudo, ~10 GB free
 under `/data/`, Python 3.9+ already in `/usr/bin/`. No internet
@@ -16,7 +16,7 @@ console scripts on `$PATH`:
 
 | Command | What it does |
 |---|---|
-| `dr-tui` | Textual TUI — your traffic-control station |
+| `dr_tui` | Textual TUI — your traffic-control station |
 | `dr-load` | Headless load-test CLI |
 | `dr-job-run` | Run one saved job (used by the TUI's Run / Run-Now and by recurring systemd timers) |
 | `dr-job-delete` | Retention cleanup — deletes the corpus + data area created by one run |
@@ -94,7 +94,7 @@ sudo dnf install -y \
   ./packaging/rpmbuild/RPMS/x86_64/dr-tools-0.15.0-1.el9.x86_64.rpm
 ```
 
-After this completes, `dr-tui`, `dr-load`, `dr-job-run`, and
+After this completes, `dr_tui`, `dr-load`, `dr-job-run`, and
 `dr-job-delete` are all on your `$PATH`.
 
 ### 6. Configure your `.env`
@@ -127,7 +127,7 @@ loginctl show-user $USER --property=Linger     # should print Linger=yes
 ### 8. Launch
 
 ```bash
-dr-tui
+dr_tui
 ```
 
 Pick **admin@training** at the login screen if you want the full

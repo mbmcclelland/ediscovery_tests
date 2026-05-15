@@ -1,5 +1,5 @@
 """
-Role-aware data fetchers for the dr-tui dashboard.
+Role-aware data fetchers for the dr_tui dashboard.
 
 Sync EDiscoveryClient calls are invoked from Textual's worker threads
 (@work(thread=True)), so these functions are deliberately sync.
@@ -1720,7 +1720,7 @@ def create_system_user(
     Maps to `adminOrgManager/createUser` with `orgName: "super_system_customer"`
     + `systemScope: true`. The captured shape carries `contextHandle: "training"`
     (whichever org the admin is currently in); we use `super_system_customer`
-    so the call is self-contained for the dr-tui session.
+    so the call is self-contained for the dr_tui session.
     """
     return client.post(
         "adminOrgManager/createUser",

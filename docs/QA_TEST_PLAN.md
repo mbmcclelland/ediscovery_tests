@@ -3,7 +3,7 @@
 **Audience:** QA Engineer taking ownership of the dr-tools test
 plan from the development team.
 
-**Scope:** `dr-tui` (Textual TUI), `dr-load` (load-test CLI), and the
+**Scope:** `dr_tui` (Textual TUI), `dr-load` (load-test CLI), and the
 two scheduler companion CLIs (`dr-job-run`, `dr-job-delete`). Pytest
 functional suite (`tests/*`) is the regression net beneath all of it.
 
@@ -55,7 +55,7 @@ them means **don't certify the release**; chase the root cause.
 | 1 | `dr-load preflight` | All checks green | Anything red → see RUNBOOK §1 |
 | 2 | `pytest -m smoke` | All pass | Failure → flag the failing test for the dev team |
 | 3 | `pytest tests/test_dr_tui_dashboard_layout.py tests/test_dr_tui_depot_modal.py tests/test_dr_tui_scheduler.py` | 19/19 green | Pilot regression — TUI is broken at the structural level |
-| 4 | `dr-tui` → DRSysAdmin → password | Landing Dashboard appears with metrics scrolling | Login error / blank screen → RUNBOOK §2 |
+| 4 | `dr_tui` → DRSysAdmin → password | Landing Dashboard appears with metrics scrolling | Login error / blank screen → RUNBOOK §2 |
 | 5 | F3 → wait 2s | Jobs Monitor modal lists tasks (or shows "no jobs"). Filter buttons clickable. | Crash → check `~/.dr-tools/logs/` for last run / report |
 | 6 | System Settings tab → Realm Settings → Password Policy → Edit | Modal pops; numeric fields visible; Cancel returns to read view | Modal won't open → F4 binding broken |
 | 7 | Organizations → training → Connectors | **Green** "N connector(s) for training" status line + 1 row | Yellow "no connectors" or red error → RUNBOOK §3 |
@@ -84,7 +84,7 @@ modal / CLI surface, and the test files that cover it.
 | F2 docs side-pane | v0.09 | F2 toggle on each tab | `test_help_pane_toggle` | v0.09 |
 | F3 Jobs Monitor modal | v0.10 | F3 anywhere | `test_jobs_monitor_modal` | v0.10 |
 | Pause / Resume / Cancel / Priority | v0.10.1 | F3 action buttons | `test_priority_modal_paths` | v0.10.1 |
-| PuTTY terminal compat (now obsolete — use Tabby) | v0.10.2 | `/usr/bin/dr-tui` launcher | (manual) | v0.10.2 |
+| PuTTY terminal compat (now obsolete — use Tabby) | v0.10.2 | `/usr/bin/dr_tui` launcher | (manual) | v0.10.2 |
 | Jobs Monitor v2: listRealmTasks + type filter + per-task log | v0.11 | F3 — type Select, `L` shortcut | `test_jobs_monitor_modal` | v0.11.0 |
 | Realm Settings edit modals | v0.12 | System Settings → Realm Settings → Edit button or F4 | `test_settings_modal_paths` | v0.12.0 |
 | Job Scheduler tab (templates + systemd timers + CLIs) | v0.13 | Job Scheduler tab; `dr-job-run`, `dr-job-delete` | `test_dr_tui_scheduler.py` | v0.13.0 |
@@ -111,7 +111,7 @@ Pilot: `test_depot_modal_paths` (offline) + manual lab run.
 (`/data/docstorage`, `/data/indexstorage`).
 
 **Steps:**
-1. dr-tui → System Settings → Document Storage Depots → F7 (New).
+1. dr_tui → System Settings → Document Storage Depots → F7 (New).
 2. Fill: Name = `qa-doc-depot-1`, FQDN/IP = `192.168.58.128`,
    Export = `/data/docstorage`, Allocation = `0`.
 3. Save.
@@ -211,7 +211,7 @@ the live connector-browse endpoint.
   some files in it.
 
 **Happy path:**
-1. dr-tui → Job Scheduler → New Job.
+1. dr_tui → Job Scheduler → New Job.
 2. **Verify defaults:**
    - Name: empty
    - Organization: `training` (auto-picked)
@@ -302,7 +302,7 @@ journalctl --user -u dr-tools-retention-qa-retention-001-*.service
 connector for `training`.
 
 **Steps:**
-1. dr-tui → Organizations → training → Connectors.
+1. dr_tui → Organizations → training → Connectors.
 2. Inline status flips: `Loading connectors for training…` (yellow)
    → `1 connector(s) for training.` (green).
 3. Table shows the row: name, type=NFS, mode=READ, status=AVAILABLE.
@@ -415,7 +415,7 @@ TITLE:    [v0.14.3] <short symptom>
 
 ENVIRONMENT
   Terminal:    Tabby / Windows Terminal / …
-  dr-tui ver:  0.14.3
+  dr_tui ver:  0.14.3
   Role:        DRSysAdmin / admin@training
   Tab:         Landing / System Settings / Organizations / Job Scheduler
   Sub-view:    e.g. "Job Scheduler → Saved Templates"

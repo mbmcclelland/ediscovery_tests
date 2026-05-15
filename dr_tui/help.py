@@ -1,5 +1,5 @@
 """
-Help-content loader for the dr-tui F2 side pane.
+Help-content loader for the dr_tui F2 side pane.
 
 `help_content/` is generated once by `tools/extract_help.py` and shipped
 with the package (via `package_data` in setup.cfg). At runtime we just

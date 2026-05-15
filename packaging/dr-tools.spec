@@ -1,4 +1,4 @@
-# RPM spec for `dr-tools` — bundles dr-tui + dr-load and their deps into
+# RPM spec for `dr-tools` — bundles dr_tui + dr-load and their deps into
 # a self-contained venv under /opt/dr-tools.
 #
 # Build flow:
@@ -13,7 +13,7 @@
 %global py3 /usr/bin/python3
 %global drroot /opt/dr-tools
 # v0.17.10 — REEF-A-TUI ("Ratatouille") rebrand. The collection of
-# Digital-Reef ops tools (dr-tui, dr-load, DR_freshinstall.py, the
+# Digital-Reef ops tools (dr_tui, dr-load, DR_freshinstall.py, the
 # expect installer, cleandr) is collectively named REEF-A-TUI. The
 # Python venv stays at /opt/dr-tools/venv for backward compatibility
 # (it's where every existing wrapper / shebang points), but the
@@ -59,7 +59,7 @@ on PATH:
 
   dr-load   Headless load-test CLI — preflight, background monitoring,
             merged CSV reports for the eDiscovery REST API.
-  dr-tui    Textual TUI dashboard — landing page with live License,
+  dr_tui    Textual TUI dashboard — landing page with live License,
             Realm Node Status, system metrics, log stream, and top
             processes; per-org drill-down with full CRUD on storage
             depots, system users, and system groups.
@@ -94,9 +94,14 @@ mkdir -p %{buildroot}%{drroot}
 find %{buildroot}%{drroot}/venv/bin -type f \
     -exec sed -i 's|%{buildroot}%{drroot}|%{drroot}|g' {} \;
 
-# Drop launcher scripts in /usr/bin so dr-tui / dr-load are on PATH.
+# Drop launcher scripts in /usr/bin so dr_tui / dr-load are on PATH.
+# v0.19.2 — the canonical (underscore) wrapper is `dr_tui`; the
+# legacy hyphen form `dr-tui` is now a symlink to it. Reverses the
+# v0.17.10 layout where `dr-tui` was canonical and `dr_tui` the
+# symlink. End behaviour identical (both work), but every doc and
+# install-time banner now points at the underscore form first.
 mkdir -p %{buildroot}/usr/bin
-cat > %{buildroot}/usr/bin/dr-tui <<'EOF'
+cat > %{buildroot}/usr/bin/dr_tui <<'EOF'
 #!/bin/sh
 # PuTTY (and some other older SSH clients) advertises TERM=xterm which
 # lacks 256-color and confuses Textual's terminal-capability probes.
@@ -109,6 +114,11 @@ fi
 # wants enhancements via TEXTUAL_FEATURES=...
 : "${TEXTUAL_FEATURES=}"
 export TERM TEXTUAL_FEATURES
+# /opt/dr-tools/venv/bin/dr-tui is the Python console_script entry
+# point from setup.cfg — kept hyphenated there because that's where
+# the venv bin name lives. The user-facing /usr/bin/dr_tui wrapper
+# is what's documented; the system never asks you to type
+# /opt/dr-tools/venv/bin/anything.
 exec /opt/dr-tools/venv/bin/dr-tui "$@"
 EOF
 cat > %{buildroot}/usr/bin/dr-load <<'EOF'
@@ -138,20 +148,19 @@ install -m 0755 cleandr.sh            %{buildroot}%{reefroot}/cleandr.sh
 install -m 0644 reef-a-tui-logo.txt   %{buildroot}%{reefroot}/reef-a-tui-logo.txt
 install -m 0644 reef-a-tui-logo.go    %{buildroot}%{reefroot}/reef-a-tui-logo.go
 
-# v0.17.10 — REEF-A-TUI launchers.
-#
-# `dr_tui` (underscore) — alias for `dr-tui` (hyphen). Both naming
-# conventions live side-by-side because (a) the Python convention is
-# underscore, (b) the Unix CLI convention is hyphen, (c) the user
-# typed dr_tui in the v0.17.10 request, so we honour it.
-ln -sf dr-tui %{buildroot}/usr/bin/dr_tui
+# v0.19.2 — `dr-tui` (legacy hyphen alias) symlinks to `dr_tui`
+# (canonical). Reverse of the v0.17.10 layout. The hyphen alias is
+# kept for muscle memory + any user scripts that already call
+# `dr-tui` directly; new users + every doc reference uses `dr_tui`.
+ln -sf dr_tui %{buildroot}/usr/bin/dr-tui
 
-# `dr-freshinstall` + `dr_freshinstall` — new entry points for the
+# `dr_freshinstall` (canonical, v0.19.2) — entry point for the
 # end-to-end fresh-install driver. The script lives at
 # /opt/digitalreef/scripts/reef-a-tui/DR_freshinstall.py and uses
 # the venv's Python interpreter (which has Rich, requests, urllib3,
-# and the dr_tui.data helpers all pre-installed).
-cat > %{buildroot}/usr/bin/dr-freshinstall <<'EOF'
+# and the dr_tui.data helpers all pre-installed). The hyphen form
+# `dr-freshinstall` is kept as a back-compat symlink.
+cat > %{buildroot}/usr/bin/dr_freshinstall <<'EOF'
 #!/bin/sh
 # Launcher for the REEF-A-TUI ("Ratatouille") fresh-install driver.
 # Run with no args for help; --force for the full destructive
@@ -159,10 +168,10 @@ cat > %{buildroot}/usr/bin/dr-freshinstall <<'EOF'
 exec /opt/dr-tools/venv/bin/python3 \
     /opt/digitalreef/scripts/reef-a-tui/DR_freshinstall.py "$@"
 EOF
-chmod 0755 %{buildroot}/usr/bin/dr-freshinstall
-ln -sf dr-freshinstall %{buildroot}/usr/bin/dr_freshinstall
+chmod 0755 %{buildroot}/usr/bin/dr_freshinstall
+ln -sf dr_freshinstall %{buildroot}/usr/bin/dr-freshinstall
 
-chmod 0755 %{buildroot}/usr/bin/dr-tui \
+chmod 0755 %{buildroot}/usr/bin/dr_tui \
             %{buildroot}/usr/bin/dr-load \
             %{buildroot}/usr/bin/dr-job-run \
             %{buildroot}/usr/bin/dr-job-delete
@@ -190,14 +199,18 @@ install -m 0644 .env.example %{buildroot}%{drroot}/share/env.example
 %{reefroot}/cleandr.sh
 %{reefroot}/reef-a-tui-logo.txt
 %{reefroot}/reef-a-tui-logo.go
+# v0.19.2 — `dr_tui` + `dr_freshinstall` are the canonical underscore
+# wrappers; `dr-tui` + `dr-freshinstall` are legacy alias symlinks.
+# `dr-load`, `dr-job-run`, `dr-job-delete` have no underscore form
+# (the entry points were always hyphenated and there's no name
+# collision to resolve).
+/usr/bin/dr_tui
 /usr/bin/dr-tui
 /usr/bin/dr-load
 /usr/bin/dr-job-run
 /usr/bin/dr-job-delete
-# v0.17.10 — aliases + new fresh-install entry points.
-/usr/bin/dr_tui
-/usr/bin/dr-freshinstall
 /usr/bin/dr_freshinstall
+/usr/bin/dr-freshinstall
 
 %post
 cat <<'BANNER'
@@ -206,13 +219,12 @@ cat <<'BANNER'
   │  REEF-A-TUI installed — Digital Reef ops toolkit             │
   ╰──────────────────────────────────────────────────────────────╯
 
-  On PATH:
-    dr-tui    /  dr_tui              Textual TUI dashboard
-    dr-load                          load-test CLI
-    dr-job-run / dr-job-delete       indexing-chain CLIs
-    dr-freshinstall  /  dr_freshinstall   end-to-end fresh-install
-                                          driver (run with no args
-                                          for help)
+  On PATH (canonical names; hyphenated forms are aliases):
+    dr_tui                       Textual TUI dashboard
+    dr_freshinstall              End-to-end fresh-install driver
+                                 (run with no args for help)
+    dr-load                      Load-test CLI
+    dr-job-run / dr-job-delete   Indexing-chain CLIs
 
   Scripts:    /opt/digitalreef/scripts/reef-a-tui/
   Venv:       /opt/dr-tools/venv
@@ -221,10 +233,10 @@ cat <<'BANNER'
   Quick start:
     cp /opt/dr-tools/share/env.example  ~/.env
     $EDITOR ~/.env       # DR_HOST / DR_USER / DR_PASS
-    dr-tui
+    dr_tui
 
   For a brand-new DR install from scratch:
-    sudo dr-freshinstall --force
+    sudo dr_freshinstall --force
 
 BANNER
 

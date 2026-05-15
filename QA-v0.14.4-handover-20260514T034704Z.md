@@ -103,7 +103,7 @@ re-initialise the training org.**
 
 [2026-05-14T03:51:30Z]
 
-## QA-4 — dr-tui launches + login + dashboard mounts — **PASS**
+## QA-4 — dr_tui launches + login + dashboard mounts — **PASS**
 
 Drove the live `DRTUIApp` via Textual's Pilot harness:
 
@@ -478,7 +478,7 @@ install regardless of which user logs in:
 | admin@training / Organization Administrator | ✗ PERMISSION_DENIED on listConnectors | ✗ |
 | ?? (no other roles available) | — | — |
 
-The dr-tui v0.14.10 pre-emptive warning + translated error
+The dr_tui v0.14.10 pre-emptive warning + translated error
 correctly tells the user this is a permission issue, but the
 underlying remediation is at the DR server level, not the client.
 
@@ -490,13 +490,13 @@ underlying remediation is at the DR server level, not the client.
    describes this — "Add, Edit, or Copy a Role".)
 2. **Roll back the DR install** to a 5.5.3.1 baseline that matches
    the capture sessions.
-3. **Skip the file browse feature** in dr-tui — add a manual-path
+3. **Skip the file browse feature** in dr_tui — add a manual-path
    text input so users can type the path they want to index without
    browsing. The submit chain (createDataArea + createCorpus +
    createRepresentation) might or might not work depending on
    whether those endpoints share the same permission gate (likely
    they do — we'd find out when the user clicks Run).
-4. **Accept the limitation** — dr-tui works fully for everything
+4. **Accept the limitation** — dr_tui works fully for everything
    EXCEPT the Job Scheduler's New Job wizard in this DR install.
    All other features (Connectors view via Organizations tab — see
    QA-5, F3 Jobs Monitor — QA-12, Realm Settings — QA-11, etc.) are
@@ -505,7 +505,7 @@ underlying remediation is at the DR server level, not the client.
 **Recommend option 3** as the in-tool fix — falls back gracefully to
 a manual path input when permission is denied. Option 1 is the
 "right" fix but requires a DR-admin-level role-config change which
-is outside the dr-tui scope.
+is outside the dr_tui scope.
 
 [2026-05-14T04:55:00Z]
 

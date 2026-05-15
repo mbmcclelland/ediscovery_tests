@@ -1,1 +1,1 @@
-"""dr-tui — Textual TUI for the Digital Reef eDiscovery REST API."""
+"""dr_tui — Textual TUI for the Digital Reef eDiscovery REST API."""

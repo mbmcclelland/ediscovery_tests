@@ -28,7 +28,7 @@ index storage @ /data/indexstorage → system depot → virus update →
 RW archive) → PROJECT + EXPORT data areas.
 
 End state: DRSysAdmin / password, admin@training / password,
-fully-stocked training org ready for dr-tui or dr-load.
+fully-stocked training org ready for dr_tui or dr-load.
 
 Useful flags:
 
@@ -80,7 +80,7 @@ or run dr-load as `auraria` directly.
 
 ---
 
-## §2 — `dr-tui` won't launch / crashes on login
+## §2 — `dr_tui` won't launch / crashes on login
 
 ### Login screen never appears; just title bar + escape codes
 
@@ -90,12 +90,12 @@ Almost always PuTTY with default settings.
 **Fix.** Use **Tabby** or **Windows Terminal**. If you must use PuTTY:
 
 1. PuTTY → Window → Translation → Remote character set: **UTF-8**.
-2. Run with `TERM=xterm-256color TEXTUAL_FEATURES= dr-tui`.
+2. Run with `TERM=xterm-256color TEXTUAL_FEATURES= dr_tui`.
 
-The `/usr/bin/dr-tui` launcher (RPM v0.10.2+) sets both defensively,
+The `/usr/bin/dr_tui` launcher (RPM v0.10.2+) sets both defensively,
 so a clean RPM install needs only step 1.
 
-### `permission denied: /usr/local/bin/dr-tui`
+### `permission denied: /usr/local/bin/dr_tui`
 
 **Cause.** Editable-install left over from dev, or the launcher script
 got chmod-stripped.
@@ -103,8 +103,8 @@ got chmod-stripped.
 **Fix.**
 
 ```bash
-ls -la /usr/local/bin/dr-tui /opt/dr-tools/venv/bin/dr-tui
-sudo chmod 755 /usr/local/bin/dr-tui /opt/dr-tools/venv/bin/dr-tui
+ls -la /usr/local/bin/dr_tui /opt/dr-tools/venv/bin/dr_tui
+sudo chmod 755 /usr/local/bin/dr_tui /opt/dr-tools/venv/bin/dr_tui
 ```
 
 ### Login succeeds but dashboard is blank / "drd not running"
@@ -560,7 +560,7 @@ the pattern in `dr_tui/app.py:NewJobModal` compose() (v0.13.1+).
 |---|---|
 | Last `dr-job-run` invocation | `~/.dr-tools/logs/<slug>-<latest>.log` |
 | Run history for a job | `~/.dr-tools/runs/<slug>.jsonl` (one JSON per line) |
-| What endpoints dr-tui hit | Start `mitmdump -s proxy_logger.py --listen-port 8090 --set ssl_insecure=true` before launching dr-tui; capture lands in `/tmp/dr_proxy_capture.json`. |
+| What endpoints dr_tui hit | Start `mitmdump -s proxy_logger.py --listen-port 8090 --set ssl_insecure=true` before launching dr_tui; capture lands in `/tmp/dr_proxy_capture.json`. |
 | Server-side errors | `/home/auraria/AHS/output/server-*.log` — the dashboard log pane tails these. |
 | Postgres state (load-test scope) | `sudo -u auraria psql -d auraria_mgmt -c "SELECT * FROM datamining_corpus_representation;"` |
 | Active systemd timers | `systemctl --user list-timers --all` |
@@ -579,15 +579,15 @@ the pattern in `dr_tui/app.py:NewJobModal` compose() (v0.13.1+).
     tests/test_dr_tui_scheduler.py
 
 # Drive the smoke test in 10 minutes (see QA_TEST_PLAN.md §2).
-dr-load preflight && pytest -m smoke && dr-tui
+dr-load preflight && pytest -m smoke && dr_tui
 
-# Capture the next dr-tui session's API calls.
+# Capture the next dr_tui session's API calls.
 mitmdump -s proxy_logger.py \
     --listen-port 8090 \
     --set ssl_insecure=true &
 HTTPS_PROXY=http://localhost:8090 \
 HTTP_PROXY=http://localhost:8090 \
-dr-tui
+dr_tui
 
 # Full destructive reset (preserves /root/license.lic).
 bash cleandr.sh
@@ -619,7 +619,7 @@ dev team:
 3. `/home/auraria/AHS/output/server-*.log` for the relevant 60 s
    window.
 4. The git commit hash (`git rev-parse HEAD` in the repo).
-5. `dr-tui --help` output (confirms install path).
+5. `dr_tui --help` output (confirms install path).
 
 The 19 pilot tests run in ~12 seconds — running them is usually the
 fastest first diagnostic, since a clean pilot run rules out

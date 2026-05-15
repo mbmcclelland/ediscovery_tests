@@ -1,4 +1,4 @@
-"""Pilot smoke for the dr-tui Phase D CRUD modals.
+"""Pilot smoke for the dr_tui Phase D CRUD modals.
 
 Doesn't talk to the API. Mounts each modal in a dummy App and walks
 the success / cancel / validation paths with a fresh modal per scenario.

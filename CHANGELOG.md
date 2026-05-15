@@ -4,6 +4,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| [v0.19.2](#v0192--2026-05-14) | 2026-05-14 | Standardise on `dr_tui` / `dr_freshinstall` (underscore) as the canonical command names — hyphen forms become legacy symlinks |
 | [v0.19.1](#v0191--2026-05-14) | 2026-05-14 | cleandr.sh now disables SELinux as Phase 0 — runtime `setenforce 0` + persistent `SELINUX=disabled` in `/etc/selinux/config` |
 | [v0.19.0](#v0190--2026-05-14) | 2026-05-14 | Organizations tab — **Create Project** via F7 on the Projects view (`ecaManager/createCase` + clear error when org has no default templates yet) |
 | [v0.18.0](#v0180--2026-05-14) | 2026-05-14 | NewJobModal — explicit **Project** picker (fixes "PROJECT_NOT_ACTIVATED Project 0 not activated" by letting the user choose which existing project the imports attach to) |
@@ -56,6 +57,89 @@ touched, files changed, and pilot test added (if any). For
 feature-by-feature **expected behaviour** see
 [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md). For **symptom →
 fix** lookups see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
+---
+
+## v0.19.2 — 2026-05-14
+
+### Changed: canonical command names are now the underscore forms (`dr_tui`, `dr_freshinstall`)
+
+**Symptom (user):** "make sure we are calling this dr_tui everywhere,
+I am seeing dr-tui in places and that's probably a typo".
+
+Pre-v0.19.2 the canonical filesystem wrapper was `/usr/bin/dr-tui`
+and `/usr/bin/dr_tui` was a symlink to it (v0.17.10's "both forms
+work" layout). Most docs spelled it `dr-tui`. This release inverts
+the relationship so the underscore form is canonical everywhere:
+
+| Layer | Before (v0.17.10–v0.19.1) | After (v0.19.2) |
+|---|---|---|
+| `/usr/bin/dr_tui` | symlink → dr-tui | **real wrapper** (903 bytes) |
+| `/usr/bin/dr-tui` | real wrapper | **symlink → dr_tui** (legacy alias, 6 bytes) |
+| `/usr/bin/dr_freshinstall` | symlink → dr-freshinstall | **real wrapper** |
+| `/usr/bin/dr-freshinstall` | real wrapper | **symlink → dr_freshinstall** |
+| README / Workflow Guide / RUNBOOK / QA docs | `dr-tui` throughout | `dr_tui` throughout |
+| In-code docstrings + status messages + RPM `%post` banner | `dr-tui` | `dr_tui` |
+
+Both forms still work at the shell — the hyphen aliases are kept
+as compatibility symlinks for muscle memory and any existing
+scripts. End behaviour is identical; only the spelling we
+*document* and *banner* changed.
+
+**Not touched:**
+
+- `setup.cfg`'s `console_scripts` entry — `dr-tui = dr_tui.app:main`
+  is unchanged. The internal venv binary at
+  `/opt/dr-tools/venv/bin/dr-tui` keeps its hyphen because Python
+  console-script conventions don't matter to end users (the
+  `/usr/bin/dr_tui` wrapper is what users invoke).
+- `dr_tui/` package directory — already underscored per Python
+  convention.
+- Historical CHANGELOG entries — left as-is (don't rewrite history).
+- `dr-load`, `dr-job-run`, `dr-job-delete` — no rename; they were
+  always hyphenated, no name collision, no underscore alias needed.
+
+**Files swept (`dr-tui` → `dr_tui` in prose / strings):**
+
+- README.md (15 spots), CHANGELOG.md (new entries only),
+  DR_Workflow_Guide.md (8), docs/RUNBOOK.md (12),
+  docs/QA_TEST_PLAN.md (7), docs/DR_ROLE_SETUP.md (5),
+  packaging/README.md (5)
+- BETA_USER_README.md (4), BETA-Marcus-Chen-20260514.md (11),
+  QA-v0.14.4-handover-20260514T034704Z.md (5)
+- dr_tui/app.py (4), dr_tui/data.py (2), dr_tui/metrics.py (2),
+  dr_tui/help.py (1), dr_tui/app.tcss (1), dr_tui/__init__.py (1)
+- DR_freshinstall.py (3 — the SUCCESS panel + 2 comments)
+- tests/test_dr_tui_depot_modal.py (1 docstring),
+  tools/extract_help.py (1), playwright_fresh_init.py (1)
+- packaging/dr-tools.spec — 3 cosmetic + flipped symlink direction
+  + flipped %files manifest + flipped %post banner
+- packaging/install.sh — flipped wrapper + symlink direction
+
+### Verified
+
+```bash
+$ sudo dnf -y install …/dr-tools-0.19.2-1.el9.x86_64.rpm
+$ ls -la /usr/bin/dr_tui /usr/bin/dr-tui
+-rwxr-xr-x 1 root root 903 …  /usr/bin/dr_tui          ← real wrapper
+lrwxrwxrwx 1 root root   6 …  /usr/bin/dr-tui -> dr_tui ← legacy alias
+$ ls -la /usr/bin/dr_freshinstall /usr/bin/dr-freshinstall
+-rwxr-xr-x 1 root root 298 …  /usr/bin/dr_freshinstall          ← real wrapper
+lrwxrwxrwx 1 root root  15 …  /usr/bin/dr-freshinstall -> dr_freshinstall
+```
+
+17/17 pilot tests pass (10 scheduler + 7 depot). `bash -n
+cleandr.sh && bash -n packaging/install.sh` clean.
+
+**Files:** README.md, CHANGELOG.md, DR_Workflow_Guide.md,
+docs/RUNBOOK.md, docs/QA_TEST_PLAN.md, docs/DR_ROLE_SETUP.md,
+packaging/README.md, packaging/dr-tools.spec, packaging/install.sh,
+BETA_USER_README.md, BETA-Marcus-Chen-20260514.md,
+QA-v0.14.4-handover-20260514T034704Z.md, dr_tui/app.py,
+dr_tui/data.py, dr_tui/metrics.py, dr_tui/help.py, dr_tui/__init__.py,
+dr_tui/app.tcss, DR_freshinstall.py, tests/test_dr_tui_depot_modal.py,
+tools/extract_help.py, playwright_fresh_init.py,
+__version__.py → 0.19.2.
 
 ---
 

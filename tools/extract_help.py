@@ -1,6 +1,6 @@
 """
 tools/extract_help.py — one-shot preprocessor that turns Digital Reef's
-help-export PDFs into per-view markdown files for the dr-tui help pane.
+help-export PDFs into per-view markdown files for the dr_tui help pane.
 
 Run from the repo root:
 

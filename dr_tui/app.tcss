@@ -1,4 +1,4 @@
-/* dr-tui — colors inspired by lazygit / btop */
+/* dr_tui — colors inspired by lazygit / btop */
 
 Screen {
     background: $surface;

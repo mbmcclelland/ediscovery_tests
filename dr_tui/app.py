@@ -1,8 +1,8 @@
 """
-dr-tui — Textual TUI for the Digital Reef eDiscovery REST API.
+dr_tui — Textual TUI for the Digital Reef eDiscovery REST API.
 
 Run:
-    dr-tui                 # console_scripts entry from setup.cfg
+    dr_tui                 # console_scripts entry from setup.cfg
     python -m dr_tui       # equivalent
 
 v0.05 layout: TabbedContent with two tabs:
@@ -2530,7 +2530,7 @@ class HelpModal(ModalScreen[None]):
     ]
 
     HELP_TEXT = (
-        "[b]dr-tui — Keyboard reference[/]\n\n"
+        "[b]dr_tui — Keyboard reference[/]\n\n"
         "[b cyan]Global[/]\n"
         "  F1            this help screen\n"
         "  F2            toggle DR documentation side-pane\n"
@@ -5344,7 +5344,7 @@ class DRTUIApp(App):
     """Top-level Textual app."""
 
     CSS_PATH = CSS_PATH
-    TITLE = "dr-tui"
+    TITLE = "dr_tui"
     SUB_TITLE = "Digital Reef eDiscovery"
 
     role: str = ROLE_SYS

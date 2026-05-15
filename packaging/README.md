@@ -1,6 +1,6 @@
 # Packaging dr-tools
 
-Two distribution paths for `dr-tools` (the `dr-tui` + `dr-load`
+Two distribution paths for `dr-tools` (the `dr_tui` + `dr-load`
 console-scripts bundle):
 
 | Path | Audience | Internet at install time? | Build host requirements |
@@ -13,8 +13,8 @@ Either way the result is identical:
 - A self-contained venv at `/opt/dr-tools/venv` (RPM) or
   `/opt/dr-tools/venv` (shell installer).
 - Launcher scripts on `PATH`:
-  - `/usr/bin/dr-tui` and `/usr/bin/dr-load` (RPM)
-  - `/usr/local/bin/dr-tui` and `/usr/local/bin/dr-load` (shell)
+  - `/usr/bin/dr_tui` and `/usr/bin/dr-load` (RPM)
+  - `/usr/local/bin/dr_tui` and `/usr/local/bin/dr-load` (shell)
 - A sample `.env.example` at `/opt/dr-tools/share/env.example` (RPM
   only; with the shell path you copy from your local checkout).
 
@@ -122,8 +122,8 @@ from `PATH`. Python 3.9+ is required.
 ## Quick sanity-check after install
 
 ```bash
-which dr-tui dr-load
-dr-tui --help     # should print Textual usage / no traceback
+which dr_tui dr-load
+dr_tui --help     # should print Textual usage / no traceback
 dr-load preflight # verifies REST connectivity once .env is in place
 ```
 

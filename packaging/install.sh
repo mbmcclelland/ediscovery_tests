@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# install.sh — single-command installer for dr-tools (dr-tui + dr-load).
+# install.sh — single-command installer for dr-tools (dr_tui + dr-load).
 #
 # Usage:
 #   curl -sSL https://github.com/mbmcclelland/ediscovery_tests/raw/v0.06/packaging/install.sh | bash
@@ -9,7 +9,7 @@
 #   bash packaging/install.sh uninstall # remove
 #
 # Creates /opt/dr-tools/venv with all runtime deps and drops launcher
-# scripts at /usr/local/bin/{dr-tui,dr-load}. Requires Python 3.9+ and
+# scripts at /usr/local/bin/{dr_tui,dr-load}. Requires Python 3.9+ and
 # sudo. For an air-gapped install build the RPM instead — see
 # packaging/Makefile.
 set -euo pipefail
@@ -75,7 +75,10 @@ install_dr_tools() {
     fi
 
     log "creating launcher scripts in $BIN_DIR"
-    cat <<'EOF' | $SUDO tee "$BIN_DIR/dr-tui" >/dev/null
+    # v0.19.2 — canonical wrapper name is `dr_tui` (underscore). The
+    # hyphen alias `dr-tui` is a symlink to it. Mirrors the RPM
+    # spec's layout.
+    cat <<'EOF' | $SUDO tee "$BIN_DIR/dr_tui" >/dev/null
 #!/bin/sh
 # Force a sane TERM + skip kitty-keyboard probe for legacy SSH clients
 # (PuTTY in particular). See README "Terminal compatibility" for why.
@@ -84,26 +87,33 @@ if [ "$TERM" = "xterm" ] && [ -f /usr/share/terminfo/x/xterm-256color ]; then
 fi
 : "${TEXTUAL_FEATURES=}"
 export TERM TEXTUAL_FEATURES
+# Venv binary at /opt/dr-tools/venv/bin/dr-tui is the Python
+# console_script entry — name fixed there in setup.cfg. The user-
+# facing wrapper above is the canonical name.
 exec /opt/dr-tools/venv/bin/dr-tui "$@"
 EOF
     cat <<'EOF' | $SUDO tee "$BIN_DIR/dr-load" >/dev/null
 #!/bin/sh
 exec /opt/dr-tools/venv/bin/dr-load "$@"
 EOF
-    $SUDO chmod 0755 "$BIN_DIR/dr-tui" "$BIN_DIR/dr-load"
+    $SUDO chmod 0755 "$BIN_DIR/dr_tui" "$BIN_DIR/dr-load"
+    # Legacy alias for muscle memory + back-compat with shell scripts
+    # that already call `dr-tui`.
+    $SUDO ln -sf dr_tui "$BIN_DIR/dr-tui"
 
     log "done."
-    log "  Launchers:    $BIN_DIR/dr-tui  $BIN_DIR/dr-load"
+    log "  Launchers:    $BIN_DIR/dr_tui  $BIN_DIR/dr-load"
+    log "                ($BIN_DIR/dr-tui → dr_tui legacy symlink)"
     log "  Venv:         $VENV"
     log "  Next step:    cp /path/to/checkout/.env.example ~/.env  (and edit it)"
-    log "                then run \`dr-tui\` to launch the TUI."
+    log "                then run \`dr_tui\` to launch the TUI."
 }
 
 uninstall_dr_tools() {
     need_sudo
     log "removing $INSTALL_ROOT and launcher scripts"
     $SUDO rm -rf "$INSTALL_ROOT"
-    $SUDO rm -f "$BIN_DIR/dr-tui" "$BIN_DIR/dr-load"
+    $SUDO rm -f "$BIN_DIR/dr_tui" "$BIN_DIR/dr-tui" "$BIN_DIR/dr-load"
     log "done."
 }
 
