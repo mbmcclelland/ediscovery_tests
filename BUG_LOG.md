@@ -24,10 +24,15 @@
 | B14d | **HIGH** | ✅ Fixed in v0.03 | Two scripts used different stale template-attribute IDs; replaced with runtime discovery |
 | B14e | Medium | ✅ Fixed in v0.03 | `IS_IMPORTED='false'` was in the locustfile but not in tests/fullWorkflow; `discover_template_attributes()` injects it |
 | B11 | **HIGH** | ✅ Fixed in v0.03 | Template IDs in `.env.example` stale from a different host; block removed, runtime discovery used instead |
-| B10 | **HIGH** | Open | The test suite cannot bootstrap its own preconditions (no createOrg/createUser/createConnector helpers) |
+| B10 | **HIGH** | ✅ Fixed in v0.04 | `dr-load admin` subcommands + `tests/test_e2e_bootstrap.py` smoke test self-bootstrap the suite's preconditions |
 | B17a | **HIGH** | ✅ Fixed in v0.03 | Silent install rolled back 10 GB without any visible error; new `dr_install.sh` wrapper detects rollback + persists logs |
-| B15 | **HIGH** | Open | `/testload` (and `/data/import/testload`) missing on a fresh install; no prep step stages it |
+| B15 | **HIGH** | ✅ Fixed in v0.04 | Fixtures versioned at `tests/fixtures/testload/`; `dr-load admin stage-testload` copies them into `/data/import/testload/` |
 | B17 | **HIGH** | Documented (CHANGELOG) | The team's docs claim "no createOrganization endpoint" but `realmManager/createOrganization` actually works |
+| B14b | Medium | ✅ Fixed in v0.04 (new path) | `approve_delete` substring match against stringified-dict — `helpers/admin_ops.delete_project` uses exact `objectHandle`/`objectName` fields. Old `test_indexing_workflow.py::approve_delete` still has it — migrate next phase. |
+| B27 | **HIGH** | ✅ Fixed in v0.04 | `config.py` had `load_dotenv(override=True)` — `.env` silently overrode shell env, making `DR_PASSWORD=newpw pytest` use the stale value. Now shell wins. |
+| B28 | Medium | ✅ Fixed in v0.04 (new path) | `adminOrgManager/requestProjectDelete` is non-idempotent — 500s if a request is pending. `delete_project` now swallows the "already requested" case so cleanup is re-runnable. |
+| B29 | Low | Open (server) | `ecaManager/createCase` emits `ERROR Could not find role row with:<role-handle>PROJECT` in SERVER.log on every project create. Request still succeeds. Same Hibernate composite-text-key smell as B25. |
+| B30 | Medium | Open (server) | `ecaManager/createCase` triggers `NullPointerException` from `javax.mail.Session.getProperty` (mail Session is null on this install). Project still activates; SendEmail subrequest fails with `errorCode: CAE_ERROR`. Server should fail-fast or no-op when SMTP is unconfigured. |
 
 ---
 

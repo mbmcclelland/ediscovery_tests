@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 
 import typer
 
+from commands.admin import app as admin_app
 from config import config as default_config
 from helpers.monitor import Monitor
 from helpers.preflight import run_orphan_sweep, run_preflight
@@ -29,6 +30,7 @@ logging.basicConfig(
 )
 
 app = typer.Typer(no_args_is_help=True, help="Digital Reef eDiscovery load tester.")
+app.add_typer(admin_app, name="admin")
 
 _HERE = Path(__file__).parent
 

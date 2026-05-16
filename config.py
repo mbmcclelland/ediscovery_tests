@@ -16,11 +16,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load .env from project root; override=True ensures .env values
-# take precedence over existing system environment variables.
+# Load .env from project root. override=False so shell env wins — a QA
+# engineer running `DR_PASSWORD=... pytest` should not be silently
+# overridden by a stale value in .env.
 _env_path = Path(__file__).parent / ".env"
 if _env_path.exists():
-    load_dotenv(_env_path, override=True)
+    load_dotenv(_env_path, override=False)
 
 
 @dataclass(frozen=True)

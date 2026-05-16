@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.04 — 2026-05-16
+
+Phase 1 of the QA-readiness plan: the test suite can now bootstrap its
+own preconditions on a fresh install instead of requiring a manual
+browser walkthrough. Verified end-to-end against 192.168.58.128.
+
+### Added
+
+- **`dr-load admin` subcommand group** — five new commands that drive the
+  workflow QA was previously stuck doing through the web UI:
+    - `dr-load admin create-org NAME` — `realmManager/createOrganization` + readback verification
+    - `dr-load admin list-connectors ORG -u USER -p PASS` — lists connectors as an org user (DRSysAdmin sees zero per BUG_LOG B14)
+    - `dr-load admin create-project NAME --org ORG --role-handle HANDLE` — `ecaManager/createCase` with templates discovered live
+    - `dr-load admin create-import-job PROJECT_HANDLE -c CONNECTOR_HANDLE --path PATH` — full `createDataArea → createCorpus → addCorpus → createRepresentation` chain
+    - `dr-load admin stage-testload` — copies `tests/fixtures/testload/` into `/data/import/testload/` (owner=auraria), idempotent
+- **`helpers/admin_ops.py`** — pure workflow primitives that both the CLI and the smoke test consume. Single source of truth for the create/import/delete flow. Includes `wait_for_tasks` (with a `max_consecutive_errors` cap — closes BUG_LOG B14c for the new path) and `delete_project` (idempotent — handles "already requested" gracefully).
+- **`tests/test_e2e_bootstrap.py`** — pytest smoke test that proves the bootstrap path end-to-end. Two tests: project visible via `listProjects` after create, and the full import job indexes 2 docs to `operationState=SUCCESS`. Self-cleans via fixture teardown. Runs in ~16 seconds against the live server. Tagged `@pytest.mark.smoke`.
+- **`tests/fixtures/testload/`** — version-controlled doc1.txt and doc2.txt fixtures so the import job has a known, deterministic dataset (was previously left as a manual `cp` step the prep scripts didn't do — BUG_LOG B15).
+
+### Fixed
+
+- **`config.py` no longer silently clobbers shell environment.** `load_dotenv(override=True)` meant a QA engineer running `DR_PASSWORD=newpw pytest ...` would in fact use the stale value from `.env` — opposite of every convention. Changed to `override=False` so shell wins, `.env` is fallback. *This is what made the first run of the smoke test fail with a "stale role handle" 500.*
+- **`adminOrgManager/listDeletePendingProjects` response shape corrected** in `helpers/admin_ops.delete_project`. The team's earlier test helper looked for `adminRequests` / `projects` keys with `projectHandle` / `projectName` fields. Live truth (validated this session): top-level key is `requests`, each item has `objectHandle` / `objectName` and `adminRequestObjectType: "PROJECT"`. With the old matcher, delete approval polled fruitlessly for 90s and timed out, leaving every test run with orphan projects in `DELETE_REQUEST_PENDING`. (Closes BUG_LOG B14b for the new path; the old `tests/test_indexing_workflow.py::approve_delete` still has the substring bug and will be migrated in the next phase.)
+- **`requestProjectDelete` is non-idempotent** — it returns HTTP 500 with `"Deletion of this project has already been requested"` if a request is pending. `delete_project` now swallows that case so cleanup recovers from a partial earlier run.
+
+### Newly documented (no fix yet — server-side, non-blocking)
+
+- **B29 — Every `ecaManager/createCase` emits `ERROR Could not find role row with:<role-handle>PROJECT`** in `192.168.58.128_SERVER.log`. The request still succeeds. Same Hibernate composite-text-key smell as B25 — there's a permission row lookup that uses `role_handle + entity_type` concatenation and silently fails to find it. Visible noise during every project create.
+- **B30 — `ecaManager/createCase` triggers a `NullPointerException` inside `SendEmailResponseMessage`**: `Cannot invoke "javax.mail.Session.getProperty(String)" because "session" is null`. The project still activates correctly; the send-email side request fails with `errorCode: CAE_ERROR`. Mail Session is null because no SMTP is configured on this install. The server should either fail-fast at install or no-op when mail is unconfigured instead of NPEing on every project create.
+
+### Notes for callers / QA
+
+- The smoke test needs: `DR_BASE_URL`, `DR_USERNAME`, `DR_PASSWORD`, `DR_ORG_ORGANIZATION`, `DR_ORG_USERNAME`, `DR_ORG_PASSWORD`, and **`DR_ADMIN_ROLE_HANDLE`** (per-install — look up once in `authorization_roles` for the target org). Missing env → clean `pytest.skip` with the offending var named, not a mysterious crash.
+- `dr-load admin create-org` only creates the org row, not its admin user — the Express-Provisioning "create org admin user" step is a separate endpoint not yet wired up. For now, bootstrap admin users via the web UI or by running setup as DRSysAdmin.
+
+---
+
 ## v0.03 — 2026-05-15
 
 ### Fixed
