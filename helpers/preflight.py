@@ -41,21 +41,36 @@ class CheckResult:
 
 
 def _check_app_reachable(cfg: Config) -> CheckResult:
-    """Any HTTP response (even 4xx/5xx) means the app is up and listening."""
-    url = cfg.endpoint("realmManager/getVersion")
+    """
+    Confirm the eDiscovery web app is serving by `GET /ediscovery/` (the
+    UI entry page). 200 means JBoss is up and the war is deployed —
+    a stronger signal than POSTing to an auth-required JSON endpoint,
+    which on this build always trips a server-side NPE in the unauth
+    path (BUG_LOG B24) and used to misleadingly return PASS even when
+    the app was internally broken. (BUG_LOG B23.)
+    """
+    # cfg.base_url is the REST root, e.g. https://host:8443/ediscovery/rest;
+    # strip the trailing /rest to reach the web app root.
+    web_root = cfg.base_url.rstrip("/")
+    if web_root.endswith("/rest"):
+        web_root = web_root[:-len("/rest")]
+    url = web_root + "/"
     try:
-        resp = requests.post(
-            url,
-            json={"contextHandle": cfg.organization, "systemScope": True},
-            verify=cfg.verify_ssl,
-            timeout=cfg.request_timeout,
+        resp = requests.get(
+            url, verify=cfg.verify_ssl, timeout=cfg.request_timeout, allow_redirects=False,
         )
-        # Server responded — it's up. Try to extract version if available.
-        try:
-            version = resp.json().get("version") or resp.json().get("serverVersion") or f"HTTP {resp.status_code}"
-        except Exception:
-            version = f"HTTP {resp.status_code}"
-        return CheckResult("app_reachable", True, f"OK — {version}")
+        if resp.status_code == 200:
+            return CheckResult("app_reachable", True, f"OK — HTTP 200 at {url}")
+        if resp.status_code >= 500:
+            return CheckResult(
+                "app_reachable", False,
+                f"{url} returned HTTP {resp.status_code} — listener is up but the "
+                f"app is unhealthy. Check {cfg.log_dir}/192.168.58.128_SERVER.log",
+            )
+        return CheckResult(
+            "app_reachable", False,
+            f"{url} returned unexpected HTTP {resp.status_code}",
+        )
     except requests.exceptions.ConnectionError as e:
         return CheckResult("app_reachable", False, f"Connection refused: {e}")
     except requests.exceptions.Timeout:

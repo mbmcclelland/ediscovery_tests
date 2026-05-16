@@ -26,22 +26,26 @@ if not config.verify_ssl:
 # -------------------------------------------------------------- helpers
 def skip_on_permission_or_error(func):
     """
-    Decorator: skip a test if the API returns PERMISSION_DENIED or a 500.
-    DRSysAdmin is a system-level account and lacks some org-level permissions.
+    Decorator: skip a test only when the server explicitly tells us the
+    caller lacks permission. Everything else — CAE_ERROR, HTTP 500,
+    server NPEs — is propagated as a real failure.
+
+    Before BUG_LOG B13 was fixed in v0.04, this decorator also swallowed
+    `CAE_ERROR` and HTTP 500 as skips. The result was that a server-side
+    meltdown produced a green CI run, because every test that hit the
+    broken endpoint silently turned into a skip. That made the suite
+    actively misleading. Now only the documented permission errorCodes
+    skip; real errors carry their full payload into the failure message.
     """
+    _PERMISSION_ERROR_CODES = {"PERMISSION_DENIED", "ACCESS_DENIED", "FORBIDDEN"}
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
         except APIError as e:
-            if e.error_code == "PERMISSION_DENIED":
-                pytest.skip(f"Permission denied: {e.extended_status}")
-            if e.error_code == "CAE_ERROR":
-                pytest.skip(f"Server error: {e.extended_status}")
-            raise
-        except requests.exceptions.HTTPError as e:
-            if e.response is not None and e.response.status_code == 500:
-                pytest.skip(f"Server 500: {e}")
+            if e.error_code in _PERMISSION_ERROR_CODES:
+                pytest.skip(f"{e.error_code}: {e.extended_status}")
             raise
     return wrapper
 

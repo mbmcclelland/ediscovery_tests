@@ -33,6 +33,13 @@
 | B28 | Medium | ✅ Fixed in v0.04 (new path) | `adminOrgManager/requestProjectDelete` is non-idempotent — 500s if a request is pending. `delete_project` now swallows the "already requested" case so cleanup is re-runnable. |
 | B29 | Low | Open (server) | `ecaManager/createCase` emits `ERROR Could not find role row with:<role-handle>PROJECT` in SERVER.log on every project create. Request still succeeds. Same Hibernate composite-text-key smell as B25. |
 | B30 | Medium | Open (server) | `ecaManager/createCase` triggers `NullPointerException` from `javax.mail.Session.getProperty` (mail Session is null on this install). Project still activates; SendEmail subrequest fails with `errorCode: CAE_ERROR`. Server should fail-fast or no-op when SMTP is unconfigured. |
+| B13 | Medium | ✅ Fixed in v0.05 | `skip_on_permission_or_error` swallowed `CAE_ERROR` and HTTP 500 as skips, turning every server NPE into a green CI run. Now only skips on `PERMISSION_DENIED`/`ACCESS_DENIED`/`FORBIDDEN`. |
+| B23 | Medium | ✅ Fixed in v0.05 | `_check_app_reachable` treated HTTP 500 as PASS because it POSTed to an auth-required endpoint without auth (always tripped B24's NPE). Now `GET /ediscovery/` requires HTTP 200. |
+| B14c | Low | ✅ Fixed in v0.05 (new path) | `wait_for_indexing` swallowed all exceptions and busy-looped. `helpers/admin_ops.wait_for_tasks` caps consecutive errors at 5 then re-raises. Migrated `test_indexing_workflow.py` uses it. |
+| B31 | Medium | Open (server) | `orgManager/listCorpora` returns HTTP 500 with no JSON body. Surfaced by `test_list_corpora` after B13 fix. Was silently green before. |
+| B32 | Medium | Open (server) | `orgManager/listExportDatabaseConnections` returns HTTP 500 with no JSON body. Surfaced by `test_list_export_database_connections` after B13 fix. Was silently green before. |
+| B33 | Medium | Open (server) | `projectManager/listRoles` returns `CAE_ERROR` carrying `NullPointerException: Cannot invoke "SecureObjectTypes.equals(Object)" because "objType" is null`. listRoles is non-functional on this build. Surfaced after B13 fix. |
+| B34 | Low | Open (server) | `billingReportManager/listReportSettings` returns `CAE_ERROR` carrying `NumberFormatException: Cannot parse null string` — server expects a setting that doesn't exist on a fresh install. Surfaced after B13 fix. |
 
 ---
 

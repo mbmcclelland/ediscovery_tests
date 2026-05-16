@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.05 — 2026-05-16
+
+Phase 2 of the QA-readiness plan: the test suite no longer hides real
+server failures behind silent skips. Four previously-green tests now
+correctly fail (B31–B34) — these were lying before, not regressing now.
+
+### Fixed
+
+- **`conftest.py:skip_on_permission_or_error` now only skips on permission errors** (`PERMISSION_DENIED` / `ACCESS_DENIED` / `FORBIDDEN`). Previously also swallowed `CAE_ERROR` and HTTP 500 as skips, which turned every server NPE into a green CI run. (BUG_LOG B13.)
+- **`helpers/preflight.py:_check_app_reachable` no longer treats HTTP 500 as a PASS.** Old version POSTed to an auth-required JSON endpoint without auth, tripped the server-side NPE (B24), and called it "OK". New version does `GET /ediscovery/` (the unauth web app root) and requires HTTP 200 — a true "JBoss is up and the war is deployed" signal. (BUG_LOG B23.)
+- **`tests/test_indexing_workflow.py` migrated to `helpers.admin_ops`.** The inline `approve_delete` (substring match against stringified dict — BUG_LOG B14b) and `wait_for_indexing` (swallowed all exceptions — B14c) are gone; the workflow class now delegates to admin_ops, inheriting the correct response-shape parsing and consecutive-error cap. All three tests (`test_create_project`, `test_create_and_import`, `test_full_lifecycle`) still pass against the live server — full lifecycle in 35s.
+
+### Newly visible (previously hidden as skips — server bugs to triage)
+
+- **B31 — `orgManager/listCorpora` returns HTTP 500** with no JSON body. (Now fails `tests/test_organizations.py::TestOrgResources::test_list_corpora`.)
+- **B32 — `orgManager/listExportDatabaseConnections` returns HTTP 500** with no JSON body. (Now fails `tests/test_organizations.py::TestOrgResources::test_list_export_database_connections`.)
+- **B33 — `projectManager/listRoles` returns `errorCode: CAE_ERROR` carrying a `NullPointerException: Cannot invoke "com.digitalreefinc.ws.common.SecureObjectTypes.equals(Object)" because "objType" is null`.** Server-side bug — listRoles is non-functional on this build. (Now fails `tests/test_projects.py::TestListUsers::test_list_roles`.) Matches the prior observation in BUG_LOG that "listRoles returned 0" — actually it doesn't even respond, it crashes.
+- **B34 — `billingReportManager/listReportSettings` (and similar) returns `errorCode: CAE_ERROR` carrying `NumberFormatException: Cannot parse null string`.** Server expects a setting that doesn't exist on this fresh install. (Now fails `tests/test_billing.py::TestProjectReports::test_list_report_settings`.)
+
+All four were silently green before. None are regressions in the test code; they expose actual server defects QA can now triage instead of trust.
+
+### Notes
+
+- Of the 4 newly-visible failures, B33 and B34 are clear server-side defects that surface even on a perfectly healthy install. B31 and B32 may be auth-context issues (`listCorpora` is typically called inside a project, and the test runs it at org scope) — but the API still shouldn't 500 with no body.
+- Full pre-merge signal: `pytest -m smoke` (31 passed, 1 skipped, ~27s) is the recommended CI gate. `pytest -m slow` adds the 35s end-to-end indexing-workflow test. Running plain `pytest` will expose B31–B34 until they're fixed server-side.
+
+---
+
 ## v0.04 — 2026-05-16
 
 Phase 1 of the QA-readiness plan: the test suite can now bootstrap its

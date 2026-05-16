@@ -1,51 +1,48 @@
 """
 End-to-end indexing workflow test.
 
-Replicates the Edge-recorded workflow on 172.31.240.84:
+Replicates the Edge-recorded workflow:
   1. Login as DRSysAdmin -> super_system_customer
   2. initializeOrganization -> training
   3. createCase (create project)
   4. initializeOrganization -> project context
-  5. createDataArea (link NFS connector)
-  6. createCorpus (link data area)
-  7. addCorpus to corpusSet
-  8. createRepresentation (start indexing)
-  9. Switch back to system context
-  10. requestProjectDelete -> approveProjectDeleteRequest
+  5. createDataArea + createCorpus + addCorpus to corpusSet
+  6. createRepresentation (start indexing)
+  7. requestProjectDelete -> approveProjectDeleteRequest
 
-Requires DR_NFS_CONNECTOR_HANDLE, DR_ADMIN_ROLE_HANDLE,
-and DR_TEMPLATE_* in .env (server-specific values).
+As of v0.04 this test delegates to `helpers.admin_ops`, which is the
+single source of truth for the create/import/delete chain. Tests that
+exercised the previous inline `approve_delete` (substring match against
+stringified-dict — BUG_LOG B14b) and `wait_for_indexing` (swallowed all
+exceptions — B14c) now use the corrected helpers. Newer coverage of the
+same path lives in `tests/test_e2e_bootstrap.py` (smoke-tagged, 16s).
+
+Required env:
+  DR_NFS_CONNECTOR_HANDLE  — connector to import from (per-install)
+  DR_NFS_IMPORT_PATH       — path within that connector (e.g. /testload)
+  DR_NFS_DATASET_NAME      — name for the data-area/corpus (default 'testload')
+  DR_ORG_ORGANIZATION      — target org name (default 'training')
+  DR_ADMIN_ROLE_HANDLE     — org admin role handle (per-install)
 """
 
+from __future__ import annotations
+
 import os
-import time
-import uuid
 import datetime
+
 import pytest
 
-from helpers.api_client import EDiscoveryClient, APIError
 from config import config
+from helpers import admin_ops as ops
+from helpers.api_client import EDiscoveryClient
 
 
 # ---------------------------------------------------------------- config
-NFS_CONNECTOR = os.getenv(
-    "DR_NFS_CONNECTOR_HANDLE",
-    "0000840201143a35f1f34d8d9a76a34146268ddc",
-)
-NFS_PATH = os.getenv("DR_NFS_IMPORT_PATH", "/test_datasets/Small Sample")
-NFS_DATASET_NAME = os.getenv("DR_NFS_DATASET_NAME", "Small Sample")
+NFS_CONNECTOR = os.getenv("DR_NFS_CONNECTOR_HANDLE", "")
+NFS_PATH = os.getenv("DR_NFS_IMPORT_PATH", "/testload")
+NFS_DATASET_NAME = os.getenv("DR_NFS_DATASET_NAME", "testload")
 TARGET_ORG = os.getenv("DR_ORG_ORGANIZATION", "training")
-
-# Template attribute IDs are discovered at runtime from the live system
-# via client.discover_template_attributes(). They are per-org and change
-# on every install, so shipping hardcoded values gives silent FK failures
-# in mgmtproject_attributes on any host that isn't the one they were
-# captured on (see BUG_LOG.md B11/B14d).
-
-ADMIN_ROLE = os.getenv(
-    "DR_ADMIN_ROLE_HANDLE",
-    "00008798cf6b043a18104ccd8c437b29f688f847",
-)
+ADMIN_ROLE = os.getenv("DR_ADMIN_ROLE_HANDLE", "")
 
 
 def _unique_name(prefix="api-test"):
@@ -54,274 +51,130 @@ def _unique_name(prefix="api-test"):
 
 
 class IndexingWorkflow:
-    """Full create-index-delete workflow using a single DRSysAdmin client."""
+    """
+    Thin orchestration wrapper around `helpers.admin_ops`. Keeps a small
+    bit of state (project/data-area/corpus handles) so the test body
+    reads sequentially. All API calls go through admin_ops; the buggy
+    inline approve_delete and wait_for_indexing from earlier versions
+    are gone.
+    """
 
     def __init__(self, client: EDiscoveryClient):
         self.client = client
-        self.project_handle = None
-        self.project_name = None
-        self.da_handle = None
-        self.corpus_handle = None
+        self.project_handle: str | None = None
+        self.project_name: str | None = None
+        self.da_handle: str | None = None
+        self.corpus_handle: str | None = None
+        self.cs_handle: str | None = None
 
+    # ---- context switches ------------------------------------------------
     def switch_to_org(self):
-        """Initialize organization context to training."""
-        self.client.post("realmManager/initializeOrganization", extra_body={
-            "requestHandle": None,
-            "contextHandle": TARGET_ORG,
-            "organizationName": TARGET_ORG,
-        })
+        ops.switch_to_org(self.client, TARGET_ORG)
 
     def switch_to_project(self):
-        """Initialize organization context with project handle."""
         assert self.project_handle
-        self.client.post("realmManager/initializeOrganization", extra_body={
-            "requestHandle": None,
-            "contextHandle": self.project_handle,
-            "organizationName": TARGET_ORG,
-            "systemScope": False,
-        })
-        # Browser also calls getIndexSettings + getUpdateStatus here
-        self.client.post("projectManager/getIndexSettings", extra_body={
-            "requestHandle": None,
-            "contextHandle": self.project_handle,
-            "handle": self.project_handle,
-            "systemScope": False,
-        })
-        self.client.post("projectManager/getUpdateStatus", extra_body={
-            "requestHandle": None,
-            "contextHandle": self.project_handle,
-            "projectHandle": 0,
-            "timestamp": 0,
-            "updateStatusTypes": ["CONNECTOR", "COMPONENT", "STORAGE"],
-        })
+        ops.switch_to_project(self.client, self.project_handle, TARGET_ORG)
 
     def switch_to_system(self):
-        """Switch back to system org context."""
-        self.client.post("realmManager/initializeOrganization", extra_body={
-            "requestHandle": None,
-            "contextHandle": config.organization,
-            "organizationName": config.organization,
-        })
+        ops.switch_to_org(self.client, config.organization)
 
-    def create_project(self, name=None):
+    # ---- create ----------------------------------------------------------
+    def create_project(self, name: str | None = None):
         self.project_name = name or _unique_name()
-        attributes = self.client.discover_template_attributes(TARGET_ORG)
-        data = self.client.post("ecaManager/createCase", extra_body={
-            "requestHandle": None,
-            "contextHandle": TARGET_ORG,
-            "addToCaseData": False,
-            "custodians": [],
-            "name": self.project_name,
-            "description": f"API test {self.project_name}",
-            "attributes": attributes,
-            "membersRequestMessage": {
-                "groups": [],
-                "users": [{"name": "drsysadmin", "roleHandles": [ADMIN_ROLE]}],
-            },
-            "projectLogoBytes": None,
-            "logoFileName": "",
-            "systemScope": False,
-            "reviewSystem": None,
-            "reviewProjectId": 0,
-        })
-        self.project_handle = data.get("caseHandle")
-        return data
+        self.project_handle = ops.create_project(
+            self.client,
+            org=TARGET_ORG, name=self.project_name,
+            role_handle=ADMIN_ROLE,
+            description=f"API test {self.project_name}",
+        )
+        return self.project_handle
 
-    def create_data_area(self):
+    def create_import_job(self):
+        """One-shot replacement for the old four-method import chain."""
+        assert self.project_handle, "create_project() must run first"
+        result = ops.create_import_job(
+            self.client,
+            project_handle=self.project_handle, org=TARGET_ORG,
+            connector_handle=NFS_CONNECTOR, path=NFS_PATH,
+            name=NFS_DATASET_NAME,
+        )
+        self.da_handle = result["data_area_handle"]
+        self.corpus_handle = result["corpus_handle"]
+        self.cs_handle = result["corpus_set_handle"]
+        return result
+
+    def wait_for_indexing(self, timeout: int = 600, interval: int = 5) -> bool:
+        """Returns True if all tasks reached SUCCESS, False on timeout."""
         assert self.project_handle
-        data = self.client.post("orgManager/createDataArea", extra_body={
-            "requestHandle": None,
-            "contextHandle": self.project_handle,
-            "connectorHandle": NFS_CONNECTOR,
-            "description": "",
-            "mode": "IMPORT",
-            "name": f"{NFS_DATASET_NAME}_{NFS_DATASET_NAME}",
-            "path": NFS_PATH,
-            "skippedDirectories": [],
-        })
-        da = data.get("dataArea", {})
-        self.da_handle = da.get("handle") if isinstance(da, dict) else data.get("handle")
-        return data
+        tasks = ops.wait_for_tasks(
+            self.client, self.project_handle,
+            timeout=timeout, interval=interval,
+        )
+        return ops.all_tasks_succeeded(tasks)
 
-    def create_corpus(self):
-        assert self.project_handle and self.da_handle
-        data = self.client.post("orgManager/createCorpus", extra_body={
-            "requestHandle": None,
-            "contextHandle": self.project_handle,
-            "attributes": [{"name": "projecthandle", "value": self.project_handle}],
-            "brand": True,
-            "dataAreaHandles": [self.da_handle],
-            "description": "",
-            "name": NFS_DATASET_NAME,
-            "loadFileName": "",
-            "loadFileType": "EDRM_XML",
-            "loadFileProfileId": -1,
-        })
-        corpus = data.get("corpus", {})
-        self.corpus_handle = corpus.get("handle") if isinstance(corpus, dict) else None
-        if not self.corpus_handle:
-            for k in ("corpusHandle", "handle"):
-                v = data.get(k)
-                if v and ":" in str(v):
-                    self.corpus_handle = v
-                    break
-        return data
-
-    def add_corpus_to_set(self):
-        assert self.project_handle and self.corpus_handle
-        cs_data = self.client.post("projectManager/listCorpusSets", extra_body={
-            "requestHandle": None,
-            "contextHandle": self.project_handle,
-            "projectHandle": self.project_handle,
-            "count": 1,
-            "startIndex": 0,
-        })
-        sets = cs_data.get("corpusSets", [])
-        if sets:
-            cs_handle = sets[0].get("handle")
-            self.client.post("corpusSetManager/addCorpus", extra_body={
-                "requestHandle": None,
-                "contextHandle": self.project_handle,
-                "corpusHandle": self.corpus_handle,
-                "corpusSetHandle": cs_handle,
-            })
-
-    def create_representation(self):
-        assert self.project_handle and self.corpus_handle
-        return self.client.post("corpusManager/createRepresentation", extra_body={
-            "requestHandle": None,
-            "contextHandle": self.project_handle,
-            "attributes": [{"name": "projecthandle", "value": self.project_handle}],
-            "corpusHandle": self.corpus_handle,
-            "scanAttributes": [
-                {"name": "batchNumber", "value": NFS_DATASET_NAME},
-                {"name": "projecthandle", "value": self.project_handle},
-            ],
-            "taskDescription": f"Creating representation Analytic Index for {NFS_DATASET_NAME}",
-            "typeList": ["CONTENT_INDEX", "VECTOR_SET"],
-            "enablePatternDetection": True,
-        })
-
-    def wait_for_indexing(self, timeout=600, interval=15):
-        """
-        Poll task status until indexing completes or timeout.
-        Returns True if indexing finished, False if timed out.
-        """
-        assert self.project_handle
-        start = time.time()
-        while time.time() - start < timeout:
-            try:
-                data = self.client.post("projectManager/listTasks", extra_body={
-                    "requestHandle": None,
-                    "contextHandle": self.project_handle,
-                    "projectHandle": self.project_handle,
-                })
-                tasks = data.get("tasks", [])
-                active = [t for t in tasks if t.get("state") in
-                          ("RUNNING", "QUEUED", "PENDING", "PROCESSING")]
-                if not active:
-                    return True
-            except Exception:
-                pass
-            time.sleep(interval)
-        return False
-
-    def request_delete(self):
-        assert self.project_handle
-        return self.client.post("adminOrgManager/requestProjectDelete", extra_body={
-            "requestHandle": None,
-            "contextHandle": self.project_handle,
-            "projectHandle": self.project_handle,
-            "taskDescription": f"Delete Project {self.project_name}",
-            "systemScope": True,
-        })
-
-    def approve_delete(self, max_attempts=20, interval=5):
-        """Retry finding and approving the delete request."""
-        assert self.project_handle
-        for attempt in range(max_attempts):
-            time.sleep(interval)
-            data = self.client.post("adminOrgManager/listDeletePendingProjects", extra_body={
-                "requestHandle": None,
-                "systemScope": True,
-                "contextHandle": config.organization,
-            })
-            pending = data.get("adminRequests", data.get("projects", []))
-            for req in pending:
-                if self.project_name in str(req) or str(self.project_handle) in str(req):
-                    return self.client.post(
-                        "adminOrgManager/approveProjectDeleteRequest",
-                        extra_body={
-                            "requestHandle": None,
-                            "contextHandle": self.project_handle,
-                            "handle": req.get("handle"),
-                            "systemScope": True,
-                            "taskDescription": f"Approving delete for {self.project_name}",
-                        },
-                    )
-        return None
+    def delete(self) -> bool:
+        """Two-phase delete using the corrected admin_ops helper."""
+        assert self.project_handle and self.project_name
+        self.switch_to_project()
+        ok = ops.delete_project(
+            self.client,
+            project_handle=self.project_handle,
+            project_name=self.project_name,
+            system_org=config.organization,
+        )
+        if ok:
+            self.project_handle = None  # prevent fixture double-delete
+        return ok
 
 
 # ----------------------------------------------------------- pytest tests
+
+def _skip_if_unconfigured():
+    missing = [n for n, v in [
+        ("DR_NFS_CONNECTOR_HANDLE", NFS_CONNECTOR),
+        ("DR_ADMIN_ROLE_HANDLE", ADMIN_ROLE),
+    ] if not v]
+    if missing:
+        pytest.skip(f"Indexing workflow requires: {', '.join(missing)}")
+
 
 @pytest.mark.slow
 class TestIndexingWorkflow:
 
     @pytest.fixture
     def wf(self, cfg):
+        _skip_if_unconfigured()
         client = EDiscoveryClient(cfg)
         client.login()
         workflow = IndexingWorkflow(client)
         workflow.switch_to_org()
         yield workflow
-        # Cleanup
+        # Cleanup — best-effort, never fails the test
         if workflow.project_handle:
             try:
-                workflow.switch_to_system()
-                workflow.request_delete()
-                workflow.approve_delete()
-            except Exception:
-                pass
+                workflow.delete()
+            except Exception as e:
+                print(f"WARNING: cleanup of {workflow.project_name} failed: {e}")
         client.logout()
 
-    def test_create_project(self, wf):
+    def test_create_project(self, wf: IndexingWorkflow):
         wf.create_project()
         assert wf.project_handle, "Expected a project handle"
 
-    def test_create_and_import(self, wf):
+    def test_create_and_import(self, wf: IndexingWorkflow):
         wf.create_project()
-        assert wf.project_handle
-        time.sleep(3)
         wf.switch_to_project()
-        wf.create_data_area()
+        wf.create_import_job()
         assert wf.da_handle, "Expected a data area handle"
-        wf.create_corpus()
         assert wf.corpus_handle, "Expected a corpus handle"
 
-    def test_full_lifecycle(self, wf):
-        # Create
+    def test_full_lifecycle(self, wf: IndexingWorkflow):
         wf.create_project()
-        assert wf.project_handle
-        time.sleep(3)
         wf.switch_to_project()
-
-        # Import
-        wf.create_data_area()
-        assert wf.da_handle
-        wf.create_corpus()
-        assert wf.corpus_handle
-        wf.add_corpus_to_set()
-
-        # Index
-        wf.create_representation()
-
-        # Wait for indexing to finish (up to 10 min)
-        finished = wf.wait_for_indexing(timeout=600, interval=15)
-        # Don't fail if timeout — just proceed to cleanup
-
-        # Delete
-        wf.switch_to_system()
-        wf.request_delete()
-        result = wf.approve_delete(max_attempts=20, interval=5)
-        if result:
-            wf.project_handle = None  # prevent fixture double-delete
+        wf.create_import_job()
+        # Indexing typically completes in ~15s for the small testload fixture.
+        finished = wf.wait_for_indexing(timeout=300, interval=5)
+        assert finished, "Indexing did not reach SUCCESS within the timeout"
+        # The fixture teardown will exercise delete; assert it works here too
+        # so the test owns its own cleanup verification.
+        assert wf.delete(), "Project delete did not get approved in time"
