@@ -271,13 +271,22 @@ def create_import_job(
 def delete_project(
     project_name: str = typer.Argument(..., help="Project name to delete"),
     org: str = typer.Option(None, "--org", envvar="DR_ORG_ORGANIZATION"),
+    handle: str = typer.Option(None, "--handle",
+                               help="Skip listProjects lookup and delete by handle directly. "
+                                    "Use when a half-failed createCase left the project in "
+                                    "mgmtproject but hidden from listProjects (BUG_LOG B35). "
+                                    "Get the handle from SERVER.log ('id : NNNN entityName: ...')."),
     cancel_schedule: bool = typer.Option(True, "--cancel-schedule/--keep-schedule",
                                          help="Also cancel any pending at-job for this project"),
 ) -> None:
     """
-    Resolve project by name, run the two-phase delete
-    (requestProjectDelete → approveProjectDeleteRequest), and remove any
-    pending scheduled delete for the same name from the at queue.
+    Resolve project by name (or accept --handle directly), run the
+    two-phase delete (requestProjectDelete → approveProjectDeleteRequest),
+    and remove any pending scheduled delete for the same name from the
+    at queue.
+
+    --handle is the escape hatch for orphan projects that are invisible
+    to listProjects but still exist server-side.
     """
     if not org:
         _fail("--org (or DR_ORG_ORGANIZATION) is required.")
@@ -289,10 +298,15 @@ def delete_project(
         raise typer.Exit(1)
     try:
         ops.switch_to_org(client, org)
-        handle = _resolve_project_handle(client, org, project_name)
-        _info(f"Deleting project '{project_name}' (handle={handle})...")
-        ops.switch_to_project(client, handle, org)
-        ok = ops.delete_project(client, project_handle=handle,
+        if handle:
+            project_handle = str(handle)
+            _info(f"Deleting project '{project_name}' by --handle={project_handle} "
+                  f"(skipping listProjects lookup)...")
+        else:
+            project_handle = _resolve_project_handle(client, org, project_name)
+            _info(f"Deleting project '{project_name}' (handle={project_handle})...")
+        ops.switch_to_project(client, project_handle, org)
+        ok = ops.delete_project(client, project_handle=project_handle,
                                 project_name=project_name,
                                 system_org=default_config.organization)
         if not ok:

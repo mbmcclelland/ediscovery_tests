@@ -1,5 +1,58 @@
 # Changelog
 
+## v0.07 — 2026-05-18
+
+Fix three of the four newly-visible server-bug failures from v0.05 —
+turns out B31, B32, and B33 were misformed requests, not server defects.
+Mark B34 as the only confirmed server-side defect. Add `--handle`
+escape hatch to `delete-project` for orphan recovery (B35).
+
+### Fixed (request shape was the bug, not the server)
+
+- **B31 `orgManager/listCorpora`** — the test called it in system scope.
+  Server NPEs at system scope but works fine in org scope. Fix:
+  `switch_to_org(api, org)` then call with `contextHandle=org`. Both
+  the body field AND the session-context `initializeOrganization` call
+  are required — passing the body alone is not enough.
+- **B32 `orgManager/listExportDatabaseConnections`** — same root cause
+  as B31. Same fix.
+- **B33 `orgManager/listRoles`** — needed an `objectType` field; without
+  one the server NPEs on `SecureObjectTypes.equals(null)`. Pass
+  `extra_body={"objectType": "PROJECT"}` and the call returns
+  `status=SUCCESS`. Earlier note in BUG_LOG that "listRoles is broken"
+  was overstated — the call works; the test was sending an incomplete
+  request.
+
+### Added
+
+- **`dr-load admin delete-project --handle HANDLE`** — escape hatch for
+  orphan projects (BUG_LOG B35) that exist in `mgmtproject` but are
+  invisible to `listProjects` after a half-failed `createCase`. Skips
+  the name-based lookup and deletes by known handle. Find the handle
+  in `192.168.58.128_SERVER.log` ("id : NNNN entityName: ...").
+
+### Marked xfail (confirmed server bug — no fix attempted)
+
+- **B34 `projectManager/listReportSettings`** — `NumberFormatException:
+  Cannot parse null string`. Tried every reasonable body shape
+  (system / org / project context, with `projectHandle`,
+  `projectId`, `reportType`, paging params); all fail identically.
+  Marked `@pytest.mark.xfail(strict=False)` with the BUG_LOG reference
+  so it shows up in test output but doesn't break CI.
+
+### State of the test suite after this commit
+
+| Suite | Result |
+|---|---|
+| `pytest -m smoke` | green (2 e2e + others) |
+| `pytest tests/test_indexing_workflow.py` | green (3 tests, ~22s) |
+| `pytest tests/ --ignore=test_indexing_workflow.py` | **69 passed, 16 skipped, 1 xfailed, 0 failed** |
+
+The 16 skips are intentional (permission-denied or missing-config). The
+one xfail is the documented server bug B34. Zero red failures.
+
+---
+
 ## v0.06 — 2026-05-18
 
 CLI ergonomics + background scheduling. Operators no longer need to know

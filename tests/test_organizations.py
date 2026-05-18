@@ -52,7 +52,16 @@ class TestOrgResources:
 
     @skip_on_permission_or_error
     def test_list_corpora(self, api):
-        data = api.post("orgManager/listCorpora")
+        # Must be called in org context, not system context — at system
+        # scope the server NPEs and returns HTTP 500 (BUG_LOG B31). The
+        # session must ALSO be initialized into the org first; passing
+        # contextHandle in the body alone is not sufficient — the server
+        # needs initializeOrganization to have set up its session state.
+        import os
+        from helpers import admin_ops as ops
+        org = os.getenv("DR_ORG_ORGANIZATION", "training")
+        ops.switch_to_org(api, org)
+        data = api.post("orgManager/listCorpora", extra_body={"contextHandle": org})
         assert data.get("status") != "FAILURE"
 
     def test_list_data_areas(self, api):
@@ -66,7 +75,14 @@ class TestOrgResources:
 
     @skip_on_permission_or_error
     def test_list_export_database_connections(self, api):
-        data = api.post("orgManager/listExportDatabaseConnections")
+        # Must be called in org context, not system context — at system
+        # scope the server NPEs and returns HTTP 500 (BUG_LOG B32).
+        import os
+        from helpers import admin_ops as ops
+        org = os.getenv("DR_ORG_ORGANIZATION", "training")
+        ops.switch_to_org(api, org)
+        data = api.post("orgManager/listExportDatabaseConnections",
+                        extra_body={"contextHandle": org})
         assert data.get("status") != "FAILURE"
 
     def test_list_templates(self, api):

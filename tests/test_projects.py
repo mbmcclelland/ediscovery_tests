@@ -95,5 +95,7 @@ class TestListUsers:
 
     @skip_on_permission_or_error
     def test_list_roles(self, api):
-        data = api.post("orgManager/listRoles")
+        # listRoles requires an objectType field; without one the server
+        # NPEs on a null SecureObjectTypes.equals call (BUG_LOG B33).
+        data = api.post("orgManager/listRoles", extra_body={"objectType": "PROJECT"})
         assert data.get("status") != "FAILURE"

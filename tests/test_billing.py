@@ -31,6 +31,11 @@ class TestProjectReports:
         data = api.post("projectManager/listBillingReportSettings")
         assert data.get("status") != "FAILURE"
 
+    @pytest.mark.xfail(
+        reason="Server NumberFormatException on null string — see BUG_LOG B34. "
+               "No request-body shape recovers; tracked as a server-side defect.",
+        strict=False,
+    )
     @skip_on_permission_or_error
     def test_list_report_settings(self, api):
         data = api.post("projectManager/listReportSettings")
