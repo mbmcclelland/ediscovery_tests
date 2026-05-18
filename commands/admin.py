@@ -333,6 +333,46 @@ def unschedule(
     _ok(f"Cancelled at-job(s): {', '.join(cancelled)}")
 
 
+@app.command("reschedule")
+def reschedule(
+    project_name: str = typer.Argument(..., help="Project name to (re-)arm auto-delete for"),
+    org: str = typer.Option(None, "--org", envvar="DR_ORG_ORGANIZATION"),
+    lifetime: str = typer.Option(..., "--lifetime",
+                                 help="New duration before auto-delete. Examples: 30m, 1h, 7d"),
+) -> None:
+    """
+    Re-arm auto-delete for an existing project (FR1).
+
+    Cancels any prior dr-load-tagged at-job for this project (idempotent —
+    a no-op if none exist), then queues a fresh at-job per --lifetime.
+    Useful after `unschedule` or when an operator wants to extend a
+    project's life without recreating it.
+    """
+    if not org:
+        _fail("--org (or DR_ORG_ORGANIZATION) is required.")
+        raise typer.Exit(1)
+
+    try:
+        client = _client()
+    except APIError as e:
+        _fail(f"Login failed: {e}")
+        raise typer.Exit(1)
+    try:
+        # Verify the project actually exists before scheduling its deletion.
+        ops.switch_to_org(client, org)
+        if not ops.find_project(client, org, project_name):
+            _fail(f"No project named {project_name!r} in org {org!r}. "
+                  f"Nothing to reschedule.")
+            raise typer.Exit(2)
+    finally:
+        client.logout()
+
+    cancelled = ops.cancel_scheduled_delete(project_name)
+    if cancelled:
+        _info(f"Cancelled prior at-job(s): {', '.join(cancelled)}")
+    _maybe_schedule_delete(project_name, org, lifetime)
+
+
 @app.command("list")
 def list_state(
     org: str = typer.Option(None, "--org", envvar="DR_ORG_ORGANIZATION",
@@ -366,11 +406,18 @@ def list_state(
             except APIError:
                 continue
             for p in projs:
-                name = p.get("name", "?")
                 state = (p.get("projectActivationState") or p.get("projectState")
                          or p.get("state") or "?")
-                sched = pending.get(name, {}).get("scheduled_at", "—")
-                typer.echo(f"{name:<35} {o:<22} {state:<22} {sched}")
+                raw_name = p.get("name") or ""
+                # FR2: server returns name="" while a project is in
+                # DELETE_PENDING. Render an explicit transitional marker
+                # so operators can correlate by handle.
+                if not raw_name and state == "DELETE_PENDING":
+                    display_name = f"[deleting #{p.get('handle')}]"
+                else:
+                    display_name = raw_name or f"#{p.get('handle')}"
+                sched = pending.get(raw_name, {}).get("scheduled_at", "—")
+                typer.echo(f"{display_name:<35} {o:<22} {state:<22} {sched}")
                 total += 1
         typer.echo("-" * 105)
         typer.echo(f"{total} project(s).")

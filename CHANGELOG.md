@@ -1,5 +1,63 @@
 # Changelog
 
+## v0.10 — 2026-05-18
+
+QA Persona pass on v0.09 → Developer Persona triage. Test acceptance:
+**5 / 5 project lifecycles, 5 / 5 deletes (4 auto via at-jobs, 1 manual
+via `delete-project` after `unschedule`), 0 orphans.** ERROR log diff
+surfaced 2 new server-side findings (filed) and 2 feature requests
+(both implemented in this release).
+
+### Added (closing FR1 + FR2 from QA)
+
+- **`dr-load admin reschedule NAME --org ORG --lifetime D`** (FR1) —
+  re-arm auto-delete for an existing project. Cancels any prior
+  dr-load-tagged at-job for that name (idempotent — no-op if none),
+  then queues a fresh at-job per `--lifetime`. Useful after
+  `unschedule`, or to extend a project's life without recreating it.
+  Rejects nonexistent projects with a clear error rather than silently
+  scheduling a delete for a name that's gone.
+
+- **`dr-load admin list` renders `[deleting #<handle>]` for
+  in-flight deletes** (FR2). When the server returns `name: null` for
+  a project in `DELETE_PENDING` state, the listing used to show just
+  the raw handle (`24856 ... DELETE_PENDING ...`), losing the human
+  identity. Now it shows `[deleting #24856]` so operators can correlate
+  with what they just asked to delete.
+
+### Filed (server-side, won't fix here)
+
+- **B37** — `ERROR ... Add object - could not find parent object [<orgid>] when creating type [WORK_BASKET]` fires on every `ecaManager/createCase`. Project still activates. Same Hibernate composite-key smell family as B25 / B29.
+- **B38** — `ERROR ... Exception when canceling all requests for project NNNN ... Task Handle NNNN Not found` fires on every project delete. `ProjectDeleteProcessingInstance` tries to cancel all in-flight SRIs and finds none. Delete still succeeds; the error is misleading log noise.
+
+Both observed 5 / 5 in the QA acceptance test. Filed for the server team.
+
+### QA acceptance evidence
+
+```
+Lifetimes assigned (random shuf -i 120-600):
+  qa-test-1  →  366s  (6m06s)  at-job 2  fired 12:34  → deleted ✓
+  qa-test-2  →  589s  (9m49s)  at-job 3  fired 12:37  → deleted ✓
+  qa-test-3  →  339s  (5m39s)  at-job 4  fired 12:33  → deleted ✓
+  qa-test-4  →  519s  (8m39s)  at-job 5  fired 12:36  → deleted ✓
+  qa-test-5  →  385s  (6m25s)  at-job 6  unscheduled, manual delete ✓
+
+Started 12:27:17. Last auto-delete completed 12:37:35. Manual delete
+of qa-test-5 completed 12:38:14. All 5 fully purged by 12:38:45.
+
+All 5 indexed: operationState=SUCCESS, 2 docs each, <20s elapsed.
+0 orphan projects in listProjects after the run.
+
+35 ERROR lines in SERVER.log during the window, 8 unique patterns:
+  - 2 already-known: B29 (role-row), B30 (mail NPE)
+  - 2 newly filed: B37 (WORK_BASKET parent), B38 (SRI cancel-all)
+  - 4 collapsed into the above as related variants
+
+0 ERRORs would have surfaced if B29/B30/B37/B38 were fixed server-side.
+```
+
+---
+
 ## v0.09 — 2026-05-18
 
 Documentation completeness pass: a comprehensive API dictionary,

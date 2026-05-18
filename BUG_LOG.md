@@ -37,6 +37,8 @@
 | B23 | Medium | ✅ Fixed in v0.05 | `_check_app_reachable` treated HTTP 500 as PASS because it POSTed to an auth-required endpoint without auth (always tripped B24's NPE). Now `GET /ediscovery/` requires HTTP 200. |
 | B14c | Low | ✅ Fixed in v0.05 (new path) | `wait_for_indexing` swallowed all exceptions and busy-looped. `helpers/admin_ops.wait_for_tasks` caps consecutive errors at 5 then re-raises. Migrated `test_indexing_workflow.py` uses it. |
 | B36 | Medium | ❌ Confirmed; browser-only workaround | `orgManager/createCustomerUser` refuses calls from DRSysAdmin against a freshly-created org because the `SecureObjectInterceptor` requires the caller to already be a user in that org (`User not found drsysadmin in org:<new_org>`). No body shape, no `systemScope` variant, no `contextHandle` trick gets past it. The browser Express Provisioning flow must use a non-REST path. v0.09 documents this rather than wrapping it. Workaround: the "create org admin user" step remains browser-only. |
+| B37 | Low | Open (server) | During `ecaManager/createCase`, server log fires `ERROR ... Add object - could not find parent object [<orgid>] when creating type [WORK_BASKET] with handle [<hex>]`. Project still activates correctly. Observed 5/5 createCases in the 2026-05-18 QA pass. Same Hibernate composite-key smell as B25/B29. |
+| B38 | Low | Open (server) | During `adminOrgManager/approveProjectDeleteRequest`, server log fires `ERROR ... Exception when canceling all requests for project NNNN ... Task Handle NNNN Not found ... errorCode: INVALID_ARGUMENT`. `ProjectDeleteProcessingInstance` tries to cancel all in-flight SRIs for the project but there are none — every delete logs this. Delete still completes successfully. Observed 5/5 deletes in the 2026-05-18 QA pass. |
 | B31 | Medium | ✅ Fixed in v0.07 (test) | `orgManager/listCorpora` 500'd at system scope. Test now `switch_to_org` first and passes `contextHandle=org` — server works fine in org scope. Not a server defect, the test was malformed. |
 | B32 | Medium | ✅ Fixed in v0.07 (test) | `orgManager/listExportDatabaseConnections` — same root cause + fix as B31. |
 | B33 | Medium | ✅ Fixed in v0.07 (test) | `orgManager/listRoles` NPE'd on missing `objectType` field. Pass `extra_body={"objectType":"PROJECT"}` and the call succeeds. Not a non-functional endpoint after all — the test was sending an incomplete request. |
@@ -376,3 +378,40 @@ batch_name=testload  number_of_files_scanned=2  size_of_files_scanned=261  user_
 **Improvement:** Either move IS_IMPORTED to a separate "project flags" field in the createCase API, or document that `attributes` is the general "key-value bag" rather than calling them "template attributes" everywhere.
 
 ---
+
+## Feature Requests
+
+These are filed by the QA Persona during the 2026-05-18 acceptance test
+and triaged by the Developer Persona. Severity = `Easy` items get fixed
+in the same pass; `Hard` items require user direction.
+
+| ID | Severity | Status | Title |
+|---|---|---|---|
+| FR1 | Easy | ✅ Implemented in v0.10 | `dr-load admin reschedule NAME --lifetime D` — re-arm a previously-unscheduled (or expired) auto-delete without recreating the project. |
+| FR2 | Easy | ✅ Implemented in v0.10 | `dr-load admin list` cosmetic: when a project is in DELETE_PENDING and its `name` field is null in the API response, show `[deleting #<handle>]` instead of just the bare handle. |
+
+### FR1 — `dr-load admin reschedule NAME --lifetime D`
+
+**Need:** After `dr-load admin unschedule NAME`, there is no CLI path to set a new auto-delete timer for that project. Operator must drop to raw `at(1)` (knowing the exact `dr-load admin delete-project NAME --org ORG` command + the at-script env-var layout). This breaks the "no internal handles, no out-of-band knowledge" principle the v0.06 refactor established.
+
+**Proposed behavior:**
+- `dr-load admin reschedule NAME --org ORG --lifetime D`
+- Cancel any existing dr-load-tagged at-jobs for NAME (same logic as `unschedule`)
+- Queue a new at-job per the new lifetime (same logic as the `--lifetime` flag on `create-project`)
+- Idempotent: if no prior schedule exists, still schedules.
+
+**Acceptance test:** Schedule → unschedule → reschedule → atq shows new job → wait → project auto-deletes.
+
+### FR2 — Show `[deleting #handle]` in `list` for in-flight deletes
+
+**Need:** In the 2026-05-18 QA pass, after `dr-load admin delete-project qa-test-5`, the project entered `DELETE_PENDING` state and its `name` field came back null from `listProjects`. The `dr-load admin list` output rendered the row as just the raw handle `24856`, losing the human-readable identity:
+
+```
+PROJECT                    ORG       STATE             SCHEDULED-DELETE
+-----------------------------------------------------------------------
+24856                      training  DELETE_PENDING    —
+```
+
+**Proposed behavior:** When a row's `name` is null/empty AND `projectActivationState == "DELETE_PENDING"`, render the PROJECT column as `[deleting #<handle>]` (or similar) so operators can correlate.
+
+**Acceptance test:** Create, delete, immediately list — should show the dying project with a clearly-marked transitional row.
