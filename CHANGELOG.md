@@ -1,5 +1,72 @@
 # Changelog
 
+## v0.11 — 2026-05-18
+
+New CLI command: **`dr-load admin dashboard --org ORG`**. Snapshot view
+of everything currently happening in an org — running jobs, scheduled
+auto-deletes, recently-finished jobs, and a project summary with doc
+counts and total compute time.
+
+### Added
+
+- **`helpers.admin_ops.dashboard_snapshot(client, org)`** — pure
+  function. Combines `listProjects` + `listCorpora` + per-project
+  `listTasks` + `list_scheduled_deletes()` (atq) into a single
+  structured snapshot:
+
+  ```python
+  {
+      "running":   [{project, handle, task, state, docs, elapsed}, …],
+      "scheduled": [{project, org, at_job_id, scheduled_at}, …],
+      "finished":  [{project, handle, task, state, docs, elapsed,
+                     completed}, …],
+      "projects":  [{name, handle, state, doc_count, total_elapsed}, …],
+  }
+  ```
+
+  Doc count per project is keyed off `corpus.owner` (not the corpus
+  handle prefix — the prefix is the org's default corpus-view
+  container, not the owning project — caught and fixed during this
+  build). Finished tasks are sorted most-recent-first.
+
+- **`dr-load admin dashboard [--org ORG --finished-limit N]`** — Typer
+  wrapper that formats `dashboard_snapshot` output as a four-section
+  text table. Non-interactive (single snapshot per invocation); pair
+  with `watch -n 5 dr-load admin dashboard --org training` for a
+  refreshing terminal view.
+
+- **`helpers.admin_ops._format_elapsed(seconds)`** — humanizes integer
+  seconds as `11s` / `2m05s` / `1h03m` / `2d04h`.
+
+### Notes
+
+- "Total job size" was interpreted as compute footprint (sum of
+  `task.secondsElapsed`) because the REST surface doesn't expose a
+  byte-size field on `listProjects`/`listCorpora`/`listTasks`. Byte
+  size requires the heavyweight CSV from
+  `realmManager/getStorageUsageDownloadUrl` — out of scope for v1 but
+  trivial to add as a `--bytes` flag later that downloads + parses
+  that report.
+- Dashboard is intentionally read-only — it never mutates state.
+
+### Test signal
+
+```
+pytest -m smoke                          → green
+pytest tests/ --ignore=test_indexing_workflow.py
+                                         → green
+dr-load admin dashboard --org training   → all 4 sections render
+```
+
+Live verification: created `dash-test-1` with `--lifetime 5m`,
+caught it mid-indexing — RUNNING JOBS section showed the task in
+RUNNING state with 2 docs / 3s elapsed; SCHEDULED JOBS showed the
+at-job 10 firing at 13:04; PROJECTS row showed dash-test-1 (handle
+26599). Cleaned up with `dr-load admin delete-project`, which also
+cancelled the scheduled at-job (CLI's `--cancel-schedule` default).
+
+---
+
 ## v0.10 — 2026-05-18
 
 QA Persona pass on v0.09 → Developer Persona triage. Test acceptance:

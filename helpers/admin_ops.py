@@ -599,3 +599,123 @@ def is_testload_staged(dest: Path = Path("/data/import/testload")) -> bool:
     if not dest.is_dir():
         return False
     return any(p.is_file() for p in dest.iterdir())
+
+
+# ---------------------------------------------------------- dashboard
+ACTIVE_TASK_STATES: frozenset = frozenset(
+    {"RUNNING", "QUEUED", "PENDING", "PROCESSING"}
+)
+
+
+def dashboard_snapshot(client: EDiscoveryClient, org: str) -> dict:
+    """
+    Gather everything `dr-load admin dashboard` displays for one org.
+
+    Returns a dict with four lists of pre-built rows:
+
+      {
+        "running":   [{project, handle, task, state, docs, elapsed}],
+        "scheduled": [{project, org, at_job_id, scheduled_at}],
+        "finished":  [{project, handle, task, state, docs, elapsed, completed}],
+        "projects":  [{name, handle, state, doc_count, total_elapsed}],
+      }
+
+    Keeping this pure (no I/O beyond REST + atq) so it's testable.
+    """
+    switch_to_org(client, org)
+
+    projs = client.post("orgManager/listProjects",
+                        extra_body={"contextHandle": org}).get("projects", [])
+    corpora = client.post("orgManager/listCorpora",
+                          extra_body={"contextHandle": org}).get("corpora", [])
+
+    # doc count per project: sum corpus.documentCount keyed on corpus.owner
+    # (the owning project handle). The corpus.handle prefix looks like a
+    # project handle but is actually the default-org corpus-view
+    # container on this build, so it's NOT a reliable per-project key.
+    doc_count_by_proj: dict[str, int] = {}
+    for cp in corpora:
+        owner = str(cp.get("owner") or "")
+        if not owner:
+            continue
+        doc_count_by_proj[owner] = doc_count_by_proj.get(owner, 0) + int(cp.get("documentCount", 0) or 0)
+
+    # per-project tasks
+    running: list[dict] = []
+    finished: list[dict] = []
+    proj_rows: list[dict] = []
+    elapsed_by_proj: dict[str, int] = {}
+
+    for p in projs:
+        ph = str(p.get("handle", ""))
+        name = p.get("name") or f"#{ph}"
+        state = (p.get("projectActivationState") or p.get("projectState")
+                 or p.get("state") or "?")
+        # Only fetch tasks for projects in a state where the call won't 500
+        # (DELETE_PENDING projects sometimes refuse listTasks)
+        try:
+            switch_to_project(client, ph, org)
+            tasks = list_project_tasks(client, ph)
+        except Exception:
+            tasks = []
+        # Sum elapsed
+        elapsed = sum(int(t.get("secondsElapsed", 0) or 0) for t in tasks)
+        elapsed_by_proj[ph] = elapsed
+        # Bucket each task
+        for t in tasks:
+            op = t.get("operationState") or t.get("taskStatus")
+            row = {
+                "project":     name,
+                "handle":      ph,
+                "task":        (t.get("description") or t.get("task") or "?")[:50],
+                "state":       op or "?",
+                "docs":        int(t.get("numberResults", 0) or 0),
+                "elapsed":     int(t.get("secondsElapsed", 0) or 0),
+                "percent":     t.get("percentComplete"),
+                "completed":   t.get("dateCompleted") or "",
+            }
+            if op in ACTIVE_TASK_STATES:
+                running.append(row)
+            else:
+                finished.append(row)
+        proj_rows.append({
+            "name":         name,
+            "handle":       ph,
+            "state":        state,
+            "doc_count":    doc_count_by_proj.get(ph, 0),
+            "total_elapsed": elapsed,
+        })
+
+    # Switch back so caller's session is in a sane state
+    switch_to_org(client, org)
+
+    scheduled = []
+    for j in list_scheduled_deletes():
+        if j.get("org") == org or j.get("org") is None:
+            scheduled.append({
+                "project":     j.get("project_name", "?"),
+                "org":         j.get("org", "?"),
+                "at_job_id":   j.get("at_job_id"),
+                "scheduled_at": j.get("scheduled_at", "?"),
+            })
+
+    # Order finished most-recent first
+    finished.sort(key=lambda r: r.get("completed", ""), reverse=True)
+
+    return {
+        "running":   running,
+        "scheduled": scheduled,
+        "finished":  finished,
+        "projects":  proj_rows,
+    }
+
+
+def _format_elapsed(seconds: int) -> str:
+    """Human-readable elapsed: '11s', '2m05s', '1h03m', '2d04h'."""
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m{seconds % 60:02d}s"
+    if seconds < 86400:
+        return f"{seconds // 3600}h{(seconds % 3600) // 60:02d}m"
+    return f"{seconds // 86400}d{(seconds % 86400) // 3600:02d}h"

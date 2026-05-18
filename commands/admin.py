@@ -441,6 +441,83 @@ def list_state(
         client.logout()
 
 
+@app.command("dashboard")
+def dashboard(
+    org: str = typer.Option(None, "--org", envvar="DR_ORG_ORGANIZATION",
+                            help="Org to inspect (e.g. 'training'). Required."),
+    finished_limit: int = typer.Option(10, "--finished-limit",
+                                       help="How many finished jobs to show (most recent first)"),
+) -> None:
+    """
+    Snapshot dashboard: running jobs, scheduled deletes, finished jobs,
+    and a project summary with doc counts and total compute time.
+
+    Non-interactive. Each invocation prints one full snapshot and exits.
+    Re-run for an updated view; pair with `watch -n 5 dr-load admin
+    dashboard --org training` for a refreshing terminal view.
+
+    Columns:
+        DOCS      Documents in the corpus (corpus.documentCount, summed
+                  across the project's corpora) or processed by the task
+                  (task.numberResults).
+        ELAPSED   Total compute time consumed by the project's tasks
+                  (sum of task.secondsElapsed). This is the closest
+                  proxy to "job size" available in the API without
+                  downloading the storage-usage CSV report.
+    """
+    if not org:
+        _fail("--org (or DR_ORG_ORGANIZATION) is required.")
+        raise typer.Exit(1)
+    try:
+        client = _client()
+    except APIError as e:
+        _fail(f"Login failed: {e}")
+        raise typer.Exit(1)
+
+    try:
+        snap = ops.dashboard_snapshot(client, org)
+    finally:
+        client.logout()
+
+    typer.echo(f"\n=== dr-load dashboard for org {org!r}"
+               f"  @ {datetime.now():%Y-%m-%d %H:%M:%S} ===")
+
+    typer.echo(f"\n--- RUNNING JOBS ({len(snap['running'])}) ---")
+    if snap["running"]:
+        typer.echo(f"{'PROJECT':<25} {'TASK':<40} {'STATE':<12} {'DOCS':>6} {'ELAPSED':>9}")
+        for r in snap["running"]:
+            typer.echo(f"{r['project']:<25} {r['task']:<40} {r['state']:<12} "
+                       f"{r['docs']:>6} {ops._format_elapsed(r['elapsed']):>9}")
+    else:
+        typer.echo("  (none)")
+
+    typer.echo(f"\n--- SCHEDULED JOBS ({len(snap['scheduled'])}) ---")
+    if snap["scheduled"]:
+        typer.echo(f"{'PROJECT':<25} {'AT-JOB':<8} {'FIRES AT':<32}")
+        for s in snap["scheduled"]:
+            typer.echo(f"{s['project']:<25} {s['at_job_id']:<8} {s['scheduled_at']:<32}")
+    else:
+        typer.echo("  (none)")
+
+    typer.echo(f"\n--- FINISHED JOBS (last {finished_limit}) ---")
+    fin = snap["finished"][:finished_limit]
+    if fin:
+        typer.echo(f"{'PROJECT':<25} {'TASK':<40} {'STATE':<10} {'DOCS':>6} {'ELAPSED':>9} {'COMPLETED'}")
+        for r in fin:
+            typer.echo(f"{r['project']:<25} {r['task']:<40} {r['state']:<10} "
+                       f"{r['docs']:>6} {ops._format_elapsed(r['elapsed']):>9} {r['completed']}")
+    else:
+        typer.echo("  (none)")
+
+    typer.echo(f"\n--- PROJECTS in {org!r} ({len(snap['projects'])}) ---")
+    if snap["projects"]:
+        typer.echo(f"{'NAME':<35} {'HANDLE':<8} {'STATE':<22} {'DOCS':>6} {'ELAPSED':>9}")
+        for p in snap["projects"]:
+            typer.echo(f"{p['name']:<35} {p['handle']:<8} {p['state']:<22} "
+                       f"{p['doc_count']:>6} {ops._format_elapsed(p['total_elapsed']):>9}")
+    typer.echo("")
+
+
 @app.command("stage-testload")
 def stage_testload(
     src: Path = typer.Option(None, "--src",
