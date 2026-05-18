@@ -23,9 +23,9 @@ name: smoke
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
   workflow_dispatch:        # allow manual trigger from the Actions tab
     inputs:
       run_integration:
