@@ -645,6 +645,7 @@ def dashboard_snapshot(client: EDiscoveryClient, org: str) -> dict:
     finished: list[dict] = []
     proj_rows: list[dict] = []
     elapsed_by_proj: dict[str, int] = {}
+    running_proj_handles: set[str] = set()
 
     for p in projs:
         ph = str(p.get("handle", ""))
@@ -676,14 +677,17 @@ def dashboard_snapshot(client: EDiscoveryClient, org: str) -> dict:
             }
             if op in ACTIVE_TASK_STATES:
                 running.append(row)
+                running_proj_handles.add(ph)
             else:
                 finished.append(row)
         proj_rows.append({
-            "name":         name,
-            "handle":       ph,
-            "state":        state,
-            "doc_count":    doc_count_by_proj.get(ph, 0),
+            "name":          name,
+            "handle":        ph,
+            "state":         state,
+            "doc_count":     doc_count_by_proj.get(ph, 0),
             "total_elapsed": elapsed,
+            "description":   p.get("description") or "",
+            "running":       ph in running_proj_handles,
         })
 
     # Switch back so caller's session is in a sane state

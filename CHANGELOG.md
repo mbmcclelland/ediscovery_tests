@@ -1,5 +1,72 @@
 # Changelog
 
+## v0.13 — 2026-05-18
+
+Two bulk-delete commands for managing test-project sprawl.
+
+### Added
+
+- **`dr-load admin cleanall --org ORG [--yes] [--dry-run]`** — bulk
+  delete every project in `--org` EXCEPT:
+    - projects with an active task (state RUNNING/QUEUED/PENDING/PROCESSING)
+    - projects whose **description contains "do not delete"** (case-insensitive
+      substring match anywhere in the text)
+
+  Wraps `dr-load admin delete-project` per row so each project's
+  scheduled at-job is cancelled as a side effect. Shows the plan
+  before acting and prompts for Y/N unless `--yes` is given.
+  `--dry-run` shows the plan and exits without deleting anything.
+
+- **`dr-load admin purgeall --org ORG [--force]`** — indiscriminately
+  delete every project in `--org`. No exclusions. Running projects are
+  interrupted; protected projects are deleted anyway. The default
+  prompt requires **typing the org name exactly** to confirm so a typo
+  doesn't blow away the wrong org; `--force` bypasses for scripted use.
+  After per-project deletes, the command flushes any remaining
+  dr-load-tagged at-jobs that target this org as a belt-and-suspenders
+  cleanup.
+
+### Changed
+
+- **`helpers.admin_ops.dashboard_snapshot`** now carries
+  `description` and `running: bool` on each project row. No new API
+  calls — both fields come from data the snapshot was already fetching.
+  Backwards-compatible: existing consumers ignore the new fields.
+
+### How to protect a project from `cleanall`
+
+Just include "do not delete" anywhere in its description, in any case:
+
+```bash
+dr-load admin create-project keepme --org training \
+    -d "Reference data — DO NOT DELETE during QA passes"
+```
+
+`do not delete`, `DO NOT DELETE`, `Please do not delete this`, `Don't
+delete — production data` — all match the case-insensitive substring
+matcher and the project will be skipped.
+
+### Live verification
+
+```
+qa-keep-this        Plan / cleanall:  SKIP (description "do not delete")
+smoketest           Plan / cleanall:  SKIP (description "do not delete")
+qa-running-test     Plan / cleanall:  SKIP (active indexing task)
+qa-bootstrap-proj-001  Plan:  DELETE
+verify-4320e051        Plan:  DELETE
+verify-fix-91ba6d      Plan:  DELETE
+```
+
+Found in passing during testing: `smoketest` had `description: "do not
+delete"` literally — a convention already in use by whoever set up that
+project before this feature existed. Case-insensitive substring matcher
+picked it up correctly alongside the new `qa-keep-this`.
+
+`purgeall` plumbing tested on the empty org `verify-test-001` (clean
+no-op) and confirmation guard validated by inspection.
+
+---
+
 ## v0.12 — 2026-05-18
 
 Rich-rendered dashboard with a live `--watch` mode. Operator-facing TUI

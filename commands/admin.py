@@ -668,6 +668,214 @@ def dashboard(
     typer.echo("")
 
 
+def _is_protected_description(desc: str) -> bool:
+    """Case-insensitive substring match for 'do not delete' anywhere in `desc`."""
+    return "do not delete" in (desc or "").lower()
+
+
+def _bulk_delete(client: EDiscoveryClient, org: str, candidates: list[dict]) -> tuple[int, list[tuple[str, str]]]:
+    """Delete every project in `candidates` (each must have 'name' + 'handle').
+    Returns (success_count, [(name, error_string), ...]) for any failures."""
+    ok = 0
+    failures: list[tuple[str, str]] = []
+    for p in candidates:
+        name = p["name"]
+        handle = str(p["handle"])
+        _info(f"Deleting {name!r} (handle={handle})...")
+        try:
+            ops.switch_to_project(client, handle, org)
+            if ops.delete_project(
+                client,
+                project_handle=handle,
+                project_name=name,
+                system_org=default_config.organization,
+            ):
+                ok += 1
+                cancelled = ops.cancel_scheduled_delete(name)
+                if cancelled:
+                    _info(f"  also cancelled at-job(s): {', '.join(cancelled)}")
+            else:
+                failures.append((name, "delete approval did not land in time"))
+        except APIError as e:
+            failures.append((name, str(e)))
+        except Exception as e:
+            failures.append((name, f"{type(e).__name__}: {e}"))
+    return ok, failures
+
+
+@app.command("cleanall")
+def cleanall(
+    org: str = typer.Option(None, "--org", envvar="DR_ORG_ORGANIZATION",
+                            help="Org whose projects to clean. Required."),
+    yes: bool = typer.Option(False, "--yes", "-y",
+                             help="Skip confirmation prompt."),
+    dry_run: bool = typer.Option(False, "--dry-run",
+                                 help="Show the plan; do not delete anything."),
+) -> None:
+    """
+    Bulk-delete every project in `--org` EXCEPT:
+
+        - projects that currently have an ACTIVE task
+          (RUNNING / QUEUED / PENDING / PROCESSING)
+        - projects whose description contains "do not delete"
+          (case-insensitive substring match, anywhere in the text)
+
+    Wraps `dr-load admin delete-project` per row, so each project's
+    scheduled auto-delete at-job is cancelled as a side effect.
+    """
+    if not org:
+        _fail("--org (or DR_ORG_ORGANIZATION) is required.")
+        raise typer.Exit(1)
+
+    try:
+        client = _client()
+    except APIError as e:
+        _fail(f"Login failed: {e}")
+        raise typer.Exit(1)
+
+    try:
+        _info(f"Snapshotting projects in {org!r}...")
+        snap = ops.dashboard_snapshot(client, org)
+        projects = snap["projects"]
+
+        to_delete: list[dict] = []
+        skipped: list[tuple[dict, str]] = []
+        for p in projects:
+            if p.get("running"):
+                skipped.append((p, "running"))
+            elif _is_protected_description(p.get("description", "")):
+                skipped.append((p, "protected: \"do not delete\""))
+            else:
+                to_delete.append(p)
+
+        typer.echo("")
+        typer.echo(f"Plan for org {org!r}:")
+        typer.echo(f"  {len(to_delete)} to delete · {len(skipped)} skipped "
+                   f"· {len(projects)} total")
+        if to_delete:
+            typer.echo("\nWill DELETE:")
+            for p in to_delete:
+                desc = (p["description"] or "")[:40]
+                typer.echo(f"  - {p['name']:<35} (handle={p['handle']}, desc={desc!r})")
+        if skipped:
+            typer.echo("\nWill SKIP:")
+            for p, why in skipped:
+                desc = (p["description"] or "")[:40]
+                typer.echo(f"  - {p['name']:<35} ({why}; desc={desc!r})")
+
+        if dry_run:
+            typer.echo("\n[dry-run] No changes made.")
+            return
+        if not to_delete:
+            _ok("Nothing to delete.")
+            return
+
+        if not yes:
+            ok = typer.confirm(f"\nDelete {len(to_delete)} project(s) in {org!r}?",
+                               default=False)
+            if not ok:
+                _info("Aborted.")
+                raise typer.Exit(0)
+
+        ok_count, failures = _bulk_delete(client, org, to_delete)
+        typer.echo("")
+        _ok(f"Deleted {ok_count}/{len(to_delete)} project(s).")
+        if failures:
+            _fail(f"{len(failures)} failure(s):")
+            for name, err in failures:
+                typer.echo(f"  - {name}: {err}", err=True)
+            raise typer.Exit(2)
+    finally:
+        client.logout()
+
+
+@app.command("purgeall")
+def purgeall(
+    org: str = typer.Option(None, "--org", envvar="DR_ORG_ORGANIZATION",
+                            help="Org whose projects to purge. Required."),
+    force: bool = typer.Option(False, "--force",
+                               help="Skip the typed-confirmation guard "
+                                    "(for scripted use; be sure)."),
+) -> None:
+    """
+    Indiscriminately delete every project in `--org`. NO exclusions:
+    running projects are interrupted, "do not delete"-protected projects
+    are deleted anyway. Also cancels every dr-load-tagged at-job for the
+    org so no scheduled deletes hang around pointing at gone projects.
+
+    DANGEROUS. The default prompt requires typing the org name to confirm,
+    so a typo doesn't blow away an org you didn't mean.
+    """
+    if not org:
+        _fail("--org (or DR_ORG_ORGANIZATION) is required.")
+        raise typer.Exit(1)
+
+    try:
+        client = _client()
+    except APIError as e:
+        _fail(f"Login failed: {e}")
+        raise typer.Exit(1)
+
+    try:
+        ops.switch_to_org(client, org)
+        projs = client.post("orgManager/listProjects",
+                            extra_body={"contextHandle": org}).get("projects", [])
+        if not projs:
+            _ok(f"No projects in {org!r} to purge.")
+            return
+
+        typer.echo("")
+        typer.secho(f"!!! PURGE PLAN for org {org!r} !!!", fg=typer.colors.RED, bold=True)
+        typer.echo(f"  {len(projs)} project(s) — ALL will be deleted, including:")
+        for p in projs:
+            tag = ""
+            if _is_protected_description(p.get("description", "")):
+                tag = " [PROTECTED — will be deleted anyway]"
+            typer.echo(f"  - {p.get('name', '#'+str(p.get('handle'))):<35} "
+                       f"(handle={p.get('handle')}{tag})")
+
+        if not force:
+            typer.echo("")
+            typed = typer.prompt(
+                f"To confirm, type the org name exactly ({org!r})",
+                default="",
+                show_default=False,
+            )
+            if typed != org:
+                _fail(f"Confirmation did not match {org!r}. Aborting.")
+                raise typer.Exit(1)
+
+        # Pull at-jobs first so we can flush them at the end (in case any
+        # don't get caught by the per-project delete's name match)
+        prior_atjobs = ops.list_scheduled_deletes()
+
+        to_delete = [{"name": p.get("name") or f"#{p.get('handle')}",
+                      "handle": str(p.get("handle"))} for p in projs]
+        ok_count, failures = _bulk_delete(client, org, to_delete)
+
+        # Belt-and-suspenders: any dr-load-tagged at-jobs for this org
+        # that didn't get cancelled name-by-name (e.g. stale schedules
+        # pointing at projects that no longer exist) get nuked here.
+        flushed = 0
+        for j in prior_atjobs:
+            if j.get("org") == org:
+                # cancel_scheduled_delete is by name; loop in case names overlap
+                cancelled = ops.cancel_scheduled_delete(j.get("project_name", ""))
+                flushed += len(cancelled)
+
+        typer.echo("")
+        _ok(f"Purged {ok_count}/{len(to_delete)} project(s) from {org!r}.")
+        if flushed:
+            _ok(f"Also flushed {flushed} extra at-job(s).")
+        if failures:
+            _fail(f"{len(failures)} failure(s):")
+            for name, err in failures:
+                typer.echo(f"  - {name}: {err}", err=True)
+            raise typer.Exit(2)
+    finally:
+        client.logout()
+
+
 @app.command("stage-testload")
 def stage_testload(
     src: Path = typer.Option(None, "--src",
