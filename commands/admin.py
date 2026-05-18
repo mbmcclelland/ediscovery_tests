@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import time
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -441,29 +442,133 @@ def list_state(
         client.logout()
 
 
+def _state_color(state: str) -> str:
+    """Map an operationState/projectState to a Rich color tag."""
+    s = (state or "").upper()
+    if s in ops.ACTIVE_TASK_STATES:
+        return "yellow"
+    if s == "SUCCESS":
+        return "green"
+    if s in ("FAILURE", "FAILED", "ERROR"):
+        return "red"
+    if s == "ACTIVE":
+        return "green"
+    if "DELETE" in s:
+        return "magenta"
+    return "white"
+
+
+def _render_dashboard_rich(snap: dict, org: str):
+    """Build a Rich renderable showing the four sections of a dashboard."""
+    from rich.console import Group
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+
+    # RUNNING JOBS
+    running = Table(title=f"Running jobs ({len(snap['running'])})",
+                    show_lines=False, header_style="bold yellow", expand=True)
+    running.add_column("Project", style="cyan", no_wrap=True)
+    running.add_column("Task", max_width=40, no_wrap=True, overflow="ellipsis")
+    running.add_column("State", no_wrap=True)
+    running.add_column("Docs", justify="right")
+    running.add_column("Elapsed", justify="right", no_wrap=True)
+    if snap["running"]:
+        for r in snap["running"]:
+            color = _state_color(r["state"])
+            running.add_row(r["project"], r["task"],
+                            Text(r["state"], style=color),
+                            str(r["docs"]), ops._format_elapsed(r["elapsed"]))
+    else:
+        running.add_row(Text("(none)", style="dim"), "", "", "", "")
+
+    # SCHEDULED JOBS
+    scheduled = Table(title=f"Scheduled deletes ({len(snap['scheduled'])})",
+                      show_lines=False, header_style="bold cyan", expand=True)
+    scheduled.add_column("Project", style="cyan", no_wrap=True)
+    scheduled.add_column("At-job", justify="right")
+    scheduled.add_column("Fires at", no_wrap=True)
+    if snap["scheduled"]:
+        for s in snap["scheduled"]:
+            scheduled.add_row(s["project"], str(s["at_job_id"]), s["scheduled_at"])
+    else:
+        scheduled.add_row(Text("(none)", style="dim"), "", "")
+
+    # FINISHED JOBS
+    finished = Table(title=f"Finished jobs (most recent first)",
+                     show_lines=False, header_style="bold green", expand=True)
+    finished.add_column("Project", style="cyan", no_wrap=True)
+    finished.add_column("Task", max_width=40, no_wrap=True, overflow="ellipsis")
+    finished.add_column("State", no_wrap=True)
+    finished.add_column("Docs", justify="right")
+    finished.add_column("Elapsed", justify="right", no_wrap=True)
+    finished.add_column("Completed", no_wrap=True, style="dim")
+    if snap["finished"]:
+        for r in snap["finished"]:
+            color = _state_color(r["state"])
+            finished.add_row(r["project"], r["task"],
+                             Text(r["state"], style=color),
+                             str(r["docs"]), ops._format_elapsed(r["elapsed"]),
+                             r["completed"] or "")
+    else:
+        finished.add_row(Text("(none)", style="dim"), "", "", "", "", "")
+
+    # PROJECTS
+    projects = Table(title=f"Projects in {org!r} ({len(snap['projects'])})",
+                     show_lines=False, header_style="bold blue", expand=True)
+    projects.add_column("Name", style="cyan", no_wrap=True)
+    projects.add_column("Handle", justify="right", no_wrap=True, style="dim")
+    projects.add_column("State", no_wrap=True)
+    projects.add_column("Docs", justify="right")
+    projects.add_column("Elapsed", justify="right", no_wrap=True)
+    for p in snap["projects"]:
+        color = _state_color(p["state"])
+        projects.add_row(p["name"], p["handle"],
+                         Text(p["state"], style=color),
+                         str(p["doc_count"]), ops._format_elapsed(p["total_elapsed"]))
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return Panel(
+        Group(running, scheduled, finished, projects),
+        title=f"[bold]dr-load dashboard[/]  ·  org [cyan]{org}[/]  ·  {timestamp}",
+        subtitle="[dim]Ctrl-C to exit[/]",
+        border_style="white",
+    )
+
+
 @app.command("dashboard")
 def dashboard(
     org: str = typer.Option(None, "--org", envvar="DR_ORG_ORGANIZATION",
                             help="Org to inspect (e.g. 'training'). Required."),
     finished_limit: int = typer.Option(10, "--finished-limit",
                                        help="How many finished jobs to show (most recent first)"),
+    rich_mode: bool = typer.Option(False, "--rich",
+                                   help="Render a single snapshot using Rich (colors, boxes)."),
+    watch: bool = typer.Option(False, "--watch",
+                               help="Live-refresh the dashboard every --interval seconds. "
+                                    "Implies --rich. Ctrl-C to exit."),
+    interval: int = typer.Option(5, "--interval",
+                                 help="Seconds between refreshes when --watch is set"),
+    alt_screen: bool = typer.Option(False, "--alt-screen",
+                                    help="Render --watch in the terminal's alternate screen "
+                                         "(like vim/htop). Restores the prior view on exit."),
 ) -> None:
     """
     Snapshot dashboard: running jobs, scheduled deletes, finished jobs,
     and a project summary with doc counts and total compute time.
 
-    Non-interactive. Each invocation prints one full snapshot and exits.
-    Re-run for an updated view; pair with `watch -n 5 dr-load admin
-    dashboard --org training` for a refreshing terminal view.
+    Three render modes:
+      (default)  plain text. Pipeable; scripts can grep this.
+      --rich     one Rich-rendered snapshot. Same data, nicer table.
+      --watch    Rich Live, auto-refresh every --interval seconds.
 
     Columns:
         DOCS      Documents in the corpus (corpus.documentCount, summed
                   across the project's corpora) or processed by the task
                   (task.numberResults).
         ELAPSED   Total compute time consumed by the project's tasks
-                  (sum of task.secondsElapsed). This is the closest
-                  proxy to "job size" available in the API without
-                  downloading the storage-usage CSV report.
+                  (sum of task.secondsElapsed). Closest proxy to "job
+                  size" without downloading the storage-usage CSV.
     """
     if not org:
         _fail("--org (or DR_ORG_ORGANIZATION) is required.")
@@ -474,11 +579,57 @@ def dashboard(
         _fail(f"Login failed: {e}")
         raise typer.Exit(1)
 
+    if watch:
+        # Quiet the api_client INFO logs so they don't smear the Live frame.
+        # (login happened above; the loop only does post() calls which log
+        #  at DEBUG.) Belt-and-suspenders: raise the logger level for the
+        # duration of the watch.
+        api_logger = logging.getLogger("helpers.api_client")
+        old_level = api_logger.level
+        api_logger.setLevel(logging.WARNING)
+
+        from rich.console import Console
+        from rich.live import Live
+        console = Console()
+        try:
+            snap = ops.dashboard_snapshot(client, org)
+            snap["finished"] = snap["finished"][:finished_limit]
+            with Live(_render_dashboard_rich(snap, org),
+                      console=console,
+                      refresh_per_second=4,
+                      screen=alt_screen) as live:
+                while True:
+                    try:
+                        time.sleep(interval)
+                    except KeyboardInterrupt:
+                        break
+                    try:
+                        snap = ops.dashboard_snapshot(client, org)
+                        snap["finished"] = snap["finished"][:finished_limit]
+                        live.update(_render_dashboard_rich(snap, org))
+                    except APIError as e:
+                        # Don't crash the loop on transient errors; surface
+                        # in-frame so the operator notices.
+                        console.print(f"[red]APIError:[/] {e}")
+                    except KeyboardInterrupt:
+                        break
+        finally:
+            api_logger.setLevel(old_level)
+            client.logout()
+        return
+
     try:
         snap = ops.dashboard_snapshot(client, org)
+        snap["finished"] = snap["finished"][:finished_limit]
     finally:
         client.logout()
 
+    if rich_mode:
+        from rich.console import Console
+        Console().print(_render_dashboard_rich(snap, org))
+        return
+
+    # Plain text (default, pipeable)
     typer.echo(f"\n=== dr-load dashboard for org {org!r}"
                f"  @ {datetime.now():%Y-%m-%d %H:%M:%S} ===")
 
@@ -500,10 +651,9 @@ def dashboard(
         typer.echo("  (none)")
 
     typer.echo(f"\n--- FINISHED JOBS (last {finished_limit}) ---")
-    fin = snap["finished"][:finished_limit]
-    if fin:
+    if snap["finished"]:
         typer.echo(f"{'PROJECT':<25} {'TASK':<40} {'STATE':<10} {'DOCS':>6} {'ELAPSED':>9} {'COMPLETED'}")
-        for r in fin:
+        for r in snap["finished"]:
             typer.echo(f"{r['project']:<25} {r['task']:<40} {r['state']:<10} "
                        f"{r['docs']:>6} {ops._format_elapsed(r['elapsed']):>9} {r['completed']}")
     else:

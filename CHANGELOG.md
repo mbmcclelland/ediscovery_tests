@@ -1,5 +1,58 @@
 # Changelog
 
+## v0.12 — 2026-05-18
+
+Rich-rendered dashboard with a live `--watch` mode. Operator-facing TUI
+for "what's happening in this org right now," refreshable on a timer.
+
+### Added
+
+- **`dr-load admin dashboard --rich`** — single Rich-rendered snapshot.
+  Four tables in a Panel (Running jobs / Scheduled deletes / Finished
+  jobs / Projects), per-section bold-colored headers, state column
+  color-coded (yellow=running, green=success/active, red=failed,
+  magenta=delete-pending), Task column ellipsis-truncated at 40
+  chars so rows stay single-line and the dashboard reads cleanly.
+- **`dr-load admin dashboard --watch [--interval N] [--alt-screen]`** —
+  same Rich layout but driven by `rich.live.Live`. Refreshes every
+  `--interval` seconds (default 5). `Ctrl-C` exits cleanly; transient
+  `APIError`s in a poll are caught and printed in-frame so the loop
+  doesn't die on a flaky network blip. `--alt-screen` puts the dashboard
+  in the terminal's alternate screen (vim / htop style) and restores
+  the prior view on exit.
+- **Suppressed `helpers.api_client` INFO log during `--watch`** so the
+  per-poll login chatter doesn't smear the live frame. (Login still
+  happens once at the start; subsequent post() calls log at DEBUG.)
+
+### Compatibility
+
+- Plain-text mode (the default) is unchanged. `dr-load admin dashboard
+  --org training` still emits the same scriptable text as v0.11; pipes
+  and greps continue to work.
+- `rich >= 13.0` was already pinned in `requirements.txt` before this
+  release. No new dependencies.
+
+### Notes
+
+- Best in a wide terminal (`COLUMNS >= 120`). The Rich tables auto-fit
+  to whatever width is available; narrow terminals will compress
+  columns but stay legible.
+- Watch loop doesn't depend on a database connection — it reads
+  everything through the REST API + the local at-queue. The same
+  session token is reused across polls.
+
+### Test signal
+
+```
+pytest -m smoke              → green
+pytest tests/                → green (69 passed, 16 skipped, 1 xfailed)
+dr-load admin dashboard --rich            → renders all 4 tables
+dr-load admin dashboard --watch -i 3      → Live loop polls cleanly,
+                                            exits on Ctrl-C / SIGTERM
+```
+
+---
+
 ## v0.11 — 2026-05-18
 
 New CLI command: **`dr-load admin dashboard --org ORG`**. Snapshot view
