@@ -1,6 +1,11 @@
 # eDiscovery API Test Suite
 
-**Version 0.03**
+**Version 0.07**
+
+> **Working with this for the first time? Start at [QA_README.md](QA_README.md).**
+> It is the operator-facing companion to this doc — quick start, CLI reference,
+> example workflows, and the known-issues list. This README stays as the
+> developer-facing reference.
 
 Automated API tests and load tests for the Digital Reef eDiscovery REST API,
 plus the `dr-load` CLI for running headless load tests with preflight checks,
