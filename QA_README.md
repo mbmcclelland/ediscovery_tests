@@ -1,16 +1,45 @@
 # Digital Reef eDiscovery — QA Quick Start
 
-**Version 0.13 · 2026-05-18**
+**Version 0.14 · 2026-05-18**
 
-This is the operator-facing companion to [README.md](README.md). If you
-just inherited a fresh test VM and need to get to "I ran the smoke
-test and it's green" in under 30 minutes, start here.
+You just inherited a test VM and need to get to "the smoke test is green" in
+under 30 minutes. This doc walks that path end-to-end, then becomes your
+day-to-day operator reference. Read **§1 Quick start** first; everything
+else is lookup material.
 
-Other docs in this repo:
-- [API_DICTIONARY.md](API_DICTIONARY.md) — every REST endpoint with request/response shapes and examples
-- [DR_Workflow_Guide.md](DR_Workflow_Guide.md) — workflow narrative (browser flows mapped to REST)
-- [BUG_LOG.md](BUG_LOG.md) — known issues, root causes, historical context
+**Audience.** Anyone running QA against a Digital Reef install. Written
+so a junior sysadmin (familiar with Linux + ssh, less so with APIs and
+Python venvs) can follow it; tables and examples are dense enough that
+a senior sysadmin won't feel patronized.
+
+**Other docs:**
+- [README.md](README.md) — repo overview + doc map
+- [API_DICTIONARY.md](API_DICTIONARY.md) — every REST endpoint with real shapes
+- [DR_Workflow_Guide.md](DR_Workflow_Guide.md) — what the server actually does behind each call
+- [BUG_LOG.md](BUG_LOG.md) — open server bugs + history
 - [CHANGELOG.md](CHANGELOG.md) — per-release notes
+
+---
+
+## 0. Glossary (read this first if any term is unfamiliar)
+
+| Term | What it means here |
+|---|---|
+| **Digital Reef** | The product under test. A web-based eDiscovery platform served at `https://<host>:8443/ediscovery/`. |
+| **DRSysAdmin** | The built-in super-admin user. Lives in the `super_system_customer` org. Used by the test suite for orchestration. |
+| **Organization (org)** | A tenant-like grouping. All projects belong to an org. The default for testing is `training`. |
+| **Project** | A unit of work in eDiscovery — a "case." Holds documents (a *corpus*) and indexing/analysis jobs. |
+| **Corpus** | The bag of documents inside a project. One project can have one or more corpora. |
+| **Connector** | A configured data source the server can read from. The test fixture uses `training-import-nfs-local`. |
+| **Data area** | A directory inside a connector — what gets scanned during import. |
+| **Representation** | A processed view of a corpus (metadata, content, vectors). Each import creates several. |
+| **Handle** | An opaque server-side ID. Sometimes numeric (`1095`), sometimes 40-char hex, sometimes composite (`project_handle:corpus_handle`). Never parse them. |
+| **Indexing** | The pipeline that scans files in a data area, extracts text, builds search indexes. |
+| **`dr-load`** | The CLI shipped by this repo. Three families: `preflight`, `admin <subcommand>`, and the load-test scenarios (`browsing`, `indexing`). |
+| **`pytest -m smoke`** | The canonical "is the install healthy?" gate. ~16 seconds; runs ~31 tests. |
+| **Express Provisioning** | The browser-only flow that creates an org + admin user in one shot. Required once per fresh install ([BUG_LOG B36](BUG_LOG.md)). |
+| **at-job** | A scheduled command queued via Linux `at(1)`. `dr-load` uses this to auto-delete projects after a `--lifetime`. |
+| **"do not delete"** | A case-insensitive substring convention in a project's description. Projects marked this way are skipped by `cleanall`. |
 
 ---
 
@@ -356,52 +385,105 @@ For full root-cause analysis see `BUG_LOG.md`. The QA-facing summary:
 
 ## 7. Troubleshooting
 
-### Smoke test fails with "Could not auto-discover role handle"
+**Start at the top and stop at the first match.** Each row links to the
+fix.
 
-DRSysAdmin isn't an Organization Administrator on `DR_ORG_ORGANIZATION`. Fix:
+| Symptom you saw | What's actually wrong | Fix |
+|---|---|---|
+| `dr-load preflight` fails on `app_reachable` | App server is down or you have the wrong host | See [§7.1](#71-app-server-not-reachable) |
+| `dr-load preflight` fails on `auth` | Wrong username/password, or password contains a shell metachar that got eaten | See [§7.2](#72-auth-fails) |
+| `dr-load preflight` fails on `connector_uuid: not found` | Stale `DR_NFS_CONNECTOR_HANDLE` | See [§7.3](#73-connector-uuid-not-found) |
+| `dr-load preflight` fails on `nfs_path` | The path inside the connector doesn't exist on the host | See [§7.4](#74-nfs-path-missing) |
+| Smoke test fails with `Could not auto-discover role handle` | DRSysAdmin is not yet an Org Admin on the target org | See [§7.5](#75-no-role-handle) |
+| `pytest` fails with HTTP 500 + no useful body | Server-side error; body went to log | See [§7.6](#76-http-500-no-body) |
+| `create-project` says `Already exists` but `list` doesn't show it | Orphan project (BUG_LOG B35) | See [§7.7](#77-orphan-project) |
+| `atq` shows jobs you don't want | Scheduled at-jobs need clearing | See [§7.8](#78-stale-at-jobs) |
+| `dr-load admin list` shows a row with `[deleting #<handle>]` | Delete in flight; expected, not an error | Wait ~10s and re-list |
+| Login error after recent password change | `.env` overrides shell env? No — shell wins as of v0.04 | Confirm `echo $DR_PASSWORD` matches |
 
-1. Open the web UI as DRSysAdmin
-2. Switch to the target org
-3. Add DRSysAdmin to the org's user list with role "Organization Administrator"
-4. Retry. The CLI does not require this until you actually call something that needs role information.
-
-### `pytest` reports HTTP 500 with no useful body
-
-Check `/home/auraria/AHS/output/192.168.58.128_SERVER.log` and `192.168.58.128_MGMTAGT.log` — the server's stack trace lands there. The api_client *does* surface JSON error bodies for non-5xx responses; only true 500s with no body fall through to a generic `HTTPError`.
-
-### "Already exists" when creating a project after a previous failed run
-
-The orphan-project case (B35). Find the handle in the SERVER.log
-"id : NNNN entityName: ..." line and recover:
+### 7.1 App server not reachable
 
 ```bash
-dr-load admin delete-project NAME --org ORG --handle NNNN
+curl -k -s -o /dev/null -w "%{http_code}\n" https://192.168.58.128:8443/ediscovery/
+# Expect: 200
 ```
 
-### `dr-load preflight` says `connector_uuid: not found`
+If you get a connection refused or 5xx:
+- Confirm the VM is up: `ping 192.168.58.128`
+- Confirm JBoss is running on the server: `ssh <host> systemctl status auraria-jboss-eap || ps aux | grep jboss`
+- Check the server log: `/home/auraria/AHS/output/192.168.58.128_SERVER.log`
 
-Either `DR_NFS_CONNECTOR_HANDLE` is stale (the connector was recreated
-and got a new handle) or the org user can't see it. Re-discover:
+### 7.2 Auth fails
+
+```bash
+echo "$DR_USERNAME / $DR_PASSWORD"      # are these set, no quoting weirdness?
+echo "$DR_ORGANIZATION"                 # should be super_system_customer for DRSysAdmin
+```
+
+If the password contains `$`, `!`, or backticks, put it in single quotes inside `.env`. The shell wins over `.env` (v0.04+), so an outdated `.env` won't silently override a fresh shell export.
+
+### 7.3 Connector UUID not found
+
+Re-discover the handle and re-export it:
 
 ```bash
 dr-load admin list-connectors training
-# Copy the handle of training-import-nfs-local into DR_NFS_CONNECTOR_HANDLE
+export DR_NFS_CONNECTOR_HANDLE=$(dr-load admin list-connectors training \
+    | awk '/training-import-nfs-local/ {print $3}')
 ```
 
-### `atq` shows a job I don't want
+### 7.4 NFS path missing
+
+`DR_NFS_IMPORT_PATH` is the subpath *under* the connector's `remotePath` (which is `/data/import`). If `DR_NFS_IMPORT_PATH=/testload`, files must exist at `/data/import/testload/` on the server host.
 
 ```bash
-atrm <job_id>          # raw atrm
-dr-load admin unschedule NAME   # name-based, finds and atrms tagged jobs
+ls /data/import/testload                # should list doc1.txt, doc2.txt
+sudo dr-load admin stage-testload       # re-stages if empty
 ```
 
-### `dr-load admin list` shows orphan scheduled jobs
+### 7.5 No role handle
 
-A scheduled at-job exists for a project that's already gone. The
-`list` output flags this. Cancel:
+DRSysAdmin must be a member of `DR_ORG_ORGANIZATION` with the "Organization Administrator" role:
+
+1. Open `https://<host>:8443/ediscovery/` in a browser, log in as DRSysAdmin.
+2. Switch to the target org (e.g. `training`).
+3. Add DRSysAdmin to the user list with role "Organization Administrator".
+4. Re-run the test.
+
+This is a one-time setup. After it's done, `dr-load` auto-discovers the role on every call. ([BUG_LOG B36](BUG_LOG.md) is why this can't yet be done from the CLI.)
+
+### 7.6 HTTP 500 with no body
+
+The server returned a non-JSON error page. The actual stack trace is in the server log on the host:
 
 ```bash
-dr-load admin unschedule NAME
+tail -F /home/auraria/AHS/output/192.168.58.128_SERVER.log
+tail -F /home/auraria/AHS/output/192.168.58.128_MGMTAGT.log
+```
+
+Re-run the failing call and watch the log. The first `ERROR` line near the timestamp is usually the trigger. The api_client surfaces structured JSON bodies for 200/4xx responses; only true 500s with HTML bodies fall through to the generic `HTTPError`.
+
+### 7.7 Orphan project
+
+A half-failed `createCase` can leave a project row in the DB that `listProjects` doesn't return ([BUG_LOG B35](BUG_LOG.md)). The server log shows the handle:
+
+```
+INFO MonitorEntityBase: New Monitor Entity created: type: PROJECT id : 17261 entityName: demo
+```
+
+Delete by handle:
+
+```bash
+dr-load admin delete-project demo --org training --handle 17261
+```
+
+### 7.8 Stale at-jobs
+
+```bash
+atq                                          # list everything
+dr-load admin unschedule NAME                # cancel dr-load's tagged jobs for NAME
+atrm <job_id>                                # raw cancel by ID
+atq | awk '{print $1}' | xargs -r atrm       # nuclear: clear the whole queue
 ```
 
 ---

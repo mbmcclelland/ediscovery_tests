@@ -1,39 +1,80 @@
-# eDiscovery API Test Suite
+# eDiscovery Test Suite & `dr-load` CLI
 
-**Version 0.07**
+**Version 0.14**
 
-> **Working with this for the first time? Start at [QA_README.md](QA_README.md).**
-> It is the operator-facing companion to this doc — quick start, CLI reference,
-> example workflows, and the known-issues list. This README stays as the
-> developer-facing reference.
+This repository is the test-and-tooling layer for the **Digital Reef eDiscovery** product. It contains:
 
-Automated API tests and load tests for the Digital Reef eDiscovery REST API,
-plus the `dr-load` CLI for running headless load tests with preflight checks,
-background monitoring, and merged CSV reports.
+- **`dr-load`** — a command-line tool for creating, listing, indexing, and deleting projects against a live install, plus running headless load tests.
+- A **pytest** suite that exercises every important REST endpoint and the end-to-end indexing lifecycle.
+- Versioned **install scripts** for a fresh RHEL 9 VM.
 
-Built with **pytest + requests** for functional tests and **Locust** for performance/load testing.
+It does **not** contain the Digital Reef product itself — that ships separately as `install.bin`.
 
 ---
 
-## Installation
+## Which doc do I need?
 
-### Requirements
+Different jobs land on different docs. Pick yours:
 
-- Python 3.9+
-- Access to the Digital Reef eDiscovery server
-- For `dr-load` full monitoring: Postgres peer auth (`sudo -u auraria psql`) and a readable log directory
+| If your job today is… | Open… |
+|---|---|
+| **Install + run the smoke test on a fresh VM** (junior sysadmin handoff) | [QA_README.md](QA_README.md) — operator quick-start |
+| **Operate the test environment** (create/delete projects, schedule auto-delete, watch dashboard) | [QA_README.md](QA_README.md) §3–4 |
+| **Triage a failing test or weird server behavior** | [BUG_LOG.md](BUG_LOG.md) — known issues + workarounds |
+| **Write a new test against an endpoint I haven't used before** | [API_DICTIONARY.md](API_DICTIONARY.md) — every REST call with real request/response shapes |
+| **Understand what the server does behind the scenes** (REST → Java → Postgres) | [DR_Workflow_Guide.md](DR_Workflow_Guide.md) — concepts + DB tables |
+| **See what changed between versions** | [CHANGELOG.md](CHANGELOG.md) |
+| **Install or re-install the product** | [`scripts/install/README.md`](scripts/install/README.md) |
 
-### Install the `dr-load` CLI (recommended)
+If you're brand-new and not sure where to start, **start with [QA_README.md](QA_README.md)**.
 
-This installs `dr-load` as a console script in your virtualenv:
+---
+
+## The shortest possible "is this working?"
+
+After you've installed the product (see [scripts/install/README.md](scripts/install/README.md)) and the toolkit, the canonical health gate is:
 
 ```bash
-git clone <repo-url> ediscovery_tests
-cd ediscovery_tests
+source .venv/bin/activate
+dr-load preflight          # 6 environment checks
+pytest -m smoke            # ~16 seconds, must be all green
+```
 
+Both green = the install is healthy and the API is reachable. Both are what CI runs.
+
+---
+
+## What's in the repo
+
+```
+ediscovery_tests-master/
+├── README.md               # this file — top-level entry
+├── QA_README.md            # operator quick-start + CLI reference
+├── API_DICTIONARY.md       # every endpoint with real shapes
+├── DR_Workflow_Guide.md    # REST + Postgres concepts; DB table reference
+├── BUG_LOG.md              # known issues + history
+├── CHANGELOG.md            # per-release notes
+├── scripts/install/        # versioned install wrappers
+├── cli.py                  # dr-load entry point
+├── commands/               # dr-load admin subcommands
+├── helpers/                # API client, preflight, monitoring, admin ops
+├── tests/                  # pytest suite
+└── tests/fixtures/testload/ # canonical 2-document fixture (doc1.txt, doc2.txt)
+```
+
+For the full file-by-file layout, see [Project Structure](#project-structure-detailed) at the bottom of this file.
+
+---
+
+## Install (for the toolkit, not the product)
+
+This installs the **test/CLI side only**. The product (`install.bin`) is a separate step — see [`scripts/install/README.md`](scripts/install/README.md).
+
+```bash
+# In the repo root
 python3 -m venv .venv
 source .venv/bin/activate
-
+sudo dnf install -y python3-devel gcc       # gevent needs Python.h
 pip install -e .
 ```
 
@@ -43,223 +84,50 @@ Verify:
 dr-load --help
 ```
 
-### Install for pytest only (no CLI entry point)
-
-```bash
-pip install -r requirements.txt
-```
-
-### Configure your environment
-
-```bash
-cp .env.example .env
-# Edit .env — at minimum set DR_PASSWORD and DR_BASE_URL
-```
+Then configure the environment — [QA_README.md §2](QA_README.md#2-environment-variables) lists every variable and which commands need each.
 
 ---
 
-## Quick Start
+## Top-level commands
 
-### Run preflight checks
+`dr-load` has three families. The first two are documented in detail in [QA_README.md](QA_README.md).
 
-```bash
-dr-load preflight
-```
-
-### Run a browsing load test
+### Operator / admin commands
 
 ```bash
-dr-load browsing --users 5 --duration 60s
+dr-load admin --help                       # list all 12 admin subcommands
+dr-load admin list --org training          # what projects exist?
+dr-load admin dashboard --org training     # live snapshot of jobs + deletes
+dr-load admin create-project demo --org training --lifetime 1h
 ```
 
-### Run the full indexing workflow load test
+Full reference: [QA_README.md §3](QA_README.md#3-dr-load-admin--operator-reference).
+
+### Load tests
 
 ```bash
-dr-load indexing --users 1 --duration 120s
+dr-load preflight                          # gate
+dr-load browsing --users 5 --duration 60s  # read-only traffic mix
+dr-load indexing --users 1 --duration 120s # full create+index+delete loop
 ```
 
-### Run the pytest functional test suite
+The CSV report lands at `dr_report.csv` (override with `DR_REPORT_OUTPUT`).
+
+### Functional tests (pytest)
 
 ```bash
-pytest
-pytest -m smoke          # Quick health checks only
-pytest --html=report.html --self-contained-html
+pytest -m smoke                                 # ~16s health gate
+pytest -m slow                                  # 3 full-lifecycle tests, ~22s
+pytest tests/ --ignore=tests/test_indexing_workflow.py   # full non-slow surface
 ```
+
+For the full marker list and what each test file covers, see [QA_README.md §5](QA_README.md#5-test-suite--what-pytest-proves).
 
 ---
 
-## CLI Usage (`dr-load`)
+## API client usage (Python scripting)
 
-`dr-load` wraps the Locust load tests with preflight checks, orphan cleanup,
-background monitoring, and a merged report.
-
-### Commands
-
-```bash
-# Verify environment before running a test
-dr-load preflight
-
-# Run the full indexing workflow load test
-dr-load indexing --users 3 --duration 120s --spawn-rate 1
-
-# Run the browsing load test
-dr-load browsing --users 10 --duration 60s --spawn-rate 2
-
-# Override the output report path
-dr-load indexing --report /tmp/my_report.csv
-```
-
-All options fall back to `.env` values (`DR_LOAD_TEST_USERS`, `DR_LOAD_TEST_DURATION`, etc.)
-when not specified on the command line.
-
-### What `dr-load indexing` does
-
-1. Runs preflight checks (app reachable, auth, Postgres, NFS, log dir, connector UUID)
-2. Sweeps for orphaned `load-test-*` projects and deletes them
-3. Starts background `LogWatcher` (tails `*.log` files in `DR_LOG_DIR`) and `JobPoller` (polls `datamining_corpus_representation` every `DR_POLL_INTERVAL` seconds)
-4. Runs Locust headless, streaming output to the terminal
-5. On exit, prints a summary (Locust stats + error counts + indexing job completion counts)
-6. Writes a merged CSV report combining Locust stats with monitor data
-
-### CLI-specific env vars
-
-| Variable            | Default                       | Description                                  |
-|---------------------|-------------------------------|----------------------------------------------|
-| `DR_LOG_DIR`        | `/home/auraria/AHS/output`    | App log directory to watch                   |
-| `DR_POLL_INTERVAL`  | `10`                          | Seconds between job-status DB polls          |
-| `DR_REPORT_OUTPUT`  | `dr_report.csv`               | Output path for the merged report CSV        |
-| `DR_PG_DB`          | `auraria_mgmt`                | Postgres database name                       |
-| `DR_PG_USER`        | `auraria`                     | Postgres user (peer auth via sudo)           |
-
----
-
-## Configuration (.env)
-
-| Variable                  | Description                                  | Default                                              |
-|---------------------------|----------------------------------------------|------------------------------------------------------|
-| `DR_BASE_URL`             | Full base URL for REST API                   | `https://192.168.58.128:8443/ediscovery/rest`        |
-| `DR_USERNAME`             | Login username                               | `DRSysAdmin`                                         |
-| `DR_PASSWORD`             | Login password                               | *(required)*                                         |
-| `DR_ORGANIZATION`         | Organization name                            | `super_system_customer`                              |
-| `DR_LDAP_DOMAIN`          | LDAP domain (if applicable)                  | *(empty)*                                            |
-| `DR_REQUEST_TIMEOUT`      | Default request timeout (seconds)            | `30`                                                 |
-| `DR_LONG_REQUEST_TIMEOUT` | Timeout for slow endpoints (seconds)         | `120`                                                |
-| `DR_VERIFY_SSL`           | Verify SSL certificates                      | `false`                                              |
-| `DR_LOAD_TEST_USERS`      | Locust: concurrent users                     | `10`                                                 |
-| `DR_LOAD_TEST_SPAWN_RATE` | Locust: users spawned per second             | `2`                                                  |
-| `DR_LOAD_TEST_DURATION`   | Locust: test duration (seconds)              | `60`                                                 |
-
-All variables use a `DR_` prefix to avoid collisions with Windows system environment variables
-(Windows sets `USERNAME` automatically).
-
----
-
-## Project Structure
-
-```
-ediscovery_tests/
-├── .env.example              # Environment config template
-├── .env                      # Your local config (git-ignored)
-├── __version__.py            # Version string
-├── CHANGELOG.md              # Release notes
-├── config.py                 # Config loader (reads .env)
-├── conftest.py               # Shared pytest fixtures (auth, clients, helpers)
-├── pytest.ini                # Pytest settings and markers
-├── requirements.txt          # Python dependencies
-├── setup.cfg                 # Package config + dr-load entry point
-├── cli.py                    # dr-load CLI entry point (typer)
-├── locustfile.py             # Locust load test: status/reports/browsing
-├── locustfile_indexing.py    # Locust load test: full indexing workflow
-├── helpers/
-│   ├── __init__.py
-│   ├── api_client.py         # EDiscoveryClient wrapper
-│   ├── preflight.py          # Preflight checks + orphan sweep
-│   └── monitor.py            # LogWatcher + JobPoller background threads
-└── tests/
-    ├── test_auth.py               # Session creation / login
-    ├── test_ocr_report.py         # OCR Usage Report
-    ├── test_status.py             # Realm, system, node status
-    ├── test_projects.py           # Project listing and management
-    ├── test_organizations.py      # Organization and resource listing
-    ├── test_connectors.py         # Connector listing and retrieval
-    ├── test_billing.py            # Billing and report settings
-    ├── test_workflows.py          # End-to-end chained workflows
-    ├── test_org_user.py           # Org-scoped user tests
-    └── test_indexing_workflow.py  # Full indexing lifecycle (create → import → index → delete)
-```
-
----
-
-## Running pytest Tests
-
-### By marker (category)
-
-```bash
-pytest -m smoke              # Quick health checks
-pytest -m auth               # Authentication tests only
-pytest -m ocr                # OCR usage report tests
-pytest -m status             # System status tests
-pytest -m projects           # Project management
-pytest -m orgs               # Organization tests
-pytest -m connectors         # Connector tests
-pytest -m "smoke and ocr"    # Combine markers
-```
-
-### Parallel execution
-
-```bash
-pytest -n 4                  # Run on 4 parallel workers
-```
-
-### Verbose with logging
-
-```bash
-pytest -v --log-cli-level=DEBUG
-```
-
----
-
-## Load Testing with Locust
-
-Three user personas simulate realistic traffic patterns:
-
-| Persona          | Weight | Behavior                                      |
-|------------------|--------|-----------------------------------------------|
-| `ReadOnlyUser`   | 3      | Status dashboards, realm health, version      |
-| `OCRReportUser`  | 1      | OCR report generation with date filters       |
-| `ProjectBrowser` | 2      | Browsing projects, orgs, connectors, users    |
-
-### Web UI mode
-
-```bash
-locust -f locustfile.py --host https://192.168.58.128:8443
-# Open http://localhost:8089 in your browser
-```
-
-### Headless mode
-
-```bash
-locust -f locustfile.py \
-    --host https://192.168.58.128:8443 \
-    --headless \
-    -u 10 -r 2 \
-    --run-time 60s \
-    --csv=results/load_test
-```
-
-### Filter by tag
-
-```bash
-locust -f locustfile.py --tags ocr          # Only OCR tasks
-locust -f locustfile.py --tags status       # Only status tasks
-locust -f locustfile.py --exclude-tags ocr  # Everything except OCR
-```
-
----
-
-## API Client Usage
-
-The `EDiscoveryClient` can also be used standalone for scripting:
+If you need to talk to the REST API outside the test suite, the same client is reusable:
 
 ```python
 from config import config
@@ -268,74 +136,86 @@ from helpers.api_client import EDiscoveryClient
 client = EDiscoveryClient(config)
 client.login()
 
-# System-scoped: contextHandle stays at the configured org, so
+# System-scoped call — contextHandle stays at the configured org, so
 # systemScope is auto-set to True.
 data = client.post("realmManager/getRealmStatus")
 print(data["realmStatus"])
 
-# Project-scoped: caller overrides contextHandle to a project handle, so
-# systemScope is auto-set to False. Older versions of this client always
-# sent True, which made the server check super-system roles and return
-# HTTP 500. If you ever need to force a value, pass system_scope= explicitly.
-client.post("realmManager/initializeOrganization", extra_body={
-    "requestHandle": None, "contextHandle": project_handle, "organizationName": "training",
-})
+# Project-scoped call — caller passes a project handle as contextHandle,
+# so systemScope is auto-set to False. (If you ever need to force a
+# value, pass system_scope= explicitly.)
 client.post("orgManager/createCorpus", extra_body={
-    "contextHandle": project_handle, "dataAreaHandles": [da_handle], "name": "my-corpus",
-    # ... no need to pass systemScope ...
+    "contextHandle": project_handle,
+    "dataAreaHandles": [da_handle],
+    "name": "my-corpus",
 })
 
-# Discover this org's template-attribute IDs at runtime. Per-org and
-# changes on every install — never hardcode these. Caller must have
-# listTemplates permission (DRSysAdmin works; admin@training does not).
+# Template-attribute IDs change per install — discover at runtime, never
+# hardcode. Caller must have listTemplates permission (DRSysAdmin does;
+# admin@training does not).
 attrs = client.discover_template_attributes("training")
 client.post("ecaManager/createCase", extra_body={"attributes": attrs, ...})
+```
 
-client.logout()
+For every endpoint's exact request shape, see [API_DICTIONARY.md](API_DICTIONARY.md).
+
+---
+
+## CI / GitHub Actions
+
+A self-hosted-runner workflow lives at `.github/workflows/smoke.yml`. It runs `pytest -m smoke` against the live server on every push to `main` or `master`.
+
+To wire up a new runner, set these GitHub Secrets:
+
+| Secret | Used for |
+|---|---|
+| `EDISCOVERY_URL` | `DR_BASE_URL` |
+| `EDISCOVERY_USER` | `DR_USERNAME` |
+| `EDISCOVERY_PASS` | `DR_PASSWORD` |
+| `EDISCOVERY_ORG` | `DR_ORGANIZATION` |
+
+---
+
+## Project structure (detailed)
+
+```
+ediscovery_tests-master/
+├── __version__.py            # single source of truth for the version string
+├── config.py                 # loads environment + .env
+├── conftest.py               # pytest fixtures (auth, clients, helpers)
+├── cli.py                    # dr-load entry point (Typer)
+├── commands/                 # admin subcommands (create-org, list, dashboard, …)
+├── locustfile.py             # browsing load-test scenarios
+├── locustfile_indexing.py    # full create→index→delete load test
+├── helpers/
+│   ├── api_client.py         # EDiscoveryClient — auth, scope, retries, error parsing
+│   ├── admin_ops.py          # one-call helpers for create_project / wait_for_tasks / …
+│   ├── preflight.py          # the 6 environment checks
+│   └── monitor.py            # LogWatcher + JobPoller background threads for load tests
+├── tests/
+│   ├── test_e2e_bootstrap.py     # canonical create→import→index→delete (smoke gate)
+│   ├── test_indexing_workflow.py # same path via the inline workflow class (slow)
+│   ├── test_auth.py              # login / session / version
+│   ├── test_status.py            # realm + system status
+│   ├── test_organizations.py     # org listing + per-org resources
+│   ├── test_connectors.py        # connector listing
+│   ├── test_projects.py          # project listing, users, groups, roles
+│   ├── test_billing.py           # billing + report settings
+│   ├── test_ocr_report.py        # OCR usage report (Edge-recorded flow)
+│   ├── test_workflows.py         # chained multi-click UI flows
+│   ├── test_org_user.py          # org-scoped user paths (skip if DR_ORG_* unset)
+│   └── fixtures/testload/        # doc1.txt + doc2.txt (the 2-doc canonical fixture)
+└── scripts/install/
+    ├── dr_installprep.sh     # OS prep — packages, SELinux off, atd on
+    ├── dr_install.sh         # silent installer wrapper with rollback detection
+    └── README.md             # install-scripts reference
 ```
 
 ---
 
-## How Edge Recordings Map to API Tests
+## Getting help
 
-The Edge recorder JSON captures UI clicks. Here's how they translate:
-
-| Edge Step                         | API Equivalent                                |
-|-----------------------------------|-----------------------------------------------|
-| Navigate to `/ediscovery/`        | —                                             |
-| Click username field, Log in      | `POST /realmManager/createSession`            |
-| Click Status menu                 | —                                             |
-| Click "OCR Usage Report"          | —                                             |
-| Set start date (Jan 1 2026)       | `filters[].attribute=FROM_DATE`               |
-| Set end date (Jan 31 2026)        | `filters[].attribute=TO_DATE`                 |
-| Click "Download Report"           | `POST /realmManager/getOCRUsageStatisticsUrl` |
-| Open downloaded file              | GET the returned `url`                        |
-
----
-
-## Adding New Tests
-
-1. Identify the API endpoint in `swagger.json`
-2. Create or extend a test file in `tests/`
-3. Use the `api` fixture for a shared session or `api_fresh` for isolated sessions
-4. Call `api.post("manager/endpoint", extra_body={...})`
-5. Assert `data["status"] == "SUCCESS"` plus any field-level checks
-6. Tag with appropriate markers (`@pytest.mark.smoke`, etc.)
-
----
-
-## CI/CD Integration
-
-```yaml
-# Example GitHub Actions step
-- name: Run API Tests
-  env:
-    DR_BASE_URL: ${{ secrets.EDISCOVERY_URL }}
-    DR_USERNAME: ${{ secrets.EDISCOVERY_USER }}
-    DR_PASSWORD: ${{ secrets.EDISCOVERY_PASS }}
-    DR_ORGANIZATION: ${{ secrets.EDISCOVERY_ORG }}
-    DR_VERIFY_SSL: "true"
-  run: |
-    pip install -r requirements.txt
-    pytest -m smoke --html=report.html --self-contained-html
-```
+- **First**: check [QA_README.md §7 Troubleshooting](QA_README.md#7-troubleshooting) — common errors and their fixes.
+- **Then**: skim [BUG_LOG.md](BUG_LOG.md). The Open Items section at the top lists everything currently broken on the server side.
+- **For the API**: every endpoint is in [API_DICTIONARY.md](API_DICTIONARY.md) with real request and response shapes.
+- **For concepts** (what is a corpus, what is a representation): [DR_Workflow_Guide.md](DR_Workflow_Guide.md).

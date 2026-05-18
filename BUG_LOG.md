@@ -1,21 +1,56 @@
-# Digital Reef — TUI Verification: Bug & Improvement Log
+# Digital Reef — Bug & Improvement Log
 
-**Tester:** Senior dev (Claude, on behalf of mmcclelland@digitalreefinc.com)
-**Date:** 2026-05-15
-**System:** digitalreef.localdomain (192.168.58.128), RHEL 9.7, fresh-clean install
-**Task:** Install the product, run the "TUI", and exercise create-org / create-project / create-import-job (connector `training-import-nfs-local`, folder `testload`).
+This is the historical record of every issue this test suite has found,
+both inside the product and inside this repo. Most are fixed. The
+ones that aren't are listed first.
+
+**Audience.** Anyone triaging a failure or deciding whether a weird
+log line is worth filing. Read [§A — Open today](#a--open-today-quick-scan)
+first; the rest is appendix.
 
 ---
 
-## TL;DR — Outcome
+## A — Open today (quick scan)
 
-- ✅ Install: succeeded after correcting the silent-install invocation (first attempt rolled back catastrophically — see B6, B17a)
-- ✅ Create organization: `realmManager/createOrganization` works (created `verify-test-001` handle=833 and `verify-claude-001` handle=955). Test suite previously assumed this endpoint did not exist — see B10.
-- ✅ Create project: `ecaManager/createCase` works *after* discovering real role + template IDs from the live DB. Created `verify-4320e051` handle=1095.
-- ✅ Create import job: `createDataArea → createCorpus → addCorpus → createRepresentation` works *after* discovering that `systemScope: True` (the api_client's default) breaks project-scoped operations — see B18.
-- ✅ Verified: `import_activity_table` shows `batch_name='testload'` with `number_of_files_scanned=2`, `size_of_files_scanned=261`. Indexing pipeline submitted 4 representations.
+These are still active. The first three affect what a tester might see;
+the rest are server-side log noise that's safe to ignore.
 
-## Highest-priority issues (act on these first)
+| ID | Severity | Where it bites | Workaround |
+|---|---|---|---|
+| **B36** | Medium | Bootstrap | `orgManager/createCustomerUser` refuses DRSysAdmin against a fresh org. Use **browser Express Provisioning** once per fresh install. After that, the CLI is fine. |
+| **B34** | Low | Test surface | `projectManager/listReportSettings` always returns `NumberFormatException`. The test is `xfail`'d, so CI stays green. Don't call this endpoint until the server fix lands. |
+| **B35** | Low | Cleanup | A half-failed `createCase` can leave an orphan project the API can't see. Recover with `delete-project --handle <h>` ([QA_README §7.7](QA_README.md#77-orphan-project)). |
+| **B30** | Medium | Logs (cosmetic) | `ecaManager/createCase` triggers a SendEmail NPE when SMTP is unconfigured. Project still activates correctly. |
+| **B29** | Low | Logs (cosmetic) | `Could not find role row with:<handle>PROJECT` on every `createCase`. Hibernate composite-key smell. No functional impact. |
+| **B37** | Low | Logs (cosmetic) | `WORK_BASKET parent-not-found` on every `createCase`. Same family as B29. |
+| **B38** | Low | Logs (cosmetic) | `SRI cancel-all` error on every project delete. Delete still completes. |
+| **B24** | Low | Edge case | Unauthenticated POST to JSON endpoints returns an HTML NPE instead of a structured 401. Always log in first. |
+
+If you see one of the **Logs (cosmetic)** errors in `SERVER.log` and
+nothing functional broke, you can ignore it — it's tracked here and
+filed with the server team.
+
+---
+
+## B — Repo-side items still on the runway
+
+Not blockers; just polish.
+
+| ID | Severity | Why |
+|---|---|---|
+| B12 | Low | `config.py` defaults Postgres password to empty (`""`) — fine in dev, sniff-test before any prod use. |
+| B15b | Low | Three conventions for "where test data lives" remain across the codebase. The authoritative answer is the connector record's `remotePath`. |
+
+---
+
+## C — Full table: every issue ever found
+
+`✅` = fixed in the listed version. `❌` = confirmed defect, no fix available. Status column says where it landed.
+
+> **Reading guide.** This table mixes server bugs (filed with the
+> server team) and repo bugs (fixed in this codebase). If a fix
+> version is listed, that's the `v0.x` release on this repo where
+> the workaround or fix went in — see [CHANGELOG.md](CHANGELOG.md).
 
 | # | Severity | Status | Title |
 |---|----------|--------|-------|

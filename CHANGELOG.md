@@ -1,5 +1,30 @@
 # Changelog
 
+> **Versioning convention.** This repo uses `v0.X` minor versions for
+> feature/refactor releases; there is no `v0.X.Y` patch level. Each
+> release squashes documentation + memory updates alongside the code.
+
+## At a glance
+
+| Version | Date | Headline |
+|---|---|---|
+| **v0.14** | 2026-05-18 | Documentation sweep — API_DICTIONARY + QA_README reflect v0.10–v0.13 |
+| **v0.13** | 2026-05-18 | `cleanall` + `purgeall` bulk-delete commands |
+| **v0.12** | 2026-05-17 | Rich-rendered dashboard with `--watch` live mode |
+| **v0.11** | 2026-05-17 | `dr-load admin dashboard` — running/scheduled/finished sections |
+| **v0.10** | 2026-05-16 | QA acceptance pass: FR1 reschedule, FR2 deleting marker, B37/B38 filed |
+| **v0.09** | 2026-05-15 | API_DICTIONARY.md created; self-healing smoke fixture; B36 documented |
+| **v0.08** | 2026-05-15 | Phases 3/4/6 — cleanup, in-repo install scripts, CI workflow |
+| **v0.07** | 2026-05-14 | Recovered 3 of 4 hidden-bug failures; B34 `xfail`'d |
+| **v0.06** | 2026-05-13 | Names instead of handles; project lifetimes via `at(1)` |
+| **v0.05** | 2026-05-12 | Stopped masking real server failures as test-skips |
+| **v0.04** | 2026-05-12 | `dr-load admin` CLI + end-to-end smoke test |
+| **v0.03** | 2026-05-11 | Three fixes from fresh-install verification (B11, B14d, B18) |
+
+For the per-version detail, scroll on.
+
+---
+
 ## v0.14 — 2026-05-18
 
 Documentation sweep: API_DICTIONARY and QA_README reflect everything
