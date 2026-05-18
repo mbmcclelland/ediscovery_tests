@@ -1,5 +1,62 @@
 # Changelog
 
+## v0.06 — 2026-05-18
+
+CLI ergonomics + background scheduling. Operators no longer need to know
+internal handles or UUIDs — every command takes names and resolves them
+via the API. DRSysAdmin works against any org it has Org Administrator
+in (the training default). Project lifetimes can be specified at create
+time and the deletion runs automatically via the OS `at` queue.
+
+### Added
+
+- **Auto-discovery of role handle.** `helpers/admin_ops.create_project`
+  now looks up the logged-in user's role handle in the target org via
+  `orgManager/listUsers` (the only role-discovery surface that works on
+  this build — `listRoles` etc. all 500). `--role-handle` becomes an
+  escape hatch flag; the env-var binding was removed deliberately so a
+  stale `.env` value cannot silently defeat auto-discovery.
+- **`dr-load admin` now takes names, not handles.**
+    - `create-import-job PROJECT_NAME -c CONNECTOR_NAME --path /testload`
+      (was: `create-import-job <project-handle> -c <connector-handle>`)
+    - `delete-project NAME` (new — resolves by name)
+    - `list-connectors ORG` no longer requires `-u/-p` — DRSysAdmin works
+      now that it's added as Org Admin to training.
+- **Project lifetimes via `at(1)`.** Pass `--lifetime 1h` / `30m` / `7d`
+  / `90s` / `2w` to `create-project` or `create-import-job`. The CLI
+  queues an `at` job that calls `dr-load admin delete-project NAME`
+  when the lifetime expires. No new daemon to maintain: `atd` is
+  standard on RHEL, already enabled. Job persists across reboot.
+- **`dr-load admin list`** — combined view of projects (API) +
+  scheduled operations (at queue). Shows project name, org, state, and
+  scheduled-delete time. Flags orphan scheduled jobs whose target
+  project no longer exists.
+- **`dr-load admin unschedule NAME`** — `atrm` wrapper that cancels any
+  pending dr-load-tagged at-job for a project.
+
+### Fixed
+
+- **`tests/test_indexing_workflow.py` no longer reads
+  `DR_ADMIN_ROLE_HANDLE` from env.** A stale value in `.env` was
+  silently defeating auto-discovery (every createCase 500'd with
+  "Could not find role row with ..."). Same change applied to
+  `tests/test_e2e_bootstrap.py`. The auto-discovered handle is now the
+  single source of truth.
+
+### Notes
+
+- The `at` script holds DR_* credentials inline (in `/var/spool/at/<id>`,
+  root-owned, mode 700). Acceptable for a single-tenant QA VM, not
+  appropriate for shared hosts. A future hardening could move creds to
+  a `~/.config/dr-load/env` file the at-script sources.
+- Half-failed `createCase` requests leave the project in mgmtproject
+  but invisible to `listProjects` (state filter excludes
+  pre-AVAILABLE entries). `delete-project NAME` resolves by API listing
+  and so cannot recover such orphans — only `delete_project` via
+  Python with the known handle works. Worth a future cleanup helper.
+
+---
+
 ## v0.05 — 2026-05-16
 
 Phase 2 of the QA-readiness plan: the test suite no longer hides real

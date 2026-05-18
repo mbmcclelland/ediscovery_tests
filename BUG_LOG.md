@@ -40,6 +40,9 @@
 | B32 | Medium | Open (server) | `orgManager/listExportDatabaseConnections` returns HTTP 500 with no JSON body. Surfaced by `test_list_export_database_connections` after B13 fix. Was silently green before. |
 | B33 | Medium | Open (server) | `projectManager/listRoles` returns `CAE_ERROR` carrying `NullPointerException: Cannot invoke "SecureObjectTypes.equals(Object)" because "objType" is null`. listRoles is non-functional on this build. Surfaced after B13 fix. |
 | B34 | Low | Open (server) | `billingReportManager/listReportSettings` returns `CAE_ERROR` carrying `NumberFormatException: Cannot parse null string` — server expects a setting that doesn't exist on a fresh install. Surfaced after B13 fix. |
+| B14 | Medium | ✅ Fixed in v0.06 (config) | DRSysAdmin saw 0 connectors. No longer true once DRSysAdmin is added to the org as Organization Administrator. `dr-load admin list-connectors` no longer needs `-u/-p`. |
+| B27b | Medium | ✅ Fixed in v0.06 | Stale `DR_ADMIN_ROLE_HANDLE` in `.env` would silently defeat the v0.06 role auto-discovery (because shell-env-first + .env-fallback still surfaces the stale value when shell doesn't set it). CLI option no longer binds to that env var; tests no longer read it. Auto-discovery is now authoritative. |
+| B35 | Low | Open (server) | A half-failed `ecaManager/createCase` (e.g. when the permission-row lookup fails per B29) leaves the project row in `mgmtproject` but invisible to `orgManager/listProjects`. `delete-project NAME` cannot recover it because the lookup is API-based — only an explicit handle works. The server should either complete the rollback or expose the orphan via a stale-state listing. |
 
 ---
 

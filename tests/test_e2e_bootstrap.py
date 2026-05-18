@@ -62,8 +62,15 @@ def org_name() -> str:
 
 
 @pytest.fixture(scope="module")
-def role_handle() -> str:
-    return _require("DR_ADMIN_ROLE_HANDLE")
+def role_handle() -> None:
+    """
+    The smoke test relies on `helpers.admin_ops.create_project`
+    auto-discovering the role handle from the logged-in user's record
+    in the target org. Deliberately does NOT read DR_ADMIN_ROLE_HANDLE
+    from env, because a stale value left in .env from earlier versions
+    would silently break createCase before auto-discovery ever ran.
+    """
+    return None
 
 
 @pytest.fixture(scope="module")

@@ -13,6 +13,11 @@ response.
 from __future__ import annotations
 
 import logging
+import os
+import re
+import shlex
+import shutil
+import subprocess
 import time
 from typing import Iterable
 
@@ -65,6 +70,34 @@ def find_connector(client: EDiscoveryClient, org: str, name: str) -> dict | None
     return None
 
 
+# ------------------------------------------------------------------ users
+def list_users(client: EDiscoveryClient, org: str) -> list[dict]:
+    """List users in `org` with their roleHandles embedded.
+
+    `orgManager/listUsers` is the only role-discovery surface that works
+    on this build — `listOrgRoles`/`listRoles`/`listAuthorizationRoles`
+    all 500 or return empty (BUG_LOG B33).
+    """
+    return client.post("orgManager/listUsers", extra_body={
+        "contextHandle": org,
+    }).get("users", [])
+
+
+def find_role_handle(client: EDiscoveryClient, org: str, username: str) -> str | None:
+    """Look up the role handle assigned to `username` in `org`.
+
+    Use case: the operator doesn't know internal handles. When creating
+    a project, we discover the logged-in user's org-admin role handle
+    via their user record and pass that to createCase.
+    """
+    for u in list_users(client, org):
+        if u.get("name") == username or u.get("userName") == username:
+            handles = u.get("roleHandles") or []
+            if handles:
+                return str(handles[0])
+    return None
+
+
 # --------------------------------------------------------------- projects
 def switch_to_org(client: EDiscoveryClient, org: str) -> None:
     client.post("realmManager/initializeOrganization", extra_body={
@@ -88,12 +121,30 @@ def create_project(
     *,
     org: str,
     name: str,
-    role_handle: str,
+    role_handle: str | None = None,
     description: str = "",
-    member: str = "drsysadmin",
+    member: str | None = None,
 ) -> str:
-    """Create project via ecaManager/createCase. Returns caseHandle."""
+    """Create project via ecaManager/createCase. Returns caseHandle.
+
+    If `role_handle` is None, auto-discovers it from the logged-in user's
+    record in `org` via listUsers. `member` defaults to the client's
+    configured username (typically `drsysadmin` for DRSysAdmin sessions).
+
+    createCase 500s with an empty `members.users` list on this build —
+    a role handle is required, hence the auto-discovery.
+    """
     switch_to_org(client, org)
+    if member is None:
+        member = client.cfg.username.lower()  # server expects lowercase
+    if role_handle is None:
+        role_handle = find_role_handle(client, org, member)
+        if not role_handle:
+            raise APIError(
+                "UNKNOWN", None,
+                f"Could not auto-discover role handle for {member!r} in {org!r} — "
+                f"pass --role-handle explicitly", {},
+            )
     attrs = client.discover_template_attributes(org)
     data = client.post("ecaManager/createCase", extra_body={
         "requestHandle": None,
@@ -349,3 +400,150 @@ def delete_project(
                 })
                 return True
     return False
+
+
+# ----------------------------------------------------------- scheduling
+# Background scheduling uses the standard `at(1)` queue. atd is enabled
+# and active on this RHEL build; no new daemon to maintain. The queued
+# script holds DR_* credentials inline so it can call dr-load when it
+# fires — acceptable for a single-tenant QA VM; not for shared hosts.
+
+_DURATION_UNITS = {
+    "s": 1, "sec": 1, "second": 1, "seconds": 1,
+    "m": 60, "min": 60, "minute": 60, "minutes": 60,
+    "h": 3600, "hr": 3600, "hour": 3600, "hours": 3600,
+    "d": 86400, "day": 86400, "days": 86400,
+    "w": 604800, "week": 604800, "weeks": 604800,
+}
+
+
+def parse_duration(s: str) -> int:
+    """Parse '1h' / '30m' / '7d' / '90s' / '2w' into seconds.
+
+    Whitespace tolerated; case-insensitive. Raises ValueError on garbage.
+    """
+    if not s:
+        raise ValueError("empty duration")
+    m = re.fullmatch(r"\s*(\d+)\s*([a-zA-Z]+)\s*", s)
+    if not m:
+        raise ValueError(f"could not parse duration {s!r} — try '1h', '30m', '7d', '90s'")
+    n, unit = int(m.group(1)), m.group(2).lower()
+    if unit not in _DURATION_UNITS:
+        raise ValueError(f"unknown unit {unit!r} in {s!r} — use s/m/h/d/w")
+    return n * _DURATION_UNITS[unit]
+
+
+_AT_TAG = "DR_LOAD_SCHEDULED"
+
+
+def _env_export_block(env_vars: Iterable[str]) -> str:
+    """Render `export FOO=value` lines for every var in `env_vars` that
+    is set in the current process environment. Values are shell-escaped.
+    """
+    lines = []
+    for name in env_vars:
+        if name in os.environ:
+            lines.append(f"export {name}={shlex.quote(os.environ[name])}")
+    return "\n".join(lines)
+
+
+# Env vars that the scheduled `dr-load admin delete-project` invocation
+# will need at fire time. Keep this list explicit — anything outside it
+# is not snapshotted into the at-spool.
+_SCHEDULED_ENV_VARS = (
+    "DR_BASE_URL", "DR_USERNAME", "DR_PASSWORD", "DR_ORGANIZATION",
+    "DR_LDAP_DOMAIN", "DR_VERIFY_SSL", "DR_ORG_ORGANIZATION",
+    "DR_REQUEST_TIMEOUT", "DR_LONG_REQUEST_TIMEOUT",
+)
+
+
+def schedule_delete(
+    *,
+    project_name: str,
+    org: str,
+    lifetime_seconds: int,
+    dr_load_binary: str | None = None,
+) -> str:
+    """Queue an `at` job that runs `dr-load admin delete-project NAME`
+    after `lifetime_seconds`. Returns the at-job ID (as a string).
+
+    Captures the relevant DR_* env vars from the current process so the
+    scheduled invocation can authenticate without the user re-exporting
+    them. Stored in /var/spool/at/<id> (root-owned, mode 700) — fine for
+    a single-tenant QA VM, not for prod.
+    """
+    if not shutil.which("at"):
+        raise RuntimeError("at(1) is not installed — `dnf install at` and `systemctl enable --now atd`")
+
+    bin_path = dr_load_binary or shutil.which("dr-load") or "dr-load"
+    minutes = max(1, (lifetime_seconds + 59) // 60)  # at granularity is minutes
+    env_block = _env_export_block(_SCHEDULED_ENV_VARS)
+    # The leading "echo" line is a tag the listing code can grep for to
+    # identify dr-load-scheduled jobs (vs. other things in the at queue).
+    script = (
+        f"#!/bin/sh\n"
+        f"# {_AT_TAG} project={project_name} org={org} created={int(time.time())}\n"
+        f"echo '{_AT_TAG}' >/dev/null\n"
+        f"{env_block}\n"
+        f"{shlex.quote(bin_path)} "
+        f"admin delete-project {shlex.quote(project_name)} "
+        f"--org {shlex.quote(org)}\n"
+    )
+    proc = subprocess.run(
+        ["at", "now", "+", str(minutes), "minutes"],
+        input=script, capture_output=True, text=True, check=True,
+    )
+    # at emits "job 42 at <when>" to stderr; capture the job id
+    m = re.search(r"job\s+(\d+)\b", proc.stderr)
+    if not m:
+        raise RuntimeError(f"could not parse at output: {proc.stderr!r}")
+    return m.group(1)
+
+
+def list_scheduled_deletes() -> list[dict]:
+    """Return the dr-load-tagged at jobs.
+
+    Each entry: {at_job_id, project_name, org, scheduled_at (str), created_at}.
+    Jobs not tagged with our sentinel are filtered out so we don't
+    list user-created at entries unrelated to dr-load.
+    """
+    if not shutil.which("atq"):
+        return []
+    q = subprocess.run(["atq"], capture_output=True, text=True, check=False)
+    out: list[dict] = []
+    for line in q.stdout.splitlines():
+        # Format: "<id>\t<datetime>\t<queue>\t<user>"
+        parts = line.split("\t")
+        if not parts:
+            continue
+        job_id = parts[0].strip()
+        when = parts[1].strip() if len(parts) > 1 else ""
+        try:
+            body = subprocess.run(
+                ["at", "-c", job_id], capture_output=True, text=True, check=True,
+            ).stdout
+        except subprocess.CalledProcessError:
+            continue
+        if _AT_TAG not in body:
+            continue
+        project_match = re.search(r"# " + _AT_TAG + r"\s+project=(\S+)\s+org=(\S+)\s+created=(\d+)", body)
+        out.append({
+            "at_job_id": job_id,
+            "scheduled_at": when,
+            "project_name": project_match.group(1) if project_match else None,
+            "org": project_match.group(2) if project_match else None,
+            "created_at": int(project_match.group(3)) if project_match else None,
+        })
+    return out
+
+
+def cancel_scheduled_delete(project_name: str) -> list[str]:
+    """Remove all at jobs targeting `project_name`. Returns the list of
+    cancelled at-job IDs.
+    """
+    cancelled = []
+    for j in list_scheduled_deletes():
+        if j["project_name"] == project_name:
+            subprocess.run(["atrm", j["at_job_id"]], check=False)
+            cancelled.append(j["at_job_id"])
+    return cancelled

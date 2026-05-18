@@ -42,7 +42,10 @@ NFS_CONNECTOR = os.getenv("DR_NFS_CONNECTOR_HANDLE", "")
 NFS_PATH = os.getenv("DR_NFS_IMPORT_PATH", "/testload")
 NFS_DATASET_NAME = os.getenv("DR_NFS_DATASET_NAME", "testload")
 TARGET_ORG = os.getenv("DR_ORG_ORGANIZATION", "training")
-ADMIN_ROLE = os.getenv("DR_ADMIN_ROLE_HANDLE", "")
+# ADMIN_ROLE is intentionally NOT read from env — admin_ops auto-discovers
+# the role handle from the logged-in user's record in TARGET_ORG. Reading
+# DR_ADMIN_ROLE_HANDLE from a stale .env was the silent cause of every
+# pre-v0.06 createCase 500 we hit during the QA-readiness push.
 
 
 def _unique_name(prefix="api-test"):
@@ -84,7 +87,7 @@ class IndexingWorkflow:
         self.project_handle = ops.create_project(
             self.client,
             org=TARGET_ORG, name=self.project_name,
-            role_handle=ADMIN_ROLE,
+            role_handle=None,  # admin_ops auto-discovers
             description=f"API test {self.project_name}",
         )
         return self.project_handle
@@ -132,7 +135,6 @@ class IndexingWorkflow:
 def _skip_if_unconfigured():
     missing = [n for n, v in [
         ("DR_NFS_CONNECTOR_HANDLE", NFS_CONNECTOR),
-        ("DR_ADMIN_ROLE_HANDLE", ADMIN_ROLE),
     ] if not v]
     if missing:
         pytest.skip(f"Indexing workflow requires: {', '.join(missing)}")
