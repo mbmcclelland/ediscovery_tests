@@ -1,6 +1,6 @@
 # Digital Reef eDiscovery — API Dictionary
 
-**Version 0.09 · 2026-05-18**
+**Version 0.13 · 2026-05-18**
 
 Reference for every REST endpoint the test suite + `dr-load admin` CLI
 exercises. Each entry has been validated live against the build at
@@ -367,25 +367,49 @@ Called after `initializeOrganization(<org_name>)`. Body usually has
   "totalCount": 2,
   "connectors": [
     {
-      "handle":      "000084ba6f8e4a2488d74ef2af4e893b8ea2ac99",
-      "name":        "training-import-nfs-local",
-      "type":        "NFS",
-      "mode":        "READ_WRITE",
-      "status":      "ACTIVE",
-      "readOnly":    false,
-      "networkId":   "...",
-      "offset":      0,
-      "attributes":  { ... }
+      "handle":               "000084ba6f8e4a2488d74ef2af4e893b8ea2ac99",
+      "name":                 "training-import-nfs-local",
+      "type":                 "NFS",
+      "mode":                 "READ",
+      "mountedConnectorMode": "CLASSIC",
+      "status":               "AVAILABLE",
+      "readOnly":             true,
+      "networkId":            "192.168.58.128",
+      "remoteHost":           "192.168.58.128",
+      "remotePath":           "/data/import",
+      "offset":               "/data/import",
+      "attributes":           []
     },
     ...
   ]
 }
 ```
 
+**Critical — connector path resolution:**
+
+The `remotePath` (and `offset`) field is **the connector's view of its
+host root**. When you later call `orgManager/createDataArea` with a
+`path` argument, the server resolves it as `<remotePath>/<path>`:
+
+```
+remotePath  =  /data/import
+--path      =  /testload                  →  scans /data/import/testload
+--path      =  /Dave White Hard Drive     →  scans /data/import/Dave White Hard Drive
+--path      =  /data/testload             →  scans /data/import/data/testload
+```
+
+So `--path` is the **subpath under `remotePath`**, never an absolute
+host filesystem path. Operators frequently get this wrong on first
+contact — a `--path` value that doesn't exist under `remotePath`
+results in `createRepresentation` finding 0 documents and the
+indexing task marking FAILURE in 1-2 seconds with no obvious error.
+Confirmed end-to-end on 2026-05-18.
+
 **Quirks:**
 
 - Connector handles are 40-character hex strings (unlike org/project handles which are numeric).
 - Before v0.06 DRSysAdmin saw 0 connectors here; after adding DRSysAdmin as Org Admin to the target org, it sees them. (BUG_LOG B14.)
+- Paths with spaces and special characters (e.g., `"/Dave White Collected Hard Drive 2023-07-24"`) work end-to-end through the CLI, JSON body, and server resolver — verified on a 250-document custodian-style dataset.
 
 ---
 
@@ -525,23 +549,52 @@ Called after `initializeOrganization(<org_name>)`. Body usually has
   "totalCount": 7,
   "corpora": [
     {
-      "handle":              "1580:00004c79d6fdba6e399e4dbdb7882d94b45e15a8",
-      "description":         "",
-      "documentCount":       2,
-      "corpusVersion":       1,
-      "corpusViewHandle":    "...",
-      "dataAreaSet":         { ... },
-      "archived":            false,
-      "busy":                false,
-      "deletePending":       false,
-      "attributes":          { ... }
+      "handle":                  "148:0000bbfbf4bc487ed506416ebce8df70ef4a3da2",
+      "owner":                   "414",
+      "name":                    "welcome",
+      "description":             "",
+      "documentCount":           2,
+      "corpusVersion":           6,
+      "corpusViewHandle":        "0000bbfbf4bc487ed506416ebce8df70ef4a3da2",
+      "dataAreaSet":             { ... },
+      "representationSet":       ["METADATA_INDEX", "TEXT_SET", "CONTENT_INDEX", "VECTOR_SET"],
+      "externalParsingLibrary":  "Hyland",
+      "sharedState":             "PRIVATE",
+      "sourceDataInDocStorage":  false,
+      "archived":                false,
+      "busy":                    false,
+      "deletePending":           false,
+      "lastUpdateTimestamp":     "2026-05-15 19:33:53",
+      "tokenizerConfigScheme":   2,
+      "attributes":              [{"name": "BRAND", "value": "true"}]
     },
     ...
   ]
 }
 ```
 
-**Critical:** Corpus handles use composite format `<project_handle>:<corpus_handle>`. Don't parse them — treat as opaque strings.
+**Critical — owner field, not handle prefix:**
+
+A corpus's owning project is its **`owner` field**, NOT the handle prefix.
+The handle prefix on this build is the **default-org corpus-view
+container** (`148` for the training org), not the owning project. Code
+that maps corpora to projects via `handle.split(":")[0]` will get the
+wrong answer for every corpus.
+
+```python
+# WRONG — handle prefix is the default-org container, NOT the owning project
+project_handle = corpus["handle"].split(":")[0]
+
+# RIGHT — `owner` is the owning project's handle
+project_handle = corpus["owner"]
+```
+
+The `helpers.admin_ops.dashboard_snapshot` doc-counter was caught and
+fixed during v0.11 development; without this fix every project's
+DOCS column showed 0.
+
+Corpus handles themselves are still composite `<corpus-view-container>:<corpus-handle>`.
+Treat them as opaque strings; only `owner` correlates with `listProjects[*].handle`.
 
 ---
 
@@ -1132,3 +1185,7 @@ All return HTTP 500 with no body on this build. Most are likely auth-gated simil
 | `dr-load admin list-connectors` returns 0 as DRSysAdmin | DRSysAdmin not yet added as Org Admin to that org | One-time browser Express Provisioning step |
 | `pip install` fails building gevent | `python3-devel` / `gcc` missing | `sudo dnf install -y python3-devel gcc` (now in prep script) |
 | Silent install rolled back, no error message | InstallAnywhere rollback path swallowed the log | Use `scripts/install/dr_install.sh` — exits 2 on rollback |
+| `createDataArea` succeeds but indexing finds 0 docs and task ends FAILURE in 1-2s | `--path` doesn't exist under the connector's `remotePath` | Stage files under `<remotePath>/<path>` on the host; remember `--path` is relative |
+| Dashboard DOCS column reports 0 for all projects | Corpus → project mapping used `handle.split(":")[0]` instead of `corpus.owner` | Fixed in v0.11; use `corpus.owner` for any corpus-to-project mapping |
+| Every `createCase` logs ERROR `... could not find parent object [<orgid>] when creating type [WORK_BASKET] with handle [<hex>]` | Server-side Hibernate composite-key smell (BUG_LOG B37) | Cosmetic noise; project still activates correctly |
+| Every project delete logs ERROR `... Exception when canceling all requests for project NNNN ... Task Handle NNNN Not found` | `ProjectDeleteProcessingInstance` cancels in-flight SRIs but the project has none (BUG_LOG B38) | Cosmetic; delete still completes |

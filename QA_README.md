@@ -1,6 +1,6 @@
 # Digital Reef eDiscovery — QA Quick Start
 
-**Version 0.09 · 2026-05-18**
+**Version 0.13 · 2026-05-18**
 
 This is the operator-facing companion to [README.md](README.md). If you
 just inherited a fresh test VM and need to get to "I ran the smoke
@@ -107,14 +107,20 @@ dr-load admin --help
 |---|---|
 | `create-org NAME [--description T]` | Create a new organization. Idempotent. |
 | `list-connectors ORG` | List connectors visible to DRSysAdmin in `ORG`. |
-| `create-project NAME --org ORG [--lifetime D]` | Create a project. Role handle auto-resolved. With `--lifetime`, queue an at-job to auto-delete after the duration. |
-| `create-import-job PROJECT_NAME -c CONNECTOR_NAME --path P --org O [--lifetime D]` | Submit the indexing pipeline against an existing project by name. |
-| `delete-project NAME --org ORG [--handle H]` | Two-phase delete. `--handle` is an escape hatch for orphans invisible to `listProjects`. |
+| `create-project NAME --org ORG [--lifetime D] [-d DESC]` | Create a project. Role handle auto-resolved. With `--lifetime`, queue an at-job to auto-delete after the duration. With `-d "...do not delete..."` in the description, protect from `cleanall`. |
+| `create-import-job PROJECT_NAME -c CONNECTOR_NAME --path P --org O [--lifetime D]` | Submit the indexing pipeline against an existing project by name. **`--path` is a subpath under the connector's `remotePath`** — stage your files under `<remotePath>/<path>` on the host. |
+| `delete-project NAME --org ORG [--handle H]` | Two-phase delete. `--handle` is an escape hatch for orphans invisible to `listProjects`. Also cancels any pending at-job for the same name. |
 | `unschedule NAME` | Cancel any pending at-job for that project name. |
-| `list [--org ORG]` | Show all projects + their pending scheduled deletes. |
-| `stage-testload [--src --dest --owner]` | Copy versioned test fixtures into `/data/import/testload/`. |
+| `reschedule NAME --org ORG --lifetime D` | Re-arm auto-delete on an existing project. Cancels any prior at-job, queues a fresh one. |
+| `list [--org ORG]` | Plain-text view of projects + their pending scheduled deletes. |
+| `dashboard --org ORG [--rich \| --watch [--interval N] [--alt-screen]]` | Four-section overview: running jobs, scheduled deletes, finished jobs, project totals. `--rich` for a single colored snapshot; `--watch` for an auto-refreshing TUI. |
+| `cleanall --org ORG [--yes] [--dry-run]` | Bulk delete every project EXCEPT (a) projects with an active task and (b) projects whose description contains "do not delete" (case-insensitive). Use `--dry-run` to preview. |
+| `purgeall --org ORG [--force]` | Nuclear: delete every project unconditionally. Default prompt requires typing the org name to confirm; `--force` skips that guard. |
+| `stage-testload [--src --dest --owner]` | Copy versioned test fixtures into `/data/import/testload/` (or `--dest`). |
 
 `--lifetime` accepts `90s`, `30m`, `1h`, `7d`, `2w`. Granularity is minutes (rounded up).
+
+**Description-based protection from `cleanall`:** put `do not delete` (case-insensitive substring, anywhere in the text) into the project's description and `cleanall` will skip it. The convention is already in use on this VM — `smoketest` ships with `description: "do not delete"`.
 
 ---
 
@@ -214,6 +220,37 @@ dr-load indexing --users 1 --duration 120s       # 2-minute run
 # A merged CSV report is written to dr_report.csv
 ```
 
+### 4.7b Watch the dashboard while jobs run
+
+```bash
+# Single Rich snapshot (one frame, colors, exits)
+dr-load admin dashboard --org training --rich
+
+# Auto-refreshing TUI (Ctrl-C to exit)
+dr-load admin dashboard --org training --watch
+dr-load admin dashboard --org training --watch --interval 3      # faster refresh
+dr-load admin dashboard --org training --watch --alt-screen      # vim/htop-style
+```
+
+Four sections: running jobs, scheduled deletes, finished jobs, project
+summary. Read-only — safe to leave open on a side terminal.
+
+### 4.7c Bulk teardown at the end of a session
+
+```bash
+# Preview what cleanall would remove (running + 'do not delete' protected stay)
+dr-load admin cleanall --org training --dry-run
+
+# Actually do it (prompts Y/N)
+dr-load admin cleanall --org training
+
+# Or skip the prompt
+dr-load admin cleanall --org training --yes
+
+# Nuclear option — deletes EVERYTHING (typed confirmation required)
+dr-load admin purgeall --org training
+```
+
 ### 4.8 Tear down at the end of a test session
 
 ```bash
@@ -226,6 +263,9 @@ atq | awk '{print $1}' | xargs -r atrm
 # Or nuke specific projects
 dr-load admin delete-project demo --org training
 dr-load admin delete-project myimport --org training
+
+# Or bulk clean (skips active + protected)
+dr-load admin cleanall --org training --yes
 ```
 
 ---

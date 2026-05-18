@@ -1,5 +1,55 @@
 # Changelog
 
+## v0.14 — 2026-05-18
+
+Documentation sweep: API_DICTIONARY and QA_README reflect everything
+that shipped in v0.10–v0.13.
+
+### Updated
+
+- **`API_DICTIONARY.md` v0.13** — captures two important data-shape
+  findings that bit us during dashboard development and the
+  `/data/testload` path mishap:
+
+  - `orgManager/listConnectors` response now documented with
+    **`remotePath` + `offset`** fields and an explicit explanation
+    that the `--path` to `createDataArea` is the **subpath under
+    `remotePath`**, never an absolute host filesystem path. Includes
+    a worked table showing how four different `--path` values resolve.
+  - `orgManager/listCorpora` corpus record now documented with the
+    full field set and a **critical warning** that the corpus's
+    owning project is **`corpus.owner`**, NOT the handle prefix.
+    The prefix on this build is the default-org corpus-view container,
+    not a project handle. Code that uses `handle.split(":")[0]` gets
+    the wrong answer for every corpus.
+  - Quirks cheat sheet adds: indexing-failure-from-wrong-path,
+    dashboard-DOCS=0 bug, B37 (WORK_BASKET parent), B38 (SRI cancel-all).
+
+- **`QA_README.md` v0.13** — the operator reference now lists all 12
+  `dr-load admin` subcommands (was 8), with example workflows for the
+  Rich `--watch` dashboard and the new bulk-delete commands. Documents
+  the **"do not delete" description convention** for protecting
+  projects from `cleanall`. Notes that `smoketest` already ships with
+  this convention and is auto-protected.
+
+### Memory snapshot preserved
+
+Updated `~/.claude/projects/.../memory/` with the v0.13 CLI surface,
+the connector-path lesson, the corpus.owner lesson, and the Dave
+White dataset gotcha. Future sessions opening this repo will have a
+coherent picture without re-deriving findings.
+
+### Test signal
+
+```
+pytest -m smoke            → green
+pytest tests/              → green (69 passed, 16 skipped, 1 xfailed)
+```
+
+No code changes in this release — pure doc + memory update.
+
+---
+
 ## v0.13 — 2026-05-18
 
 Two bulk-delete commands for managing test-project sprawl.
