@@ -405,25 +405,14 @@ def stage_testload(
     """Copy fixture files into `/data/import/testload/` (or `--dest`).
     Idempotent: existing files are overwritten with fresh fixture content.
     """
-    if src is None:
-        src = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "testload"
-    if not src.is_dir():
-        _fail(f"Source fixtures dir not found: {src}")
-        raise typer.Exit(1)
-    fixtures = sorted(p for p in src.iterdir() if p.is_file())
-    if not fixtures:
-        _fail(f"No files in {src}")
-        raise typer.Exit(1)
-
-    dest.mkdir(parents=True, exist_ok=True)
-    for f in fixtures:
-        shutil.copy2(f, dest / f.name)
-        _info(f"Staged {dest / f.name}")
     try:
-        shutil.chown(dest, user=owner, group=owner)
-        for f in dest.iterdir():
-            shutil.chown(f, user=owner, group=owner)
-    except (LookupError, PermissionError) as e:
+        n = ops.stage_testload_fixtures(src=src, dest=dest, owner=owner, require_chown=True)
+    except FileNotFoundError as e:
+        _fail(str(e))
+        raise typer.Exit(1)
+    except PermissionError as e:
         _fail(f"chown to {owner} failed: {e}. Run with sudo.")
         raise typer.Exit(1)
-    _ok(f"Staged {len(fixtures)} fixture file(s) in {dest} (owner={owner}).")
+    for f in sorted(dest.iterdir()):
+        _info(f"Staged {f}")
+    _ok(f"Staged {n} fixture file(s) in {dest} (owner={owner}).")

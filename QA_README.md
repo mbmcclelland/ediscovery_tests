@@ -1,13 +1,16 @@
 # Digital Reef eDiscovery — QA Quick Start
 
-**Version 0.08 · 2026-05-18**
+**Version 0.09 · 2026-05-18**
 
 This is the operator-facing companion to [README.md](README.md). If you
 just inherited a fresh test VM and need to get to "I ran the smoke
 test and it's green" in under 30 minutes, start here.
 
-For the full API documentation see `DR_Workflow_Guide.md`. For known
-issues, root causes, and historical context see `BUG_LOG.md`.
+Other docs in this repo:
+- [API_DICTIONARY.md](API_DICTIONARY.md) — every REST endpoint with request/response shapes and examples
+- [DR_Workflow_Guide.md](DR_Workflow_Guide.md) — workflow narrative (browser flows mapped to REST)
+- [BUG_LOG.md](BUG_LOG.md) — known issues, root causes, historical context
+- [CHANGELOG.md](CHANGELOG.md) — per-release notes
 
 ---
 
@@ -25,11 +28,18 @@ sudo ./scripts/install/dr_install.sh
 # Watch progress with: tail -f /var/log/dr_install.log
 # Expect ~15-20 minutes. Exit code: 0=ok, 2=rollback, 3=incomplete
 
-# 2. (Browser, one time) Provision the training org and DRSysAdmin's
-#    admin permissions on it via Express Provisioning at:
+# 2. (Browser, one time) Express Provisioning at:
 #    https://192.168.58.128:8443/ediscovery/
-#    Create org "training", create user "admin" with password "password".
-#    Add DRSysAdmin to "training" as Organization Administrator.
+#      a) Create org "training"
+#      b) Create user "admin" with password "password"
+#      c) Add DRSysAdmin to "training" as Organization Administrator
+#
+#    *** This is the only step that CANNOT be done from the CLI. ***
+#    The server's createCustomerUser endpoint refuses calls from
+#    DRSysAdmin against an org DRSysAdmin doesn't belong to yet
+#    (chicken-and-egg permission check — BUG_LOG B36). The browser
+#    Express Provisioning flow uses a non-REST code path to get past
+#    this.
 
 # 3. Install the test toolkit and CLI
 cd /root/scripts/ediscovery_tests-master
@@ -282,6 +292,7 @@ For full root-cause analysis see `BUG_LOG.md`. The QA-facing summary:
 | B30 | Medium | Every `createCase` triggers a `NullPointerException` in `SendEmailResponseMessage` because no SMTP is configured. Project still activates correctly; the NPE is logged but not user-facing. |
 | B29 | Low | `Could not find role row with:<handle>PROJECT` is logged on every `createCase`. Hibernate composite-text-key smell. Doesn't break anything. |
 | B24 | Low | Unauthenticated calls to JSON endpoints NPE instead of returning 401. Workaround: always log in first. |
+| B36 | Medium | `orgManager/createCustomerUser` requires the caller to already be a user in the target org. DRSysAdmin isn't on a fresh org, so CLI can't bootstrap admin users — browser Express Provisioning is the only path. Documented in [API_DICTIONARY.md §5](API_DICTIONARY.md#5-unwrapped--blocked-endpoints). |
 
 ### Configuration / install gotchas
 

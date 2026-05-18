@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.09 — 2026-05-18
+
+Documentation completeness pass: a comprehensive API dictionary,
+self-healing smoke fixture, and the honest scope of what `dr-load admin`
+can and cannot do.
+
+### Added
+
+- **`API_DICTIONARY.md`** — comprehensive REST endpoint reference (~1130 lines, ~30 endpoints). Every entry: purpose, scope, request body shape with real fields, response shape with example payload, quirks, and cross-references to BUG_LOG. Shapes captured live from the server — no swagger file is served by this build (verified 404/500 on every conventional path), so the live response is the only source of truth. Includes:
+    - Connection + auth model (rolling session tokens, the `userDeviceID` correlation)
+    - Request envelope conventions (`contextHandle` + `systemScope` auto-derivation)
+    - Error format (structured `errorCode`/`extendedStatus` vs HTML 500s)
+    - 30+ endpoints grouped by area (Auth, Realm, Org, Project, Import pipeline, Delete, Reports)
+    - "Unwrapped / blocked endpoints" section documenting B36
+    - Known-quirks cheat sheet for fast troubleshooting
+- **Auto-staging fixture in `tests/test_e2e_bootstrap.py`** — session-scoped, autouse. If `/data/import/testload/` is empty or missing, the fixture invokes the new `helpers.admin_ops.stage_testload_fixtures()` to populate it from the versioned `tests/fixtures/testload/`. The smoke test no longer fails opaquely after a snapshot rollback or `rm -rf /data/import/`. (Anchors #2 in the post-handover gap list.)
+
+### Fixed / Documented
+
+- **B36 — `orgManager/createCustomerUser` is gated by `SecureObjectInterceptor`** which requires the caller to already be a user in the target org. DRSysAdmin isn't on a fresh org, so this endpoint refuses to bootstrap the org admin user via REST — `User not found drsysadmin in org:<new_org>`. Tried 6 endpoint variants and 3 body/scope shapes; none recover. The browser Express Provisioning flow must use a non-REST path (JSP servlet or DB-direct). v0.09 documents this honestly rather than pretending it's "browser-only by choice." This is the only operational gap remaining; everything else is wrappable.
+- **`helpers/admin_ops.py`** gains `stage_testload_fixtures(...)` and `is_testload_staged(...)` as pure helpers that both the CLI and the smoke fixture consume. The CLI's `dr-load admin stage-testload` is now a thin wrapper. `require_chown=False` lets tests skip chown when not running as root.
+- **`QA_README.md`** updated: Express Provisioning is now explicitly called out as the only browser-required step with a pointer to B36 and API_DICTIONARY §5. Cross-links to API_DICTIONARY.md, DR_Workflow_Guide.md, BUG_LOG.md, CHANGELOG.md added near the top so QA can navigate.
+
+### Plan status
+
+```
+All six QA-readiness phases ✅ done
+The only remaining operational gap is B36 (browser-required user creation),
+which is server-side and not in our hands.
+```
+
+---
+
 ## v0.08 — 2026-05-18
 
 Phases 3, 4, and 6 of the QA-readiness plan landed. Repo is now

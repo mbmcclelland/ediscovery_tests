@@ -19,6 +19,7 @@ import shlex
 import shutil
 import subprocess
 import time
+from pathlib import Path
 from typing import Iterable
 
 from helpers.api_client import APIError, EDiscoveryClient
@@ -547,3 +548,54 @@ def cancel_scheduled_delete(project_name: str) -> list[str]:
             subprocess.run(["atrm", j["at_job_id"]], check=False)
             cancelled.append(j["at_job_id"])
     return cancelled
+
+
+# ---------------------------------------------------------- fixtures
+_DEFAULT_FIXTURE_SRC = (Path(__file__).resolve().parent.parent
+                        / "tests" / "fixtures" / "testload")
+
+
+def stage_testload_fixtures(
+    *,
+    src: Path | None = None,
+    dest: Path = Path("/data/import/testload"),
+    owner: str = "auraria",
+    require_chown: bool = True,
+) -> int:
+    """
+    Copy fixture files from `src` into `dest`, chown to `owner`.
+    Returns the count of files staged. Idempotent.
+
+    Used by both `dr-load admin stage-testload` and the smoke-test
+    fixture in `tests/test_e2e_bootstrap.py` so the import job never
+    fails opaquely because `/data/import/testload/` is missing.
+
+    `require_chown=False` lets callers (e.g. tests not running as root)
+    skip the chown step gracefully when it would otherwise fail.
+    """
+    if src is None:
+        src = _DEFAULT_FIXTURE_SRC
+    if not src.is_dir():
+        raise FileNotFoundError(f"fixtures dir not found: {src}")
+    fixtures = sorted(p for p in src.iterdir() if p.is_file())
+    if not fixtures:
+        raise FileNotFoundError(f"no files in {src}")
+
+    dest.mkdir(parents=True, exist_ok=True)
+    for f in fixtures:
+        shutil.copy2(f, dest / f.name)
+    try:
+        shutil.chown(dest, user=owner, group=owner)
+        for f in dest.iterdir():
+            shutil.chown(f, user=owner, group=owner)
+    except (LookupError, PermissionError):
+        if require_chown:
+            raise
+    return len(fixtures)
+
+
+def is_testload_staged(dest: Path = Path("/data/import/testload")) -> bool:
+    """True iff `dest` exists, is a directory, and contains at least one file."""
+    if not dest.is_dir():
+        return False
+    return any(p.is_file() for p in dest.iterdir())

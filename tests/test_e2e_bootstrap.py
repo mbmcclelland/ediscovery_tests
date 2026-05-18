@@ -56,6 +56,27 @@ def _require(name: str) -> str:
     return val
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_testload_staged():
+    """
+    Auto-stage `/data/import/testload/` if it's empty or missing.
+
+    The smoke test's import job scans this directory; if QA snapshot-rolls
+    the VM or runs `rm -rf /data/import/`, the test would otherwise fail
+    opaquely. Now it self-heals: if the dir is empty, we stage from the
+    versioned fixtures in `tests/fixtures/testload/`. If staging requires
+    root (chown to auraria) and we're not root, we skip the chown but
+    still copy the files — the test cares about the contents being
+    scannable, not strictly auraria-owned.
+    """
+    if ops.is_testload_staged():
+        return
+    try:
+        ops.stage_testload_fixtures(require_chown=False)
+    except FileNotFoundError as e:
+        pytest.skip(f"Could not auto-stage testload fixtures: {e}")
+
+
 @pytest.fixture(scope="module")
 def org_name() -> str:
     return _require("DR_ORG_ORGANIZATION")
