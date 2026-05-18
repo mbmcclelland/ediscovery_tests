@@ -71,11 +71,16 @@ class Config:
         default_factory=lambda: os.getenv("DR_REPORT_OUTPUT", "dr_report.csv")
     )
 
-    # Postgres (used by preflight and job poller via subprocess — peer auth only)
+    # Postgres (used by preflight and job poller via `sudo -u auraria psql`,
+    # i.e. peer auth — no password needed on the wire). The pg_password
+    # field exists for code paths that explicitly want a libpq password
+    # connection; it defaults to empty so leaking the value into a log or
+    # error message is harmless. If you need password auth, set
+    # DR_PG_PASSWORD in the shell — never check it into .env.
     pg_host: str = field(default_factory=lambda: os.getenv("DR_PG_HOST", "localhost"))
     pg_db: str = field(default_factory=lambda: os.getenv("DR_PG_DB", "auraria_mgmt"))
     pg_user: str = field(default_factory=lambda: os.getenv("DR_PG_USER", "auraria"))
-    pg_password: str = field(default_factory=lambda: os.getenv("DR_PG_PASSWORD", "auraria"))
+    pg_password: str = field(default_factory=lambda: os.getenv("DR_PG_PASSWORD", ""))
 
     def endpoint(self, path: str) -> str:
         """Build full URL for an API endpoint path."""

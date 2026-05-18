@@ -1,5 +1,65 @@
 # Changelog
 
+## v0.08 — 2026-05-18
+
+Phases 3, 4, and 6 of the QA-readiness plan landed. Repo is now
+self-contained (install tooling versioned in-tree), debug scripts
+deprecated in favor of the CLI, and a GitHub Actions workflow gates
+both the syntax-only and the live-VM signals on every push.
+
+### Added
+
+- **`scripts/install/dr_install.sh`** (versioned copy of the silent
+  installer wrapper that was living at `/root/scripts/misc/`).
+- **`scripts/install/dr_installprep.sh`** — new version of the host-prep
+  script with three fixes:
+    - **B4**: reboot is gated behind `--reboot` / `--no-reboot` / prompt.
+      No more unannounced reboots that kick operators off SSH.
+    - **B5**: SELinux config backup only created if absent. Re-runs no
+      longer overwrite the true original with an already-disabled file.
+    - **B22**: `python3-devel` + `gcc` added so `pip install gevent`
+      doesn't blow up on a fresh VM.
+    - Also: `atd` is enabled (needed for `dr-load admin --lifetime`).
+- **`scripts/install/README.md`** documenting both wrappers + exit codes.
+- **`.github/workflows/smoke.yml`** — two-stage CI:
+    - `collect` runs on `ubuntu-latest`, checks Python imports, pytest
+      collection, and `bash -n` on the install scripts. No live server.
+    - `integration` runs on a self-hosted runner tagged
+      `digitalreef-vm` with access to the test server. Runs
+      `pytest -m smoke` and uploads the HTML report as an artifact.
+      Gracefully no-ops if no such runner is registered.
+
+### Fixed / Cleaned up
+
+- **`fullWorkflow.py` and `debug_create_data_area.py` are deprecation
+  stubs** (B14a). They used to drive the create-project/import/delete
+  chain inline with hardcoded per-host handle defaults — a drift bomb.
+  The same workflow is now in `helpers/admin_ops.py` and exposed via
+  `dr-load admin`. The stubs exit with rc=2 and a pointer to the new
+  CLI. 1316 lines of duplicate code removed.
+- **`config.py` no longer hardcodes `"auraria"` as the Postgres password
+  fallback** (B12). Defaults to empty; the peer-auth code paths
+  (`sudo -u auraria psql`) don't need a password anyway.
+- **QA_README.md** updated to reference the in-repo install scripts
+  instead of the external `/root/scripts/misc/` paths.
+
+### Plan status
+
+```
+Phase 1 — Self-bootstrapping                  ✅ Complete (v0.04, v0.06)
+Phase 2 — Stop hiding real failures           ✅ Complete (v0.05, v0.07)
+Phase 3 — Single source of truth for handles  ✅ Complete (v0.08)
+Phase 4 — Install tooling in VCS              ✅ Complete (v0.08)
+Phase 5 — QA handoff docs                     ✅ Complete (QA_README.md)
+Phase 6 — CI                                  ✅ Complete (v0.08)
+```
+
+Six of six phases done. Remaining items are server-side bugs filed
+for the server team (B24, B29, B30, B34) and optional hardening
+(move at-script creds out of `/var/spool/at/`).
+
+---
+
 ## v0.07 — 2026-05-18
 
 Fix three of the four newly-visible server-bug failures from v0.05 —

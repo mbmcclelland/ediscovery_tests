@@ -41,6 +41,11 @@
 | B33 | Medium | ✅ Fixed in v0.07 (test) | `orgManager/listRoles` NPE'd on missing `objectType` field. Pass `extra_body={"objectType":"PROJECT"}` and the call succeeds. Not a non-functional endpoint after all — the test was sending an incomplete request. |
 | B34 | Low | ❌ Confirmed server bug; xfail in v0.07 | `projectManager/listReportSettings` — `NumberFormatException: Cannot parse null string`. No request-body shape recovers. Marked `pytest.mark.xfail(strict=False)`. |
 | B14 | Medium | ✅ Fixed in v0.06 (config) | DRSysAdmin saw 0 connectors. No longer true once DRSysAdmin is added to the org as Organization Administrator. `dr-load admin list-connectors` no longer needs `-u/-p`. |
+| B4 | Low | ✅ Fixed in v0.08 | `dr_installprep.sh` rebooted unannounced. New version (in-repo at `scripts/install/`) gates reboot behind `--reboot` / `--no-reboot` / prompt. |
+| B5 | Low | ✅ Fixed in v0.08 | `dr_installprep.sh` second-runs overwrote the "original" SELinux backup with the already-modified config. New version creates the backup only if absent. |
+| B12 | Low | ✅ Fixed in v0.08 | Hardcoded `"auraria"` Postgres password fallback in `config.py` dropped. Defaults to empty; peer-auth code paths unchanged. |
+| B14a | Medium | ✅ Fixed in v0.08 | `fullWorkflow.py` and `debug_create_data_area.py` replaced with deprecation stubs pointing at `dr-load admin`. 1316 lines of duplicated workflow + stale handles removed. |
+| B22 | Low | ✅ Fixed in v0.08 | `python3-devel` and `gcc` added to `scripts/install/dr_installprep.sh` so `pip install gevent` succeeds. |
 | B27b | Medium | ✅ Fixed in v0.06 | Stale `DR_ADMIN_ROLE_HANDLE` in `.env` would silently defeat the v0.06 role auto-discovery (because shell-env-first + .env-fallback still surfaces the stale value when shell doesn't set it). CLI option no longer binds to that env var; tests no longer read it. Auto-discovery is now authoritative. |
 | B35 | Low | Open (server) | A half-failed `ecaManager/createCase` (e.g. when the permission-row lookup fails per B29) leaves the project row in `mgmtproject` but invisible to `orgManager/listProjects`. `delete-project NAME` cannot recover it because the lookup is API-based — only an explicit handle works. The server should either complete the rollback or expose the orphan via a stale-state listing. |
 

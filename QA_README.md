@@ -1,6 +1,6 @@
 # Digital Reef eDiscovery — QA Quick Start
 
-**Version 0.07 · 2026-05-18**
+**Version 0.08 · 2026-05-18**
 
 This is the operator-facing companion to [README.md](README.md). If you
 just inherited a fresh test VM and need to get to "I ran the smoke
@@ -16,11 +16,12 @@ issues, root causes, and historical context see `BUG_LOG.md`.
 This sequence takes a fresh VM to a green smoke test, end to end.
 
 ```bash
-# 0. One-time host prep (run once on a brand-new VM; reboots at the end)
-sudo /root/scripts/misc/dr_installprep.sh
+# 0. One-time host prep (run once on a brand-new VM)
+sudo ./scripts/install/dr_installprep.sh         # interactive — prompts before reboot
+# (or pass --reboot / --no-reboot to skip the prompt)
 
 # 1. Install Digital Reef (silent installer with rollback detection)
-sudo /root/scripts/misc/dr_install.sh
+sudo ./scripts/install/dr_install.sh
 # Watch progress with: tail -f /var/log/dr_install.log
 # Expect ~15-20 minutes. Exit code: 0=ok, 2=rollback, 3=incomplete
 
@@ -296,7 +297,7 @@ For full root-cause analysis see `BUG_LOG.md`. The QA-facing summary:
 
 | Bug | What |
 |---|---|
-| B14a | `fullWorkflow.py` and `debug_create_data_area.py` still have stale hardcoded handle defaults. Don't run them on a fresh install without checking what they assume. |
+| B14a | ~~`fullWorkflow.py` and `debug_create_data_area.py` had stale handle defaults~~ — both replaced with deprecation stubs in v0.07. Use `dr-load admin` instead. |
 | B12 | `config.py` has a hardcoded `"auraria"` Postgres password fallback. Smell, not a bug. |
 | B15b | Three different conventions for "where test data lives" across the repo. The authoritative answer: the connector record's `con_fsdataarea_cfg.areapath` field. |
 
@@ -372,8 +373,5 @@ dr-load admin unschedule NAME
 
 These don't block QA from running today, but are the next cleanups:
 
-- **Phase 3**: Drop duplicate hardcoded handles in `fullWorkflow.py` and `debug_create_data_area.py`
-- **Phase 4**: Move `/root/scripts/misc/dr_install.sh` into version control
-- **Phase 6**: GitHub Actions CI workflow (`.github/workflows/smoke.yml`)
 - **Hardening**: Move at-script DR_* credentials to `~/.config/dr-load/env` instead of inline
 - **Server-side**: B24, B29, B30, B34 are filed for the server team; not blockers

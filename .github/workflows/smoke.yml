@@ -1,0 +1,122 @@
+name: smoke
+
+# Phase 6 of the QA-readiness plan.
+#
+# Two jobs:
+#   1. `collect` — runs on any GitHub-hosted runner. Installs deps,
+#      asserts pytest can collect every test, runs `dr-load --help`.
+#      Catches import errors and shell-script syntax issues; does NOT
+#      hit the live server.
+#   2. `integration` — runs on a self-hosted runner tagged
+#      `digitalreef-vm` that has network access to the test server.
+#      Runs `pytest -m smoke`. Skipped if no such runner is registered.
+#
+# Secrets required for `integration`:
+#   DR_PASSWORD          DRSysAdmin's password
+#   DR_ORG_PASSWORD      Org admin user's password
+#
+# Optional repository variables (vars.*):
+#   DR_BASE_URL          REST root, e.g. https://internal-host:8443/ediscovery/rest
+#   DR_ORG_USERNAME      Org admin username (default: admin)
+#   DR_ORG_ORGANIZATION  Target org (default: training)
+#   DR_NFS_CONNECTOR_HANDLE  Per-install; set via vars
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:        # allow manual trigger from the Actions tab
+    inputs:
+      run_integration:
+        description: "Run integration job against the test VM"
+        required: false
+        default: "true"
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    name: import + collect (no live server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: System deps for gevent
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends gcc python3-dev
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: dr-load --help
+        run: dr-load --help
+
+      - name: dr-load admin --help
+        run: dr-load admin --help
+
+      - name: pytest --collect-only (no live server hit)
+        run: pytest --collect-only -q
+
+      - name: Bash syntax of install scripts
+        run: |
+          bash -n scripts/install/dr_installprep.sh
+          bash -n scripts/install/dr_install.sh
+
+  integration:
+    name: smoke against live VM (self-hosted runner)
+    needs: collect
+    # Only run when a self-hosted runner is actually registered. The label
+    # `digitalreef-vm` should be set on a runner that has network access
+    # to the test server and at(1) installed.
+    runs-on: [self-hosted, digitalreef-vm]
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.event.inputs.run_integration == 'true')
+    env:
+      DR_BASE_URL:          ${{ vars.DR_BASE_URL || 'https://192.168.58.128:8443/ediscovery/rest' }}
+      DR_USERNAME:          DRSysAdmin
+      DR_PASSWORD:          ${{ secrets.DR_PASSWORD }}
+      DR_ORGANIZATION:      super_system_customer
+      DR_VERIFY_SSL:        "false"
+      DR_ORG_ORGANIZATION:  ${{ vars.DR_ORG_ORGANIZATION || 'training' }}
+      DR_ORG_USERNAME:      ${{ vars.DR_ORG_USERNAME || 'admin' }}
+      DR_ORG_PASSWORD:      ${{ secrets.DR_ORG_PASSWORD }}
+      DR_NFS_CONNECTOR_HANDLE: ${{ vars.DR_NFS_CONNECTOR_HANDLE }}
+      DR_NFS_IMPORT_PATH:   /testload
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install package into a venv
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -e .
+
+      - name: dr-load preflight
+        run: |
+          source .venv/bin/activate
+          dr-load preflight
+
+      - name: pytest -m smoke
+        run: |
+          source .venv/bin/activate
+          pytest -m smoke --tb=line --html=smoke-report.html --self-contained-html
+
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report
+          path: smoke-report.html
+          retention-days: 14
