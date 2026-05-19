@@ -1,0 +1,52 @@
+[Unit]
+Description=Digital Reef eDiscovery load-test recorder daemon
+Documentation=https://www.digitalreefinc.com
+# Start after the network is up so the DR API collector can reach the server.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Run as the eDiscovery service account (created by the DR installer).
+User=auraria
+Group=auraria
+
+# Working directory for the SQLite store (default store.db lives here).
+WorkingDirectory=/var/lib/dr-load-recorder
+
+# Inject DR_* connection variables from the operator-editable env file.
+# Every variable in this file becomes an environment variable for the daemon.
+EnvironmentFile=/etc/sysconfig/dr-load-recorder
+
+# Daemon entrypoint.  Arguments here match defaults; override via env vars.
+# --tick: sampling interval in seconds (default 10)
+# --org:  DR organization to poll (set DR_ORG in EnvironmentFile instead)
+# --store: SQLite path (set DR_STORE in EnvironmentFile instead)
+ExecStart=/usr/bin/python3 -m recorder \
+    --tick ${DR_TICK:-10} \
+    --org ${DR_ORG:-} \
+    --store ${DR_STORE:-/var/lib/dr-load-recorder/store.db}
+
+# Redirect stdout + stderr to the log file.
+StandardOutput=append:/var/log/dr-load-recorder.log
+StandardError=append:/var/log/dr-load-recorder.log
+
+# Restart on unexpected exit but not on clean stop (systemctl stop).
+Restart=on-failure
+RestartSec=10
+
+# Give the daemon up to 30 seconds to shut down cleanly on SIGTERM before
+# escalating to SIGKILL.
+TimeoutStopSec=30
+
+# ── Hardening (appropriate for a monitoring daemon; not a privileged service) ─
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ReadWritePaths=/var/lib/dr-load-recorder /var/log/dr-load-recorder.log
+
+[Install]
+# Disabled by default.  Enable explicitly:
+#   sudo systemctl enable --now dr-load-recorder
+WantedBy=multi-user.target

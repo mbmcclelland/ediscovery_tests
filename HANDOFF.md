@@ -214,3 +214,89 @@ FAIL     →  \x1b[31m\x1b[1mFAIL \x1b[0m     (red bold prefix, stderr)
 The `helpers/style.py` module is a new runtime dependency for `commands/record.py`, `commands/campaign.py`, `commands/report.py`, and `commands/admin.py`. It has no external dependencies beyond typer (already required). No new packages need to be added to `requirements.txt`.
 
 The `--rich` flags on `record status` and `campaign list` require Rich, which is already in `requirements.txt` (used by `admin dashboard --rich`). No new install requirements.
+
+---
+
+## rpm-deployment-engineer Changes
+
+**Date:** 2026-05-19
+**From:** rpm-deployment-engineer
+**To:** tech-writer
+
+### Deliverables
+
+| File | Description |
+|---|---|
+| `packaging/dr-load.spec` | RPM spec file — builds `dr-load-toolkit-0.14-1.el9.x86_64.rpm` |
+| `packaging/build-rpm.sh` | Idempotent build script — wheel build + dep download + rpmbuild |
+| `packaging/systemd/dr-load-recorder.service` | systemd unit for the recorder daemon |
+| `packaging/dr-load-recorder.env.example` | Template for `/etc/sysconfig/dr-load-recorder` |
+| `packaging/README.md` | Operator docs: build, install, enable daemon, verify |
+| `packaging/output/dr-load-toolkit-0.14-1.el9.x86_64.rpm` | Built and verified RPM |
+
+### Build verified on this host
+
+```
+rpm -qpi packaging/output/dr-load-toolkit-0.14-1.el9.x86_64.rpm
+Name     : dr-load-toolkit
+Version  : 0.14
+License  : Proprietary
+Arch     : x86_64
+```
+
+Key `rpm -qpl` items confirmed present:
+- `/usr/bin/dr-load` (console script)
+- `/usr/lib/systemd/system/dr-load-recorder.service`
+- `/etc/sysconfig/dr-load-recorder` (config noreplace)
+- `/usr/share/dr-load/testload/doc1.txt`, `doc2.txt` (fixture corpus)
+- `/usr/share/dr-load/wheels/*.whl` (19 wheels bundled for offline install)
+- `/usr/lib/python3.9/site-packages/commands/`, `helpers/`, `recorder/` (all Python packages)
+- `/var/lib/dr-load-recorder` (state dir, owned by auraria)
+
+Key `rpm -qpR` items confirmed:
+- `python3 >= 3.9`, `python3-pip`, `python3-setuptools`
+- `at` (for `dr-load admin --lifetime` scheduling)
+
+### Architecture note for tech-writer
+
+The package builds as `x86_64` (not `noarch`) because bundled wheels include compiled
+extensions: `pydantic-core` and `charset-normalizer` ship `.so` files. If a noarch build
+is ever needed, those two deps would need to be replaced with pure-Python alternatives.
+
+### Known gaps for tech-writer to fill in
+
+1. **Logrotate config** — the RPM installs the daemon but ships no logrotate config for
+   `/var/log/dr-load-recorder.log`. Operators will need a manual logrotate entry or the
+   log will grow unbounded. A `packaging/logrotate/dr-load-recorder` file is referenced in
+   `dr-load-recorder.env.example` but not yet created. The tech-writer should either create
+   it or update the docs to note the omission explicitly.
+
+2. **GPG signing workflow** — the RPM is unsigned (`Signature: (none)`). Production
+   deployments should sign with an internal GPG key. The signing workflow (gpg key setup,
+   `rpm --addsign`, repo metadata with `repomd.xml.asc`) is not yet documented. Tech-writer
+   should add a "Signing for production" section to `packaging/README.md` or flag it as
+   a prerequisite.
+
+3. **Repo hosting** — after signing, operators will want to serve the RPM via an internal
+   DNF repository (`createrepo`, NGINX or Apache serving `repodata/`). The docs currently
+   only cover direct `dnf install <file>.rpm`. A "Set up an internal DNF repo" appendix
+   would remove the manual file-copy step.
+
+4. **`psycopg2-binary` in wheels cache** — the build script downloads `psycopg2-binary`
+   into the wheel cache (it is in `setup.cfg install_requires`) even though it is not
+   installed into the buildroot (the spec uses `--no-deps` + explicit runtime subset). The
+   wheel is in the bundled cache at `/usr/share/dr-load/wheels/` as a convenience for
+   operators who may want to `pip install psycopg2-binary` offline. The tech-writer should
+   clarify this in the docs so operators are not confused by the presence of a wheel that
+   is not auto-installed.
+
+5. **Post-install manual step reminder** — `packaging/README.md` says "the Digital Reef
+   application must already be installed" but does not cross-reference the DRSysAdmin ->
+   Org Admin promotion step that is still required manually via the browser UI. This is
+   documented in `QA_README.md §1 Quick start` and in `scripts/install/README.md` but
+   should be explicitly noted in the packaging README so the operator does not get stuck.
+
+6. **`dr-load preflight` expected output** — the README says "Expected output: connectivity
+   and auth checks against the configured DR server" but does not show what a passing
+   preflight looks like. Sample output (green checks vs. red failures) would help the
+   operator distinguish success from a misconfigured `DR_HOST`/`DR_PASSWORD`.

@@ -8,3 +8,10 @@ ediscovery_tests.egg-info/
 *.egg-info/
 .claude/
 env.txt
+
+# RPM build artifacts (regenerable from packaging/build-rpm.sh)
+build/
+dist/
+packaging/output/
+packaging/wheels/
+*.rpm
