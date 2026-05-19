@@ -153,6 +153,50 @@ dr-load admin --help
 
 ---
 
+## 3b. `dr-load record / campaign / report` — long-haul monitoring (Phase A, v0.15+)
+
+For sustained load campaigns running for hours, days, weeks, or months,
+the `dr-load monitor` toolkit gives you a persistent recorder daemon, a
+campaign event log, and on-demand reports.
+
+```bash
+dr-load record start                  # forks the daemon, writes PID + log
+dr-load record status                 # shows daemon state + latest samples
+dr-load record stop                   # SIGTERM, clean shutdown
+dr-load record tail                   # stream events as they happen
+
+dr-load campaign new soak-q2 --scenario indexing --users 10
+dr-load campaign adjust --users 50 --note "weekly ramp"
+dr-load campaign event "added 4GB heap"
+dr-load campaign end --note "ramp complete"
+dr-load campaign list                  # all campaigns, active + ended
+
+dr-load report                         # markdown report for active campaign
+dr-load report --audience mgmt         # weekly-status framing
+dr-load report --audience capacity     # peak/headroom framing
+dr-load report --format csv --out wk20.csv
+dr-load report --since 7d              # last 7 days
+dr-load report --campaign soak-q2      # specific campaign
+```
+
+The recorder writes to a single SQLite file (`/var/lib/dr-load-recorder/store.db`
+by default, falling back to `~/.local/share/dr-load-recorder/store.db` or
+`/tmp/dr-load-recorder/store.db` if the first isn't writable). Tick interval is
+10 s by default (`--tick 5` to override). Disk footprint is around 1 GB per
+quarter at the default sample rate.
+
+**Five signals** are sampled every tick (CPU%, Memory%, Disk I/O + await,
+Error rate, Indexing rate) and aggregated into a composite traffic-light
+state (`GREEN` / `YELLOW` / `RED`). State transitions are written as
+events so `dr-load report` can summarize incidents.
+
+**13 cosmetic ERROR patterns** are auto-suppressed in the error rate count
+(see [BUG_LOG.md §A](BUG_LOG.md#a--open-today-quick-scan)).
+
+For the full design contract see `memory/dr_load_monitor_vision.md`.
+
+---
+
 ## 4. Example workflows
 
 ### 4.1 Create a 1-hour throwaway project

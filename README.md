@@ -103,6 +103,22 @@ dr-load admin create-project demo --org training --lifetime 1h
 
 Full reference: [QA_README.md §3](QA_README.md#3-dr-load-admin--operator-reference).
 
+### Long-haul monitoring (Phase A — v0.15+)
+
+For sustained load campaigns lasting hours, days, or weeks, the
+`dr-load record / campaign / report` verb-groups give you a persistent
+recorder daemon plus a campaign event log and report renderer.
+
+```bash
+dr-load record start                       # fork the recorder daemon
+dr-load campaign new soak-q2 --users 10    # start a tracked campaign
+dr-load campaign adjust --users 50         # change load on the fly
+dr-load report --audience mgmt             # weekly status report
+dr-load record stop                        # clean shutdown
+```
+
+Full reference: [QA_README.md §3b](QA_README.md#3b-dr-load-record--campaign--report--long-haul-monitoring-phase-a-v015).
+
 ### Load tests
 
 ```bash
