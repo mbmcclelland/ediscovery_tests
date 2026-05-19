@@ -25,6 +25,7 @@ from typing import Optional
 import typer
 
 from recorder.store import Store, default_db_path
+from helpers.style import ok, warn, fail, info, header, col_headers, styled_state, styled_event_kind
 
 app = typer.Typer(no_args_is_help=True, help="Campaign lifecycle and annotation.")
 
@@ -36,10 +37,7 @@ def _resolve_store(store: Optional[Path]) -> Store:
 def _require_active(s: Store) -> dict:
     camp = s.active_campaign()
     if not camp:
-        typer.echo(typer.style(
-            "No active campaign. Start one with `dr-load campaign new NAME …`.",
-            fg=typer.colors.RED,
-        ))
+        fail("No active campaign. Start one with `dr-load campaign new NAME ...`.")
         raise SystemExit(2)
     return camp
 
@@ -56,13 +54,10 @@ def cmd_new(
     s = _resolve_store(store)
     existing = s.active_campaign()
     if existing and existing["name"] != name:
-        typer.echo(typer.style(
-            f"Another campaign is active: {existing['name']}. End it first.",
-            fg=typer.colors.RED,
-        ))
+        fail(f"Another campaign is active: {existing['name']}. End it first.")
         raise SystemExit(2)
     s.start_campaign(name=name, scenario=scenario, initial_users=users, notes=note)
-    typer.echo(typer.style("OK", fg=typer.colors.GREEN) + f" Campaign '{name}' started.")
+    ok(f"Campaign '{name}' started.")
     typer.echo(f"   scenario: {scenario}")
     typer.echo(f"   users:    {users}")
     if note:
@@ -80,10 +75,7 @@ def cmd_adjust(
     camp = _require_active(s)
     prev = camp.get("current_users")
     s.adjust_campaign(camp["name"], users=users, note=note)
-    typer.echo(
-        typer.style("OK", fg=typer.colors.GREEN)
-        + f" Campaign '{camp['name']}' users {prev} → {users}."
-    )
+    ok(f"Campaign '{camp['name']}' users {prev} → {users}.")
     if note:
         typer.echo(f"   note: {note}")
 
@@ -97,7 +89,7 @@ def cmd_event(
     s = _resolve_store(store)
     camp = _require_active(s)
     s.write_event("ANNOTATE", campaign=camp["name"], payload={"text": text})
-    typer.echo(typer.style("OK", fg=typer.colors.GREEN) + " Event recorded.")
+    ok("Event recorded.")
 
 
 @app.command("end")
@@ -111,15 +103,13 @@ def cmd_end(
     s.end_campaign(camp["name"], note=note)
     elapsed = int(time.time()) - camp["started_at"]
     h, m = divmod(elapsed // 60, 60)
-    typer.echo(
-        typer.style("OK", fg=typer.colors.GREEN)
-        + f" Campaign '{camp['name']}' ended after {h}h{m:02d}m."
-    )
+    ok(f"Campaign '{camp['name']}' ended after {h}h{m:02d}m.")
 
 
 @app.command("list")
 def cmd_list(
     store: Optional[Path] = typer.Option(None, "--store", help="SQLite store path"),
+    rich_mode: bool = typer.Option(False, "--rich", help="Render a Rich table (colors, boxes)."),
 ) -> None:
     """List all campaigns (active and historical)."""
     s = _resolve_store(store)
@@ -127,18 +117,74 @@ def cmd_list(
     if not camps:
         typer.echo("No campaigns recorded yet.")
         return
-    typer.echo(f"{'NAME':<25} {'SCENARIO':<12} {'USERS':>6} {'STATE':<10} {'STARTED':<20} {'ELAPSED'}")
-    typer.echo("-" * 92)
+
+    if rich_mode:
+        _list_rich(camps)
+        return
+
+    # Plain text with styled headers
+    col_headers(f"{'NAME':<25} {'SCENARIO':<14} {'USERS':>6} {'STATE':<10} {'STARTED':<20} ELAPSED")
+    typer.echo("-" * 95)
     for c in camps:
         state = "active" if c["ended_at"] is None else "ended"
+        state_styled = styled_state("RUNNING") if state == "active" else typer.style("ended", fg=typer.colors.BRIGHT_BLACK if hasattr(typer.colors, "BRIGHT_BLACK") else None)
         elapsed = (c["ended_at"] or int(time.time())) - c["started_at"]
         h = elapsed // 3600
         m = (elapsed % 3600) // 60
         started = time.strftime("%Y-%m-%d %H:%M", time.localtime(c["started_at"]))
+        # Scenario: truncate at 14 chars with ellipsis if needed
+        scenario = c.get("scenario") or "-"
+        if len(scenario) > 14:
+            scenario = scenario[:13] + "…"
+        # Name: truncate at 25 chars with ellipsis
+        name = c["name"]
+        if len(name) > 25:
+            name = name[:24] + "…"
+        users_str = str(c.get("current_users") or "-")
         typer.echo(
-            f"{c['name']:<25} {c.get('scenario') or '-':<12} {str(c.get('current_users') or '-'):>6} "
-            f"{state:<10} {started:<20} {h}h{m:02d}m"
+            f"{name:<25} {scenario:<14} {users_str:>6} {state_styled:<10} {started:<20} {h}h{m:02d}m"
         )
+
+
+def _list_rich(camps: list[dict]) -> None:
+    """Rich table rendering for `campaign list --rich`."""
+    from rich.console import Console
+    from rich.table import Table
+    from rich.text import Text
+
+    table = Table(
+        show_header=True,
+        header_style="bold bright_blue",
+        show_lines=False,
+        expand=True,
+    )
+    table.add_column("NAME", style="cyan", no_wrap=False, overflow="fold", min_width=20)
+    table.add_column("SCENARIO", no_wrap=False, overflow="fold", max_width=16)
+    table.add_column("USERS", justify="right", no_wrap=True)
+    table.add_column("STATE", no_wrap=True)
+    table.add_column("STARTED", no_wrap=True)
+    table.add_column("ELAPSED", justify="right", no_wrap=True)
+
+    for c in camps:
+        state = "active" if c["ended_at"] is None else "ended"
+        if state == "active":
+            state_text = Text("active", style="bold cyan")
+        else:
+            state_text = Text("ended", style="dim")
+        elapsed = (c["ended_at"] or int(time.time())) - c["started_at"]
+        h = elapsed // 3600
+        m = (elapsed % 3600) // 60
+        started = time.strftime("%Y-%m-%d %H:%M", time.localtime(c["started_at"]))
+        table.add_row(
+            c["name"],
+            c.get("scenario") or "-",
+            str(c.get("current_users") or "-"),
+            state_text,
+            started,
+            f"{h}h{m:02d}m",
+        )
+
+    Console().print(table)
 
 
 @app.command("show")
@@ -151,18 +197,20 @@ def cmd_show(
     s = _resolve_store(store)
     camp = s.campaign(name) if name else s.active_campaign()
     if not camp:
-        typer.echo("No such campaign." if name else "No active campaign.")
+        fail("No such campaign." if name else "No active campaign.")
         raise SystemExit(2)
 
     started = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(camp["started_at"]))
     elapsed = (camp["ended_at"] or int(time.time())) - camp["started_at"]
     h, m = divmod(elapsed // 60, 60)
+    state = "active" if camp["ended_at"] is None else "ended"
+    state_styled = styled_state("RUNNING") if state == "active" else typer.style("ended", fg=typer.colors.BRIGHT_BLACK if hasattr(typer.colors, "BRIGHT_BLACK") else None)
 
-    typer.echo(f"Campaign: {camp['name']}")
+    header(f"Campaign: {camp['name']}")
     typer.echo(f"  scenario:      {camp.get('scenario') or '-'}")
     typer.echo(f"  started:       {started}")
     typer.echo(f"  elapsed:       {h}h{m:02d}m")
-    typer.echo(f"  state:         {'active' if camp['ended_at'] is None else 'ended'}")
+    typer.echo(f"  state:         {state_styled}")
     typer.echo(f"  initial users: {camp.get('initial_users')}")
     typer.echo(f"  current users: {camp.get('current_users')}")
     if camp.get("notes"):
@@ -172,9 +220,19 @@ def cmd_show(
     if evs:
         recent = evs[-events_limit:]
         typer.echo(f"\nRecent events ({len(recent)} of {len(evs)}):")
+        col_headers(f"  {'TIME':<18} {'KIND':<16} DETAIL")
         for ev in recent:
             ts_str = time.strftime("%m-%d %H:%M:%S", time.localtime(ev["ts"]))
+            kind_styled = styled_event_kind(ev["kind"])
             payload = ev.get("payload") or {}
-            extra = " ".join(f"{k}={v}" for k, v in payload.items() if k != "text")
+            # Pretty-print payload: k=v pairs, cap total at 80 chars, text on same line
+            kv_parts = [f"{k}={v}" for k, v in payload.items() if k != "text"]
+            kv_str = "  ".join(kv_parts)
             text = payload.get("text", "")
-            typer.echo(f"  {ts_str}  {ev['kind']:<14} {extra}{('  — ' + text) if text else ''}")
+            detail = kv_str
+            if text:
+                detail += f"{'  — ' if kv_str else ''}{text}"
+            # Truncate if too long
+            if len(detail) > 80:
+                detail = detail[:78] + "…"
+            typer.echo(f"  {ts_str}  {kind_styled} {detail}")

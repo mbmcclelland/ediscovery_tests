@@ -34,6 +34,7 @@ import typer
 from config import Config, config as default_config
 from helpers import admin_ops as ops
 from helpers.api_client import APIError, EDiscoveryClient
+from helpers.style import ok as _ok, info as _info, fail as _fail, rich_state_color
 
 logger = logging.getLogger(__name__)
 
@@ -48,18 +49,6 @@ def _client(cfg: Config | None = None) -> EDiscoveryClient:
     c = EDiscoveryClient(cfg or default_config)
     c.login()
     return c
-
-
-def _ok(msg: str) -> None:
-    typer.echo(typer.style("OK ", fg=typer.colors.GREEN, bold=True) + msg)
-
-
-def _info(msg: str) -> None:
-    typer.echo(typer.style("..  ", fg=typer.colors.BLUE) + msg)
-
-
-def _fail(msg: str) -> None:
-    typer.echo(typer.style("FAIL ", fg=typer.colors.RED, bold=True) + msg, err=True)
 
 
 def _resolve_project_handle(client: EDiscoveryClient, org: str, name: str) -> str:
@@ -443,19 +432,11 @@ def list_state(
 
 
 def _state_color(state: str) -> str:
-    """Map an operationState/projectState to a Rich color tag."""
-    s = (state or "").upper()
-    if s in ops.ACTIVE_TASK_STATES:
+    """Map an operationState/projectState to a Rich color tag (DR brand palette)."""
+    s = (state or "").lower()
+    if (state or "").upper() in ops.ACTIVE_TASK_STATES:
         return "yellow"
-    if s == "SUCCESS":
-        return "green"
-    if s in ("FAILURE", "FAILED", "ERROR"):
-        return "red"
-    if s == "ACTIVE":
-        return "green"
-    if "DELETE" in s:
-        return "magenta"
-    return "white"
+    return rich_state_color(state)
 
 
 def _render_dashboard_rich(snap: dict, org: str):
@@ -467,7 +448,7 @@ def _render_dashboard_rich(snap: dict, org: str):
 
     # RUNNING JOBS
     running = Table(title=f"Running jobs ({len(snap['running'])})",
-                    show_lines=False, header_style="bold yellow", expand=True)
+                    show_lines=False, header_style="bold bright_blue", expand=True)
     running.add_column("Project", style="cyan", no_wrap=True)
     running.add_column("Task", max_width=40, no_wrap=True, overflow="ellipsis")
     running.add_column("State", no_wrap=True)
@@ -484,7 +465,7 @@ def _render_dashboard_rich(snap: dict, org: str):
 
     # SCHEDULED JOBS
     scheduled = Table(title=f"Scheduled deletes ({len(snap['scheduled'])})",
-                      show_lines=False, header_style="bold cyan", expand=True)
+                      show_lines=False, header_style="bold bright_blue", expand=True)
     scheduled.add_column("Project", style="cyan", no_wrap=True)
     scheduled.add_column("At-job", justify="right")
     scheduled.add_column("Fires at", no_wrap=True)
@@ -496,7 +477,7 @@ def _render_dashboard_rich(snap: dict, org: str):
 
     # FINISHED JOBS
     finished = Table(title=f"Finished jobs (most recent first)",
-                     show_lines=False, header_style="bold green", expand=True)
+                     show_lines=False, header_style="bold bright_blue", expand=True)
     finished.add_column("Project", style="cyan", no_wrap=True)
     finished.add_column("Task", max_width=40, no_wrap=True, overflow="ellipsis")
     finished.add_column("State", no_wrap=True)
@@ -515,7 +496,7 @@ def _render_dashboard_rich(snap: dict, org: str):
 
     # PROJECTS
     projects = Table(title=f"Projects in {org!r} ({len(snap['projects'])})",
-                     show_lines=False, header_style="bold blue", expand=True)
+                     show_lines=False, header_style="bold bright_blue", expand=True)
     projects.add_column("Name", style="cyan", no_wrap=True)
     projects.add_column("Handle", justify="right", no_wrap=True, style="dim")
     projects.add_column("State", no_wrap=True)
@@ -530,9 +511,9 @@ def _render_dashboard_rich(snap: dict, org: str):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return Panel(
         Group(running, scheduled, finished, projects),
-        title=f"[bold]dr-load dashboard[/]  ·  org [cyan]{org}[/]  ·  {timestamp}",
+        title=f"[bold bright_blue]dr-load dashboard[/]  ·  org [cyan]{org}[/]  ·  {timestamp}",
         subtitle="[dim]Ctrl-C to exit[/]",
-        border_style="white",
+        border_style="bright_blue",
     )
 
 
