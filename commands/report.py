@@ -104,16 +104,20 @@ def _fmt(v: float, precision: int = 1) -> str:
     return f"{v:,.{precision}f}"
 
 
+_SYSTEM_SIGS = ("cpu_pct", "mem_pct", "disk_used_gb", "disk_io_mb_s", "disk_iops", "disk_await_ms")
+_API_SIGS = ("docs_per_min", "docs_total", "running_tasks", "running_projects", "total_projects")
+
+
 def _build_summary(s: Store, start: int, end: int) -> dict:
     """Compute all the headline numbers for a window."""
     out: dict = {"window_start": start, "window_end": end, "elapsed_sec": end - start}
 
     # System
-    for sig in ("cpu_pct", "mem_pct", "disk_used_gb", "disk_io_mb_s", "disk_iops", "disk_await_ms"):
+    for sig in _SYSTEM_SIGS:
         out[sig] = _aggregate(s.read_metric(sig, since=start, until=end))
 
     # DR API
-    for sig in ("docs_per_min", "docs_total", "running_tasks", "running_projects", "total_projects"):
+    for sig in _API_SIGS:
         out[sig] = _aggregate(s.read_metric(sig, since=start, until=end))
 
     # Logs
@@ -133,14 +137,33 @@ def _build_summary(s: Store, start: int, end: int) -> dict:
     out["yellow_count"] = len(s.read_events(since=start, until=end, kind="YELLOW"))
     out["red_count"] = len(s.read_events(since=start, until=end, kind="RED"))
 
+    # Total samples across all tracked signals — used to detect the
+    # "no data" case so we don't render a misleading GREEN verdict on an
+    # empty store / dead recorder.
+    out["total_samples"] = sum(
+        out[sig]["n"] for sig in (_SYSTEM_SIGS + _API_SIGS) if isinstance(out.get(sig), dict)
+    )
+    out["no_data"] = out["total_samples"] == 0
+
     return out
 
 
 # --- formatters ---
 
 
+_NO_DATA_REASON = "recorder has not collected any samples for this window"
+_NO_DATA_WARNING = (
+    "WARNING: no metrics in this window — is the recorder running? "
+    "Try: dr-load record status"
+)
+
+
 def _verdict(summary: dict) -> tuple[str, str]:
-    """Return ('GREEN'|'YELLOW'|'RED', one-line reason)."""
+    """Return ('GREEN'|'YELLOW'|'RED'|'NO DATA', one-line reason)."""
+    # Empty-store / dead-recorder case takes precedence — a GREEN verdict
+    # on zero samples would be actively misleading (BUG-2).
+    if summary.get("no_data"):
+        return "NO DATA", _NO_DATA_REASON
     if summary["red_count"] > 0:
         return "RED", f"{summary['red_count']} red transition(s) during window"
     if summary["yellow_count"] > 0:
@@ -156,14 +179,16 @@ def _fmt_markdown(summary: dict, campaign: Optional[dict], audience: str) -> str
     m = (summary["elapsed_sec"] % 3600) // 60
     title = campaign["name"] if campaign else f"window {time.strftime('%Y-%m-%d %H:%M', time.localtime(summary['window_start']))}+{h}h{m:02d}m"
 
-    lines = [
-        f"# Report — {title}",
-        f"",
+    lines = [f"# Report — {title}", ""]
+    if summary.get("no_data"):
+        lines.append(f"> **{_NO_DATA_WARNING}**")
+        lines.append("")
+    lines.extend([
         f"**Verdict:** {verdict} — {why}",
         f"**Duration:** {h}h{m:02d}m",
         f"**Window:** {time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(summary['window_start']))} → {time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(summary['window_end']))}",
         f"",
-    ]
+    ])
 
     if audience in ("self", "mgmt"):
         lines.append("## Throughput")
@@ -220,6 +245,8 @@ def _fmt_markdown(summary: dict, campaign: Optional[dict], audience: str) -> str
 def _fmt_csv(summary: dict, audience: str) -> str:
     rows = [["section", "metric", "value"]]
     rows.append(["verdict", "verdict", _verdict(summary)[0]])
+    if summary.get("no_data"):
+        rows.append(["warning", "no_data", _NO_DATA_WARNING])
     rows.append(["window", "start_ts", summary["window_start"]])
     rows.append(["window", "end_ts", summary["window_end"]])
     rows.append(["window", "elapsed_sec", summary["elapsed_sec"]])
@@ -253,8 +280,14 @@ def _print_rich(summary: dict, campaign: Optional[dict], audience: str) -> None:
     h = summary["elapsed_sec"] // 3600
     m = (summary["elapsed_sec"] % 3600) // 60
 
-    # Verdict color
-    verdict_colors = {"GREEN": "bold cyan", "YELLOW": "bold yellow", "RED": "bold red"}
+    # Verdict color — NO DATA renders as bold magenta so it stands out
+    # against the usual GREEN/YELLOW/RED palette.
+    verdict_colors = {
+        "GREEN": "bold cyan",
+        "YELLOW": "bold yellow",
+        "RED": "bold red",
+        "NO DATA": "bold magenta",
+    }
     verdict_style = verdict_colors.get(verdict, "default")
 
     title = campaign["name"] if campaign else (
@@ -273,6 +306,9 @@ def _print_rich(summary: dict, campaign: Optional[dict], audience: str) -> None:
     )
 
     sections = [header_text]
+    if summary.get("no_data"):
+        sections.insert(0, Text(_NO_DATA_WARNING, style="bold magenta"))
+        sections.insert(1, Text(""))
 
     def _make_table(title_str: str) -> Table:
         t = Table(
@@ -392,6 +428,9 @@ def report(
             ok(f"Wrote {out} ({len(rendered)} bytes).")
         else:
             _print_rich(summary, camp, audience)
+        # Empty-window: exit non-zero so scripts/CI can detect "no data".
+        if summary.get("no_data"):
+            raise SystemExit(2)
         return
     else:
         fail(f"Unknown format: {fmt}  (use: markdown, csv, rich)")
@@ -404,3 +443,7 @@ def report(
         sys.stdout.write(rendered)
         if not rendered.endswith("\n"):
             sys.stdout.write("\n")
+
+    # Empty-window: exit non-zero so scripts/CI can detect "no data".
+    if summary.get("no_data"):
+        raise SystemExit(2)

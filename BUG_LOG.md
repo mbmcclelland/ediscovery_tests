@@ -18,9 +18,9 @@ server); the rest are server-side log noise that is safe to ignore.
 
 | ID | Severity | Where it bites | Workaround |
 |---|---|---|---|
-| **BUG-1** | High | **repo-side** — Phase A recorder | PID file collision when two stores share the same directory. See [§C BUG-1](#bug-1-pid-file-collision) for details. |
-| **BUG-2** | Medium | **repo-side** — Phase A reporter | Empty store exits 0 with a deceptively GREEN verdict. See [§C BUG-2](#bug-2-empty-store-false-green-verdict). |
-| **BUG-3** | Low | **repo-side** — Phase A recorder log | `recorder.log` flooded with one urllib3 `InsecureRequestWarning` per HTTP request. See [§C BUG-3](#bug-3-urllib3-flood-in-recorder-log). |
+| ~~**BUG-1**~~ | ~~High~~ | ✅ Fixed in v0.15 — Phase A recorder | PID/log paths now derive from store STEM, so `/tmp/storeA.db` → `/tmp/storeA.pid`. See [§C BUG-1](#bug-1-pid-file-collision). |
+| ~~**BUG-2**~~ | ~~Medium~~ | ✅ Fixed in v0.15 — Phase A reporter | Empty store now emits `Verdict: NO DATA` + a `WARNING` line and exits **2**. See [§C BUG-2](#bug-2-empty-store-false-green-verdict). |
+| ~~**BUG-3**~~ | ~~Low~~ | ✅ Fixed in v0.15 — Phase A recorder log | Daemon now calls `urllib3.disable_warnings()` once at startup when `verify_ssl=False`. See [§C BUG-3](#bug-3-urllib3-flood-in-recorder-log). |
 | **B36** | Medium | Bootstrap | `orgManager/createCustomerUser` refuses DRSysAdmin against a fresh org. Use **browser Express Provisioning** once per fresh install. After that, the CLI is fine. |
 | **B34** | Low | Test surface | `projectManager/listReportSettings` always returns `NumberFormatException`. The test is `xfail`'d, so CI stays green. Don't call this endpoint until the server fix lands. |
 | **B35** | Low | Cleanup | A half-failed `createCase` can leave an orphan project the API can't see. Recover with `delete-project --handle <h>` ([QA_README §7.7](QA_README.md#77-orphan-project)). |
@@ -71,68 +71,81 @@ the `dr-load admin` or `pytest` surfaces.
 
 #### BUG-1: PID file collision
 
+**Status:** ✅ Fixed in v0.15
 **Severity:** High
-**Component:** `commands/record.py` — `_pid_path()`
-**Repro:**
+**Component:** `commands/record.py` — `_pid_path()` / `_log_path()`
+**Repro (before the fix):**
 ```bash
 dr-load record start --store /tmp/storeA.db --tick 5
 dr-load record stop  --store /tmp/storeB.db   # stops storeA's daemon!
 ```
 
-Both stores in `/tmp/` produce the path `/tmp/recorder.pid` because `_pid_path()` uses only
-the parent directory, not a store-specific stem. Any two stores in the same directory will
-collide — one `record stop` will terminate the wrong daemon with no error message.
+Both stores in `/tmp/` produced the path `/tmp/recorder.pid` because `_pid_path()` used only
+the parent directory, not a store-specific stem. Any two stores in the same directory would
+collide — one `record stop` could terminate the wrong daemon with no error message.
 
-**Fix needed:** Use `store.stem + ".pid"` so each store gets its own PID file
-(e.g., `/tmp/storeA.pid`).
+**Fix landed:** `_pid_path()` and the new `_log_path()` derive from `store_path.stem`, so
+`/tmp/storeA.db` → `/tmp/storeA.pid` + `/tmp/storeA.log`. Covered by
+`tests/test_recorder.py::TestRecordPidPath`.
 
-**Workaround:** Keep each store in its own directory, or always use the default store path
-(`/var/lib/dr-load-recorder/store.db`), which has no sibling stores.
+**Historical workaround:** Keep each store in its own directory, or use the default
+(`/var/lib/dr-load-recorder/store.db`).
 
 ---
 
 #### BUG-2: Empty store — false GREEN verdict
 
+**Status:** ✅ Fixed in v0.15
 **Severity:** Medium
-**Component:** `commands/report.py` — `_build_summary()`
-**Repro:**
+**Component:** `commands/report.py` — `_build_summary()` + `_verdict()` + all three formatters
+**Repro (before the fix):**
 ```bash
 dr-load report --store /tmp/empty.db
 # Output: Verdict: GREEN — no health degradations recorded
 # System: (blank)
+# exit 0  <-- misleading
 ```
 
-An empty (or freshly created) store returns exit code 0 and prints a GREEN verdict. The
-blank System and Throughput sections reveal that no data was collected, but an operator
-reading only the verdict line would assume the system is healthy when in fact the recorder
+An empty (or freshly created) store returned exit code 0 and printed a GREEN verdict. The
+blank System and Throughput sections revealed that no data was collected, but an operator
+reading only the verdict line would assume the system was healthy when in fact the recorder
 never ran.
 
-**Fix needed:** `_build_summary()` should detect zero total samples and either exit non-zero
-or emit a warning: `WARNING: no metrics in this window — is the recorder running?`
+**Fix landed:** `_build_summary()` now records `no_data` (true when the window contains
+zero samples across all tracked signals). `_verdict()` returns `("NO DATA", "...recorder
+has not collected any samples...")` in that case. Markdown, CSV, and Rich renderers all
+emit a clear `WARNING: no metrics in this window — is the recorder running? Try: dr-load
+record status` line at the top. The CLI exits **2** when `no_data` is true. Covered by
+`tests/test_recorder.py::TestReportNoData`.
 
-**Workaround:** Run `dr-load record status` before `dr-load report` to confirm the daemon
-is active and has collected samples.
+**Historical workaround:** Run `dr-load record status` before `dr-load report` to confirm
+the daemon is active and has collected samples.
 
 ---
 
 #### BUG-3: urllib3 flood in recorder log
 
+**Status:** ✅ Fixed in v0.15
 **Severity:** Low
-**Component:** `recorder/daemon.py`
-**Observed:** `recorder.log` contains one `InsecureRequestWarning` line per HTTP request,
-not once per session. At a 5-second tick against a server with 40 projects, this produces
-~10 warning lines per tick — the log becomes unreadable within an hour.
+**Component:** `recorder/daemon.py` — `_suppress_insecure_warnings_if_needed()`
+**Observed (before the fix):** `recorder.log` contained one `InsecureRequestWarning` line
+per HTTP request, not once per session. At a 5-second tick against a server with 40
+projects, this produced ~10 warning lines per tick — the log became unreadable within an
+hour.
 
-The warning text is:
+The warning text was:
 ```
 InsecureRequestWarning: Unverified HTTPS request is being made to host '192.168.58.128'.
 Adding certificate verification is strongly advised.
 ```
 
-**Fix needed:** Call `urllib3.disable_warnings()` once at daemon startup when
-`verify_ssl=False` is set. This is already done in `conftest.py` for the test suite.
+**Fix landed:** `Daemon.run()` now calls `_suppress_insecure_warnings_if_needed(cfg)` once
+at startup. It invokes `urllib3.disable_warnings(InsecureRequestWarning)` ONLY when
+`cfg.verify_ssl` is false — properly-configured production installs (`verify_ssl=True`) are
+left alone. Mirrors the conftest.py approach. Covered by
+`tests/test_recorder.py::TestDaemonSuppressInsecureWarning`.
 
-**Workaround:** Pipe the log through `grep -v InsecureRequestWarning` when reading it, or
+**Historical workaround:** Pipe the log through `grep -v InsecureRequestWarning`, or
 increase `--tick` to reduce request frequency.
 
 ---

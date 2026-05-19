@@ -894,3 +894,201 @@ class TestRecordCLI:
         result = runner.invoke(app, ["status", "--store", str(store_path)])
         assert result.exit_code == 0
         assert "signals:" in result.output
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BUG-1: PID/log path collision — two stores in same parent must NOT share files
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestRecordPidPath:
+    """Stem-derived PID/log paths so sibling stores never collide (BUG-1)."""
+
+    def test_pid_paths_distinct_for_sibling_stores(self, tmp_path):
+        from commands.record import _pid_path
+        a = _pid_path(tmp_path / "storeA.db")
+        b = _pid_path(tmp_path / "storeB.db")
+        assert a != b, "sibling stores must produce distinct PID paths"
+        assert a.name == "storeA.pid"
+        assert b.name == "storeB.pid"
+
+    def test_pid_path_uses_store_stem(self, tmp_path):
+        from commands.record import _pid_path
+        p = _pid_path(tmp_path / "campaignXYZ.db")
+        assert p == tmp_path / "campaignXYZ.pid"
+
+    def test_log_paths_distinct_for_sibling_stores(self, tmp_path):
+        from commands.record import _log_path
+        a = _log_path(tmp_path / "storeA.db")
+        b = _log_path(tmp_path / "storeB.db")
+        assert a != b
+        assert a.name == "storeA.log"
+        assert b.name == "storeB.log"
+
+    def test_stop_only_targets_matching_store(self, tmp_path):
+        """`record stop --store B` must NOT touch the PID file for store A."""
+        from commands.record import _pid_path
+
+        store_a = tmp_path / "storeA.db"
+        store_b = tmp_path / "storeB.db"
+        pid_a = _pid_path(store_a)
+        pid_b = _pid_path(store_b)
+        # Simulate daemon A having written its PID file
+        pid_a.write_text("12345")
+        # The PID file for store B must be a different path
+        assert pid_a != pid_b
+        assert pid_a.exists()
+        assert not pid_b.exists()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BUG-2: empty-store false-GREEN verdict
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestReportNoData:
+    """An empty/fresh store must surface NO DATA, not GREEN (BUG-2)."""
+
+    @pytest.fixture
+    def empty_store(self, tmp_path):
+        from recorder.store import Store
+        db = tmp_path / "empty.db"
+        Store(db).close()
+        return db
+
+    @pytest.fixture
+    def runner(self):
+        return CliRunner()
+
+    @pytest.fixture
+    def app(self):
+        from commands.report import app
+        return app
+
+    def test_build_summary_flags_empty_window(self, empty_store):
+        from commands.report import _build_summary
+        from recorder.store import Store
+
+        s = Store(empty_store)
+        now = int(time.time())
+        summary = _build_summary(s, now - 3600, now)
+        assert summary["total_samples"] == 0
+        assert summary["no_data"] is True
+
+    def test_build_summary_no_data_false_when_samples_present(self, tmp_path):
+        from commands.report import _build_summary
+        from recorder.store import Store
+
+        db = tmp_path / "populated.db"
+        s = Store(db)
+        now = int(time.time())
+        s.write_metrics(now, {"cpu_pct": 5.0})
+        summary = _build_summary(s, now - 60, now + 60)
+        assert summary["total_samples"] >= 1
+        assert summary["no_data"] is False
+
+    def test_verdict_no_data_takes_precedence(self):
+        from commands.report import _verdict
+
+        # Even with yellow/red transitions, no_data should win — but in
+        # practice you can't have transitions without samples. Cover the
+        # canonical empty-window case here.
+        summary = {
+            "no_data": True,
+            "total_samples": 0,
+            "red_count": 0,
+            "yellow_count": 0,
+            "errors_total": 0,
+        }
+        verdict, reason = _verdict(summary)
+        assert verdict == "NO DATA"
+        assert "recorder" in reason.lower()
+
+    def test_cli_markdown_empty_store_exits_nonzero(self, runner, app, empty_store):
+        result = runner.invoke(app, [
+            "--format", "markdown",
+            "--store", str(empty_store),
+        ])
+        assert result.exit_code == 2, result.output
+        assert "NO DATA" in result.output
+        assert "WARNING" in result.output
+        assert "recorder" in result.output.lower()
+
+    def test_cli_csv_empty_store_exits_nonzero(self, runner, app, empty_store):
+        result = runner.invoke(app, [
+            "--format", "csv",
+            "--store", str(empty_store),
+        ])
+        assert result.exit_code == 2, result.output
+        assert "NO DATA" in result.output
+        # CSV path emits an explicit warning row
+        assert "no_data" in result.output
+
+    def test_cli_rich_empty_store_exits_nonzero(self, runner, app, empty_store):
+        result = runner.invoke(app, [
+            "--format", "rich",
+            "--store", str(empty_store),
+        ])
+        assert result.exit_code == 2, result.output
+        assert "NO DATA" in result.output
+
+    def test_cli_markdown_populated_store_exits_zero(self, runner, app, tmp_path):
+        # Sanity: a populated store must still exit 0.
+        from recorder.store import Store
+
+        db = tmp_path / "populated.db"
+        s = Store(db)
+        now = int(time.time())
+        for i in range(3):
+            s.write_metrics(now - 600 + i * 60, {"cpu_pct": 10.0 + i, "mem_pct": 40.0})
+        s.close()
+
+        result = runner.invoke(app, [
+            "--format", "markdown",
+            "--since", "1h",
+            "--store", str(db),
+        ])
+        assert result.exit_code == 0, result.output
+        assert "NO DATA" not in result.output
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BUG-3: urllib3 InsecureRequestWarning suppression at daemon startup
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestDaemonSuppressInsecureWarning:
+    """`_suppress_insecure_warnings_if_needed` honours cfg.verify_ssl (BUG-3)."""
+
+    def test_disables_warnings_when_verify_ssl_false(self):
+        from recorder.daemon import _suppress_insecure_warnings_if_needed
+        import urllib3 as _u3
+
+        cfg = MagicMock()
+        cfg.verify_ssl = False
+        with patch("recorder.daemon.urllib3.disable_warnings") as mock_disable:
+            _suppress_insecure_warnings_if_needed(cfg)
+            assert mock_disable.call_count == 1
+            args, _kwargs = mock_disable.call_args
+            assert args[0] is _u3.exceptions.InsecureRequestWarning
+
+    def test_no_op_when_verify_ssl_true(self):
+        from recorder.daemon import _suppress_insecure_warnings_if_needed
+
+        cfg = MagicMock()
+        cfg.verify_ssl = True
+        with patch("recorder.daemon.urllib3.disable_warnings") as mock_disable:
+            _suppress_insecure_warnings_if_needed(cfg)
+            mock_disable.assert_not_called()
+
+    def test_no_op_when_verify_ssl_missing_defaults_to_verify(self):
+        from recorder.daemon import _suppress_insecure_warnings_if_needed
+
+        # An object with no verify_ssl attribute should default to "verify",
+        # i.e. NOT suppress. Use a bare object to ensure no attribute exists.
+        class FakeCfg:
+            pass
+
+        with patch("recorder.daemon.urllib3.disable_warnings") as mock_disable:
+            _suppress_insecure_warnings_if_needed(FakeCfg())
+            mock_disable.assert_not_called()

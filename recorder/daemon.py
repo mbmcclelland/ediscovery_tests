@@ -18,6 +18,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import urllib3
+
 from config import Config, config as default_config
 from helpers.api_client import EDiscoveryClient
 from recorder.collectors import dr_api, logs, system
@@ -25,6 +27,20 @@ from recorder.health import derive_health
 from recorder.store import Store
 
 logger = logging.getLogger(__name__)
+
+
+def _suppress_insecure_warnings_if_needed(cfg: Config) -> None:
+    """One-shot suppression of urllib3 InsecureRequestWarning at daemon start.
+
+    At a 5s tick against an N-project install, every HTTPS request to the
+    self-signed SUT emits one warning line; recorder.log becomes unreadable
+    within an hour. We mirror the test suite's conftest.py approach and
+    suppress ONLY when the operator has already opted out of TLS verification
+    (verify_ssl=False). On a properly-configured production install with
+    verify_ssl=True we leave urllib3's warnings alone.
+    """
+    if not getattr(cfg, "verify_ssl", True):
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 _DEFAULT_TICK_SEC = 10
 
@@ -65,6 +81,10 @@ class Daemon:
     def run(self) -> None:
         signal.signal(signal.SIGTERM, self.stop)
         signal.signal(signal.SIGINT, self.stop)
+
+        # Suppress urllib3 InsecureRequestWarning ONCE per daemon lifetime,
+        # only when verify_ssl=False. See BUG-3.
+        _suppress_insecure_warnings_if_needed(self.cfg)
 
         self._running = True
         log_dir = Path(self.cfg.log_dir)

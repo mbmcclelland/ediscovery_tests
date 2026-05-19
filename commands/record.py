@@ -7,8 +7,11 @@ Subcommands:
   status  — show daemon state + recent samples
   tail    — stream events as they're written (for debugging)
 
-PID file lives next to the SQLite store so a single store + daemon pair
-shares one parent directory. Use `--store PATH` to override.
+PID file (and recorder log) live next to the SQLite store, with names
+derived from the store's stem. So `--store /tmp/storeA.db` produces
+`/tmp/storeA.pid` and `/tmp/storeA.log`. This means two daemons with
+different stores in the same directory cannot collide on PID/log paths.
+Use `--store PATH` to override.
 
 For production (systemd-managed), use the systemd unit; this CLI is for
 ad-hoc operator runs.
@@ -33,7 +36,16 @@ app = typer.Typer(no_args_is_help=True, help="Recorder daemon control plane.")
 
 
 def _pid_path(store_path: Path) -> Path:
-    return store_path.parent / "recorder.pid"
+    # Derive from store STEM, not parent directory, so two stores in the
+    # same directory (e.g. /tmp/storeA.db and /tmp/storeB.db) get distinct
+    # PID files (/tmp/storeA.pid, /tmp/storeB.pid).
+    return store_path.parent / f"{store_path.stem}.pid"
+
+
+def _log_path(store_path: Path) -> Path:
+    # Same stem-derivation rule as _pid_path — keeps recorder logs paired
+    # with their store and avoids cross-daemon log clobbering.
+    return store_path.parent / f"{store_path.stem}.log"
 
 
 def _read_pid(pid_path: Path) -> Optional[int]:
@@ -80,7 +92,7 @@ def start(
         return
 
     # Fork the daemon via `python -m recorder` with stdout/stderr to a log file.
-    log_path = store_path.parent / "recorder.log"
+    log_path = _log_path(store_path)
     cmd = [
         sys.executable, "-m", "recorder",
         "--store", str(store_path),
