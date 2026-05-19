@@ -1,0 +1,19 @@
+/var/log/dr-load-recorder.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 auraria auraria
+    postrotate
+        # The daemon writes its log via stdout/stderr redirection (set up
+        # by systemd or by `dr-load record start`). It does NOT handle
+        # SIGHUP to reopen the file. Restart the unit instead — it's
+        # fast (~1s) and the SQLite WAL handles crash-consistency, so
+        # no metric loss across the restart.
+        if systemctl is-active --quiet dr-load-recorder; then
+            systemctl restart dr-load-recorder
+        fi
+    endscript
+}

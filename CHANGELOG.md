@@ -8,6 +8,7 @@
 
 | Version | Date | Headline |
 |---|---|---|
+| **v0.15** | 2026-05-19 | Phase A monitor (recorder daemon + campaign log + report renderer) + DR brand palette + RPM packaging + doc rewrite |
 | **v0.14** | 2026-05-18 | Documentation sweep — API_DICTIONARY + QA_README reflect v0.10–v0.13 |
 | **v0.13** | 2026-05-18 | `cleanall` + `purgeall` bulk-delete commands |
 | **v0.12** | 2026-05-17 | Rich-rendered dashboard with `--watch` live mode |
@@ -22,6 +23,150 @@
 | **v0.03** | 2026-05-11 | Three fixes from fresh-install verification (B11, B14d, B18) |
 
 For the per-version detail, scroll on.
+
+---
+
+## v0.15 — 2026-05-19
+
+Four independent work streams landed in this release: Phase A long-haul
+monitoring, the Digital Reef brand palette, RPM packaging, and a
+documentation rewrite.
+
+### Added — Phase A: long-haul load-test monitor
+
+A new verb-group (`record / campaign / report`) for running sustained
+load campaigns over hours, days, or weeks.
+
+**`dr-load record`** — recorder daemon management:
+
+- `start [--store PATH] [--tick N]` — forks a background daemon that
+  samples five health signals (CPU%, Memory%, Disk I/O + await, Error
+  rate, Indexing rate) every N seconds (default 10) and writes them to a
+  SQLite TSDB. PID file and log land alongside the store.
+- `stop [--store PATH]` — sends SIGTERM to the daemon; waits for clean
+  shutdown.
+- `status [--store PATH] [--rich]` — shows daemon state (RUNNING/STOPPED)
+  plus the latest sample for each signal. `--rich` renders a two-column
+  Rich table.
+- `tail [--store PATH]` — streams health-transition events as they are
+  written.
+
+Default store location (in priority order):
+1. `/var/lib/dr-load-recorder/store.db` (if writable — used when the
+   systemd unit owns the state directory)
+2. `~/.local/share/dr-load-recorder/store.db`
+3. `/tmp/dr-load-recorder/store.db`
+
+**`dr-load campaign`** — campaign lifecycle tracking:
+
+- `new NAME --scenario SCENARIO --users N` — opens a new campaign in the
+  store; writes a START event.
+- `adjust --users N [--note TEXT]` — records a load-level change while
+  the campaign is running.
+- `event TEXT` — freeform annotation (e.g. "increased JVM heap to 8 GB").
+- `end [--note TEXT]` — closes the active campaign.
+- `list` — tabular view of all campaigns in the store.
+- `show NAME` — full event log for a specific campaign.
+
+**`dr-load report`** — on-demand reports from the TSDB:
+
+- `[--store PATH] [--campaign NAME] [--since DURATION]` — select data
+  window.
+- `--audience self` (default) — operator-focused: per-signal min/max/p99,
+  incident count, composite GREEN/YELLOW/RED verdict.
+- `--audience mgmt` — weekly-status framing; hides raw numbers,
+  emphasises trend.
+- `--audience capacity` — peak/headroom analysis; flags signals that
+  approached thresholds.
+- `--format markdown` (default) / `csv` / `rich` — output format.
+  Auto-detects tty and applies Rich panel rendering unless `--format
+  markdown` or `--format csv` is explicitly passed.
+- `--out PATH` — write to file instead of stdout.
+
+**13 cosmetic ERROR patterns** from the server (B29, B30, B37–B44) are
+automatically excluded from the error-rate count so they do not
+artificially degrade the traffic-light verdict.
+
+**98 unit tests** added at `tests/test_recorder.py`. All pass with no
+live server required.
+
+**Three bugs filed** against the Phase A code — see [BUG_LOG §A](BUG_LOG.md#a--open-today-quick-scan):
+BUG-1 (PID collision), BUG-2 (false GREEN on empty store), BUG-3
+(urllib3 flood in recorder log). None affect the existing `admin` CLI
+or the test suite.
+
+### Added — Digital Reef brand palette
+
+`helpers/style.py` is a new module that centralises color constants,
+prefix helpers (`ok()`, `warn()`, `fail()`, `info()`), and state
+renderers. All four command modules now import from it.
+
+| State | Old | New (DR brand) |
+|---|---|---|
+| Success / RUNNING / GREEN health | `GREEN` | `cyan` (teal family) |
+| Warning / STOPPED / YELLOW health | `YELLOW` | `yellow` (orange-ish) |
+| Error / failure / RED health | `RED` | `red` (kept universal) |
+| Section headers / column chrome | (ad-hoc) | `bright_blue` |
+
+`record status --rich` and `campaign list --rich` both use Rich `Table`
+with `overflow="fold"` so long names do not break alignment. `report`
+auto-detects tty and renders a Rich panel when writing to a terminal.
+
+No behavior changed (return codes, store writes, API calls are
+identical). All 98 recorder tests plus the existing smoke suite pass.
+
+### Added — RPM packaging
+
+`packaging/` directory ships everything needed to build and distribute
+the toolkit as an installable RHEL 9 / Rocky Linux 9 package:
+
+| File | Purpose |
+|---|---|
+| `packaging/dr-load.spec` | RPM spec — name, version, deps, file manifest |
+| `packaging/build-rpm.sh` | Idempotent build script (wheel + dep download + rpmbuild) |
+| `packaging/systemd/dr-load-recorder.service` | systemd unit for the recorder daemon |
+| `packaging/dr-load-recorder.env.example` | Template for `/etc/sysconfig/dr-load-recorder` |
+| `packaging/logrotate/dr-load-recorder` | logrotate config for `/var/log/dr-load-recorder.log` |
+| `packaging/README.md` | Operator-facing build + install + enable + verify walkthrough |
+| `packaging/output/dr-load-toolkit-0.14-1.el9.x86_64.rpm` | Built and verified RPM |
+
+The RPM bundles 19 dependency wheels for offline installation. It builds
+as `x86_64` (not `noarch`) because `pydantic-core` and
+`charset-normalizer` ship compiled `.so` extensions. A `psycopg2-binary`
+wheel is included in the bundle as a convenience for offline `pip
+install` — it is not auto-installed by the RPM.
+
+The package is **unsigned** in this release. See
+[`packaging/README.md §Signing for production`](packaging/README.md#signing-for-production)
+before distributing internally.
+
+### Updated — documentation rewrite
+
+- **`API_DICTIONARY.md`** — full structural rewrite for v0.15. Every
+  technical claim preserved; layout substantially improved. See
+  [changelog entry](#api-dictionary-rewrite) in the doc itself.
+- **`QA_README.md`** — Phase A verb-group reference (§3b) polished;
+  §3c added for RPM install operator flow; §6 Known Issues updated with
+  BUG-1/BUG-2/BUG-3.
+- **`README.md`** — doc-map updated; Phase A mention with forward link;
+  RPM location pointer added.
+- **`BUG_LOG.md`** — BUG-1/BUG-2/BUG-3 added as numbered entries in §C
+  with full root-cause detail; §A summary updated.
+- **`packaging/README.md`** — addresses all six RPM-agent gaps: logrotate
+  config, GPG signing, internal DNF repo hosting, psycopg2-binary
+  clarification, post-install browser step, sample preflight output.
+- **`DR_Workflow_Guide.md`** — audited; no staleness found relative to
+  current code.
+
+### Test signal
+
+```
+pytest -m smoke                → green (31 passed, 1 skipped)
+pytest tests/test_recorder.py  → green (98 passed)
+pytest tests/                  → green (167 passed, 16 skipped, 1 xfailed, 0 failed)
+rpm -qpi packaging/output/dr-load-toolkit-0.14-1.el9.x86_64.rpm
+                               → Name: dr-load-toolkit  Version: 0.14
+```
 
 ---
 

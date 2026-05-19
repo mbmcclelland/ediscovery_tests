@@ -20,6 +20,8 @@ Different jobs land on different docs. Pick yours:
 |---|---|
 | **Install + run the smoke test on a fresh VM** (junior sysadmin handoff) | [QA_README.md](QA_README.md) — operator quick-start |
 | **Operate the test environment** (create/delete projects, schedule auto-delete, watch dashboard) | [QA_README.md](QA_README.md) §3–4 |
+| **Run sustained load campaigns** (hours, days, or weeks) with the recorder + campaign log | [QA_README.md §3b](QA_README.md#3b-dr-load-record--campaign--report--long-haul-monitoring-phase-a-v015) |
+| **Install the toolkit as an RPM** (RHEL 9 / Rocky Linux 9 managed service) | [packaging/README.md](packaging/README.md) |
 | **Triage a failing test or weird server behavior** | [BUG_LOG.md](BUG_LOG.md) — known issues + workarounds |
 | **Write a new test against an endpoint I haven't used before** | [API_DICTIONARY.md](API_DICTIONARY.md) — every REST call with real request/response shapes |
 | **Understand what the server does behind the scenes** (REST → Java → Postgres) | [DR_Workflow_Guide.md](DR_Workflow_Guide.md) — concepts + DB tables |
@@ -54,11 +56,13 @@ ediscovery_tests-master/
 ├── DR_Workflow_Guide.md    # REST + Postgres concepts; DB table reference
 ├── BUG_LOG.md              # known issues + history
 ├── CHANGELOG.md            # per-release notes
-├── scripts/install/        # versioned install wrappers
+├── packaging/              # RPM build files (spec, build script, systemd unit, logrotate)
+├── scripts/install/        # versioned install wrappers for the DR product
 ├── cli.py                  # dr-load entry point
-├── commands/               # dr-load admin subcommands
-├── helpers/                # API client, preflight, monitoring, admin ops
-├── tests/                  # pytest suite
+├── commands/               # dr-load subcommands (admin, record, campaign, report)
+├── helpers/                # API client, preflight, monitoring, admin ops, style tokens
+├── recorder/               # Phase A recorder daemon
+├── tests/                  # pytest suite (includes test_recorder.py — 98 unit tests)
 └── tests/fixtures/testload/ # canonical 2-document fixture (doc1.txt, doc2.txt)
 ```
 

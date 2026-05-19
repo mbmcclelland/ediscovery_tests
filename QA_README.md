@@ -197,6 +197,46 @@ For the full design contract see `memory/dr_load_monitor_vision.md`.
 
 ---
 
+## 3c. Installing via the RPM (RHEL 9 / Rocky Linux 9 hosts)
+
+If you are deploying to a VM that should run the toolkit as a managed
+system service — rather than from a Python venv — install the pre-built
+RPM instead of running `pip install -e .`.
+
+**Prerequisite:** The Digital Reef application must already be installed
+and the `auraria` service account must exist before you install this
+package. If you have not yet run the browser **Express Provisioning**
+step to create the org admin user, do that first — see [§1 Quick start,
+step 2](README.md#1-quick-start-30-min) and [§7.5 No role handle](#75-no-role-handle).
+
+```bash
+# 1. Copy the RPM to the target host
+scp packaging/output/dr-load-toolkit-0.14-1.el9.x86_64.rpm root@<host>:/tmp/
+
+# 2. Install (all Python deps are bundled — no internet required)
+sudo dnf install /tmp/dr-load-toolkit-0.14-1.el9.x86_64.rpm
+
+# 3. Verify the CLI is on PATH
+dr-load --version      # → dr-load 0.14
+
+# 4. Configure the recorder daemon before enabling it
+sudo vi /etc/sysconfig/dr-load-recorder
+# Set at minimum: DR_HOST, DR_ORG, DR_USER, DR_PASSWORD, DR_VERIFY_SSL
+
+# 5. Enable and start the recorder daemon
+sudo systemctl enable --now dr-load-recorder
+sudo systemctl status dr-load-recorder
+
+# 6. Confirm connectivity
+dr-load preflight
+```
+
+For the full install, enable, verify, and upgrade walkthrough — including
+GPG signing and internal DNF repo hosting — see
+[`packaging/README.md`](packaging/README.md).
+
+---
+
 ## 4. Example workflows
 
 ### 4.1 Create a 1-hour throwaway project
@@ -396,6 +436,18 @@ one xfail is the confirmed server bug B34 (`listReportSettings`).
 ## 6. Known issues
 
 For full root-cause analysis see `BUG_LOG.md`. The QA-facing summary:
+
+### Phase A repo-side bugs (v0.15 recorder / campaign / report commands only)
+
+These do not affect `dr-load admin`, `dr-load preflight`, or the `pytest` suite.
+
+| Bug | Severity | Symptom | Workaround |
+|---|---|---|---|
+| BUG-1 | High | Two stores in the same directory share one PID file — `record stop --store B.db` kills the daemon for A.db | Keep stores in separate directories, or use the default path |
+| BUG-2 | Medium | `report` on an empty store exits 0 and shows GREEN verdict | Run `record status` first to confirm the daemon has collected samples |
+| BUG-3 | Low | `recorder.log` filled with one `InsecureRequestWarning` per request when `DR_VERIFY_SSL=false` | `grep -v InsecureRequestWarning recorder.log` to filter; or increase `--tick` |
+
+See [BUG_LOG §C BUG-1 / BUG-2 / BUG-3](BUG_LOG.md#bug-1-pid-file-collision) for full root-cause detail and fix description.
 
 ### Server-side defects (filed but not yet fixed; out of QA's hands)
 

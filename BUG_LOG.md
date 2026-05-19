@@ -13,10 +13,14 @@ first; the rest is appendix.
 ## A — Open today (quick scan)
 
 These are still active. The first three affect what a tester might see;
-the rest are server-side log noise that's safe to ignore.
+items marked **repo-side** are bugs in the Phase A CLI code (not the
+server); the rest are server-side log noise that is safe to ignore.
 
 | ID | Severity | Where it bites | Workaround |
 |---|---|---|---|
+| **BUG-1** | High | **repo-side** — Phase A recorder | PID file collision when two stores share the same directory. See [§C BUG-1](#bug-1-pid-file-collision) for details. |
+| **BUG-2** | Medium | **repo-side** — Phase A reporter | Empty store exits 0 with a deceptively GREEN verdict. See [§C BUG-2](#bug-2-empty-store-false-green-verdict). |
+| **BUG-3** | Low | **repo-side** — Phase A recorder log | `recorder.log` flooded with one urllib3 `InsecureRequestWarning` per HTTP request. See [§C BUG-3](#bug-3-urllib3-flood-in-recorder-log). |
 | **B36** | Medium | Bootstrap | `orgManager/createCustomerUser` refuses DRSysAdmin against a fresh org. Use **browser Express Provisioning** once per fresh install. After that, the CLI is fine. |
 | **B34** | Low | Test surface | `projectManager/listReportSettings` always returns `NumberFormatException`. The test is `xfail`'d, so CI stays green. Don't call this endpoint until the server fix lands. |
 | **B35** | Low | Cleanup | A half-failed `createCase` can leave an orphan project the API can't see. Recover with `delete-project --handle <h>` ([QA_README §7.7](QA_README.md#77-orphan-project)). |
@@ -59,6 +63,83 @@ Not blockers; just polish.
 > server team) and repo bugs (fixed in this codebase). If a fix
 > version is listed, that's the `v0.x` release on this repo where
 > the workaround or fix went in — see [CHANGELOG.md](CHANGELOG.md).
+
+### Phase A repo-side bugs (v0.15)
+
+These are bugs in the Phase A monitor/recorder code, not in the server. They do not affect
+the `dr-load admin` or `pytest` surfaces.
+
+#### BUG-1: PID file collision
+
+**Severity:** High
+**Component:** `commands/record.py` — `_pid_path()`
+**Repro:**
+```bash
+dr-load record start --store /tmp/storeA.db --tick 5
+dr-load record stop  --store /tmp/storeB.db   # stops storeA's daemon!
+```
+
+Both stores in `/tmp/` produce the path `/tmp/recorder.pid` because `_pid_path()` uses only
+the parent directory, not a store-specific stem. Any two stores in the same directory will
+collide — one `record stop` will terminate the wrong daemon with no error message.
+
+**Fix needed:** Use `store.stem + ".pid"` so each store gets its own PID file
+(e.g., `/tmp/storeA.pid`).
+
+**Workaround:** Keep each store in its own directory, or always use the default store path
+(`/var/lib/dr-load-recorder/store.db`), which has no sibling stores.
+
+---
+
+#### BUG-2: Empty store — false GREEN verdict
+
+**Severity:** Medium
+**Component:** `commands/report.py` — `_build_summary()`
+**Repro:**
+```bash
+dr-load report --store /tmp/empty.db
+# Output: Verdict: GREEN — no health degradations recorded
+# System: (blank)
+```
+
+An empty (or freshly created) store returns exit code 0 and prints a GREEN verdict. The
+blank System and Throughput sections reveal that no data was collected, but an operator
+reading only the verdict line would assume the system is healthy when in fact the recorder
+never ran.
+
+**Fix needed:** `_build_summary()` should detect zero total samples and either exit non-zero
+or emit a warning: `WARNING: no metrics in this window — is the recorder running?`
+
+**Workaround:** Run `dr-load record status` before `dr-load report` to confirm the daemon
+is active and has collected samples.
+
+---
+
+#### BUG-3: urllib3 flood in recorder log
+
+**Severity:** Low
+**Component:** `recorder/daemon.py`
+**Observed:** `recorder.log` contains one `InsecureRequestWarning` line per HTTP request,
+not once per session. At a 5-second tick against a server with 40 projects, this produces
+~10 warning lines per tick — the log becomes unreadable within an hour.
+
+The warning text is:
+```
+InsecureRequestWarning: Unverified HTTPS request is being made to host '192.168.58.128'.
+Adding certificate verification is strongly advised.
+```
+
+**Fix needed:** Call `urllib3.disable_warnings()` once at daemon startup when
+`verify_ssl=False` is set. This is already done in `conftest.py` for the test suite.
+
+**Workaround:** Pipe the log through `grep -v InsecureRequestWarning` when reading it, or
+increase `--tick` to reduce request frequency.
+
+---
+
+### Historical server + repo bugs
+
+`✅` = fixed in the listed version. `❌` = confirmed defect, no fix available.
 
 | # | Severity | Status | Title |
 |---|----------|--------|-------|

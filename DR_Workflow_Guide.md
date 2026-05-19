@@ -645,7 +645,7 @@ with `Organization Administrator` role.
 | Login | DRSysAdmin only | Dual: admin@training + DRSysAdmin | Different, but both work |
 | createCase caller | DRSysAdmin | admin@training | Different, same result |
 | Both users in membersRequestMessage with Org Admin role | ✅ | ✅ | ✅ |
-| `IS_IMPORTED = 'false'` in project attributes | ✅ | ❌ missing | ⚠️ |
+| `IS_IMPORTED = 'false'` in project attributes | ✅ | ✅ (injected by `discover_template_attributes` since v0.03) | ✅ |
 | createDataArea | ✅ | ✅ | ✅ |
 | createCorpus | ✅ | ✅ | ✅ |
 | listCorpusSets + addCorpus | ✅ | ✅ | ✅ |
@@ -653,34 +653,14 @@ with `Organization Administrator` role.
 | IMPORT_ACTIVITY_TABLE row created | ✅ | ✅ | ✅ |
 | All 4 representation types created | ✅ | ✅ | ✅ |
 
-### The One Fix Needed
-
-Add `IS_IMPORTED` to `TEMPLATE_ATTRIBUTES` in both `locustfile_indexing.py` and
-`debug_create_data_area.py`:
-
-```python
-TEMPLATE_ATTRIBUTES = [
-    {"name": "ALIAS_LISTS",             "value": "316"},
-    {"name": "ANALYTICAL_SETTINGS",     "value": "208"},
-    {"name": "BILLING_REPORT_SETTINGS", "value": "324"},
-    {"name": "CUSTOM_FIELDS",           "value": "321"},
-    {"name": "DOMAIN_LISTS",            "value": "260"},
-    {"name": "DUPE_SURVIVORSHIP",       "value": "268"},
-    {"name": "EMAIL_SIGNATURE",         "value": "264"},
-    {"name": "EXPORT_FIELDS",           "value": "203"},
-    {"name": "EXPORT_SETTINGS",         "value": "253"},
-    {"name": "INDEX_SETTINGS",          "value": "180"},
-    {"name": "IS_IMPORTED",             "value": "false"},   # browser always sends this
-    {"name": "LOADFILE_SETTINGS",       "value": "318"},
-    {"name": "REPORT_SETTINGS",         "value": "310"},
-    {"name": "SEARCH_FIELDS",           "value": "288"},
-    {"name": "SEARCH_SETTINGS",         "value": "270"},
-    {"name": "TAG",                     "value": "258"},
-    {"name": "USER_EXP",               "value": "262"},
-    {"name": "DOCUMENT_METADATA",       "value": "266"},
-]
-```
-
 ---
 
-*Last updated: 2026-05-10*
+> **Note — `IS_IMPORTED`:** The fix described above was implemented in
+> **v0.03** via `EDiscoveryClient.discover_template_attributes()`, which
+> automatically injects `{"name": "IS_IMPORTED", "value": "false"}` after
+> `INDEX_SETTINGS`. The hardcoded attribute lists in `locustfile_indexing.py`
+> and the deprecated `debug_create_data_area.py` were updated at the same
+> time. No manual action is required — the CLI and test suite handle this
+> transparently.
+
+*Last updated: 2026-05-19*

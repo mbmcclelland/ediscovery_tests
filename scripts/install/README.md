@@ -1,8 +1,15 @@
 # Install scripts
 
-Versioned copies of the install tooling. Use these in preference to
-anything left under `/root/scripts/misc/` — those are pre-v0.07 and
-may have drifted.
+Versioned copies of the install tooling for the **Digital Reef product
+itself** (`install.bin`). Use these in preference to anything left under
+`/root/scripts/misc/` — those are pre-v0.07 and may have drifted.
+
+> **Installing the `dr-load` toolkit?** That is a separate step. You
+> have two options:
+> - **Development / test VM:** `pip install -e .` in the repo root after
+>   creating a venv (see [QA_README §1](../../QA_README.md)).
+> - **Managed production host:** Install the RPM — see
+>   [`packaging/README.md`](../../packaging/README.md).
 
 ## `dr_installprep.sh`
 

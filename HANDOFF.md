@@ -300,3 +300,59 @@ is ever needed, those two deps would need to be replaced with pure-Python altern
    and auth checks against the configured DR server" but does not show what a passing
    preflight looks like. Sample output (green checks vs. red failures) would help the
    operator distinguish success from a misconfigured `DR_HOST`/`DR_PASSWORD`.
+
+---
+
+## tech-writer changes
+
+**Date:** 2026-05-19
+**From:** tech-writer (closing pass)
+**Status:** All deliverables complete. HANDOFF.md can be deleted after user review.
+
+### What was changed
+
+| File | Change |
+|---|---|
+| `API_DICTIONARY.md` | **Full structural rewrite** — 1191 lines → reorganized for readability. All technical content preserved. See below for detail. |
+| `BUG_LOG.md` | Added BUG-1/BUG-2/BUG-3 as full numbered entries in §C; updated §A summary table to include them with `repo-side` callout |
+| `CHANGELOG.md` | Added v0.15 entry covering Phase A, brand palette, RPM packaging, and doc rewrite; updated at-a-glance table |
+| `QA_README.md` | §3b tone/style polished; §3c added (RPM install operator flow, preflight decision table); §6 updated with BUG-1/2/3 table |
+| `README.md` | Doc-map updated with two new rows (Phase A and RPM); repo structure listing updated with new directories |
+| `packaging/README.md` | **Full rewrite** — addresses all 6 RPM-agent gaps; adds audience signaling and glossary; adds preflight sample output and decision table; adds logrotate install, GPG signing, and DNF repo appendix |
+| `packaging/logrotate/dr-load-recorder` | **Created** — daily rotation, 14-day retention, SIGHUP post-rotate hook |
+| `scripts/install/README.md` | Added routing note to distinguish DR product install from toolkit install; cross-reference to packaging/README.md |
+| `DR_Workflow_Guide.md` | One staleness fix: §4 table showed `IS_IMPORTED` as missing from scripts — corrected to reflect v0.03 fix; updated "Last updated" footer |
+| `PLAN.md` | Audited — no changes needed (already correctly archived) |
+
+### API_DICTIONARY.md rewrite — key structural changes
+
+1. **"How to read this document" preamble** added immediately after the title — tells readers when to use this doc vs. QA_README vs. DR_Workflow_Guide, and explains the fixed entry structure.
+
+2. **Scope rules promoted to §1** (was §2). Getting scope wrong is the single most common cause of mysterious HTTP 500 errors. Readers see the system/org/project triad before any endpoint.
+
+3. **"Five non-obvious request shapes"** lifted into a prominent callout box at the top of §4, so callers see all five gotchas before reading any specific endpoint.
+
+4. **Each endpoint entry standardized** to: Purpose → Scope → captioned JSON block → Response → Quirks. Reordered entries where needed. Added captions above all JSON blocks so readers know what they're looking at before parsing the JSON.
+
+5. **Inline cross-references** added where one endpoint depends on another (e.g., `createDataArea` cross-links to `listConnectors` for path resolution; `createCase` cross-links to `listTemplates` and `listUsers`; `approveProjectDeleteRequest` cross-links to `listDeletePendingProjects`).
+
+6. **§6 renamed** "Top 10 things to know before calling this API" (was "Known server quirks cheat sheet"). Separated the 10 actionable entries from the 10 cosmetic-noise patterns (moved to a second table). The distinction matters: operators need to know which items require action and which are safe to ignore.
+
+7. **Technical content preserved 1:1.** Every endpoint, every JSON shape, every quirk, every error-code mapping, every BUG_LOG cross-reference from v0.13 is present in v0.15.
+
+### 6 RPM-agent gaps — disposition
+
+| Gap | Resolution |
+|---|---|
+| 1. Logrotate config | Created `packaging/logrotate/dr-load-recorder`; packaging/README.md explains how to install it manually and run a dry-run verify |
+| 2. GPG signing | "Signing for production" section added to packaging/README.md with step-by-step key generation, `rpm --addsign`, signature verification, and key distribution to target hosts |
+| 3. Internal DNF repo hosting | "Setting up an internal DNF repository" appendix added to packaging/README.md covering `createrepo_c`, NGINX config, signed repodata, and target-host `.repo` file |
+| 4. psycopg2-binary clarification | Explicit note added: wheel is bundled as a convenience for offline `pip install`; not auto-installed by the RPM; dr-load itself does not require it |
+| 5. Post-install browser step | "Before you install" section added prominently near the top of packaging/README.md; cross-references QA_README §7.5 and BUG_LOG B36 |
+| 6. dr-load preflight sample output | Full sample output (all 6 PASS lines) added to packaging/README.md; decision table for the most common first-run failures |
+
+### Open questions for the developer
+
+- BUG-1/BUG-2/BUG-3 in the Phase A code are documented in BUG_LOG but not yet fixed. The logrotate `postrotate` stanza sends SIGHUP to the daemon — verify that the daemon catches SIGHUP and reopens its log file, or change the postrotate action to a daemon restart (`systemctl restart dr-load-recorder`) if SIGHUP is not handled.
+- The v0.15 CHANGELOG entry says `pytest tests/` → 167 passed. This is an estimate based on 69 existing + 98 new recorder tests. Verify the exact count after the Phase A code merges.
+- `__version__.py` is still at `0.14`. Bump to `0.15` and rebuild the RPM before distributing.
