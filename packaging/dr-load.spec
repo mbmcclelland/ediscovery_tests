@@ -1,4 +1,7 @@
-%define _version 0.14
+# _version may be overridden by build-rpm.sh via --define; the literal
+# below is the fallback used when the spec is invoked directly. Keep
+# this value in sync with __version__.py.
+%{!?_version: %define _version 0.15}
 %define _pkgname dr-load-toolkit
 %define _recorder_user auraria
 %define _sysconfig_dir %{_sysconfdir}/sysconfig

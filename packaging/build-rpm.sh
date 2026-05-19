@@ -133,10 +133,11 @@ echo ">> Copying spec to rpmbuild SPECS..."
 cp "${SCRIPT_DIR}/dr-load.spec" "${RPMBUILD_DIR}/SPECS/dr-load.spec"
 
 # ── Step 5: Run rpmbuild ──────────────────────────────────────────────────────
-echo ">> Running rpmbuild..."
+echo ">> Running rpmbuild (version=${VERSION} from __version__.py)..."
 rpmbuild -bb \
     --define "_topdir ${RPMBUILD_DIR}" \
     --define "_sourcedir ${SOURCES_DIR}" \
+    --define "_version ${VERSION}" \
     "${RPMBUILD_DIR}/SPECS/dr-load.spec" 2>&1 | tee /tmp/rpmbuild.log
 
 # ── Step 6: Collect output ────────────────────────────────────────────────────
