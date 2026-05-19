@@ -19,6 +19,9 @@ from urllib.parse import urlparse
 import typer
 
 from commands.admin import app as admin_app
+from commands.campaign import app as campaign_app
+from commands.record import app as record_app
+from commands.report import app as report_app
 from config import config as default_config
 from helpers.monitor import Monitor
 from helpers.preflight import run_orphan_sweep, run_preflight
@@ -31,6 +34,9 @@ logging.basicConfig(
 
 app = typer.Typer(no_args_is_help=True, help="Digital Reef eDiscovery load tester.")
 app.add_typer(admin_app, name="admin")
+app.add_typer(record_app, name="record")
+app.add_typer(campaign_app, name="campaign")
+app.add_typer(report_app, name="report")
 
 _HERE = Path(__file__).parent
 

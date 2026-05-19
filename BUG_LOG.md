@@ -24,11 +24,19 @@ the rest are server-side log noise that's safe to ignore.
 | **B29** | Low | Logs (cosmetic) | `Could not find role row with:<handle>PROJECT` on every `createCase`. Hibernate composite-key smell. No functional impact. |
 | **B37** | Low | Logs (cosmetic) | `WORK_BASKET parent-not-found` on every `createCase`. Same family as B29. |
 | **B38** | Low | Logs (cosmetic) | `SRI cancel-all` error on every project delete. Delete still completes. |
+| **B39** | Low | Logs (cosmetic) | `SecureObjectProcessing … PROJECT_PREFERENCES parent not found` on every `createCase`. Race during project setup; project still reaches AVAILABLE. |
+| **B40** | Low | Logs (cosmetic) | `DirectoryDeleteProcessingInstance: Invalid event JOB_STATUS_UPDATE in state DIRECTORY_DELETE_JOB` on every large-project delete. FSM duplicate-event race; COMPLETE follows. |
+| **B41** | Low | Logs (cosmetic) | `AurariaMgmtService: Could Not execute StorageQuotaCheck` daily at ~01:59 ET. Scheduled-maintenance check, no stack trace. |
+| **B42** | Low | Logs (cosmetic) | `CaeJvmInstance: Invalid state — negative numJobsCurrent` at large-job completion. Counter race at 99%-to-COMPLETE. |
+| **B43** | Low | Logs (cosmetic) | `CaeNodeInstance: Invalid state — negative` companion to B42. |
+| **B44** | Low | Logs (cosmetic) | `ChainOfCustodyFactory: cp command exit code is (1)` on every large-project delete. Archiver races with cleaner; delete still completes. |
 | **B24** | Low | Edge case | Unauthenticated POST to JSON endpoints returns an HTML NPE instead of a structured 401. Always log in first. |
 
 If you see one of the **Logs (cosmetic)** errors in `SERVER.log` and
 nothing functional broke, you can ignore it — it's tracked here and
-filed with the server team.
+filed with the server team. B39–B44 were catalogued during the
+**2026-05-19 soak campaign** (~46 jobs, ~1.23M docs); all six confirmed
+benign after 14+ samples each.
 
 ---
 
@@ -86,6 +94,12 @@ Not blockers; just polish.
 | B22 | Low | ✅ Fixed in v0.08 | `python3-devel` and `gcc` added to `scripts/install/dr_installprep.sh` so `pip install gevent` succeeds. |
 | B27b | Medium | ✅ Fixed in v0.06 | Stale `DR_ADMIN_ROLE_HANDLE` in `.env` would silently defeat the v0.06 role auto-discovery (because shell-env-first + .env-fallback still surfaces the stale value when shell doesn't set it). CLI option no longer binds to that env var; tests no longer read it. Auto-discovery is now authoritative. |
 | B35 | Low | Open (server) | A half-failed `ecaManager/createCase` (e.g. when the permission-row lookup fails per B29) leaves the project row in `mgmtproject` but invisible to `orgManager/listProjects`. `delete-project NAME` cannot recover it because the lookup is API-based — only an explicit handle works. The server should either complete the rollback or expose the orphan via a stale-state listing. |
+| B39 | Low | Open (server) | `SecureObjectProcessing: Add object - could not find parent object [<id>] when creating type [PROJECT_PREFERENCES]` on every `ecaManager/createCase`. Same Hibernate composite-key smell family as B29/B37. Project still reaches AVAILABLE; no user-visible impact. Catalogued during 2026-05-19 soak campaign (46/46 jobs SUCCESS through this pattern). |
+| B40 | Low | Open (server) | `DirectoryDeleteProcessingInstance: Invalid event of JOB_STATUS_UPDATE in state DIRECTORY_DELETE_JOB` on every large-project delete. FSM receives a duplicate status-update event after the state has already transitioned; `COMPLETE` log line follows immediately. Delete completes successfully. Catalogued during 2026-05-19 soak campaign (14/14 large-deletes). |
+| B41 | Low | Open (server) | `AurariaMgmtService: Could Not execute StorageQuotaCheck` fires daily at ~01:59 ET. No stack trace, no job-state impact. Likely a scheduled-maintenance check that the test installation hasn't been provisioned for. Catalogued 2026-05-19. |
+| B42 | Low | Open (server) | `CaeJvmInstance: Invalid state found - negative numJobsCurrent` at large-job completion (~99% → COMPLETE → INDEX_MERGE_JOB transition). Resource-counter accounting race. Catalogued during 2026-05-19 soak campaign (~1/large-job). |
+| B43 | Low | Open (server) | `CaeNodeInstance: Invalid state found - negative` companion to B42, logged simultaneously on the node-instance side of the same job. Same root cause. |
+| B44 | Low | Open (server) | `ChainOfCustodyFactory: cp command exit code is (1)` on every large-project delete. Archiver races with storage-cleaner during teardown; the delete proceeds to `WORKBASKET_DELETE_EJB` and completes. Catalogued during 2026-05-19 soak campaign (~1/large-delete). |
 
 ---
 
