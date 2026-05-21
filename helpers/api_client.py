@@ -19,10 +19,21 @@ import uuid
 from typing import Any
 
 import requests
+import urllib3
 
 from config import Config, config as default_config
 
 logger = logging.getLogger(__name__)
+
+# Suppress urllib3 InsecureRequestWarning once at module import when the
+# operator has opted out of TLS verification (DR_VERIFY_SSL=false). Every
+# code path that talks to the SUT comes through this module, so this is
+# the right home — fixing it here also covers the CLI, the daemon, the
+# load-test scenarios, and any external scripting that imports the client.
+# On a properly-configured production install (verify_ssl=True) we leave
+# urllib3's warnings alone so a misconfiguration is still loud.
+if not getattr(default_config, "verify_ssl", True):
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class APIError(Exception):
