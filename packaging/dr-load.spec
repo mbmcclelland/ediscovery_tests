@@ -110,6 +110,10 @@ install -d %{buildroot}%{_testload_dir}
 install -m 0644 %{_sourcedir}/testload/doc1.txt %{buildroot}%{_testload_dir}/
 install -m 0644 %{_sourcedir}/testload/doc2.txt %{buildroot}%{_testload_dir}/
 
+# ── 4a. Logrotate config (daily rotation, 14d retention, restart on rotate) ──
+install -D -m 0644 %{_sourcedir}/logrotate/dr-load-recorder \
+    %{buildroot}%{_sysconfdir}/logrotate.d/dr-load-recorder
+
 # ── 5. Bundled wheels cache (for offline pip install at %post time) ───────────
 install -d %{buildroot}%{_wheels_dir}
 cp %{_sourcedir}/wheels/*.whl %{buildroot}%{_wheels_dir}/
@@ -180,6 +184,9 @@ touch %{_recorder_log} && \
 
 # ── Fixture data ──────────────────────────────────────────────────────────────
 %{_testload_dir}/
+
+# ── Logrotate config (root:root, mode 0644 — system config) ──────────────────
+%config(noreplace) %{_sysconfdir}/logrotate.d/dr-load-recorder
 
 # ── Bundled wheels cache ──────────────────────────────────────────────────────
 %{_wheels_dir}/

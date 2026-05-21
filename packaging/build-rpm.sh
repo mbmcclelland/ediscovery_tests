@@ -128,6 +128,10 @@ install -d "${SOURCES_DIR}/testload"
 install -m 0644 "${REPO_ROOT}/tests/fixtures/testload/doc1.txt" "${SOURCES_DIR}/testload/"
 install -m 0644 "${REPO_ROOT}/tests/fixtures/testload/doc2.txt" "${SOURCES_DIR}/testload/"
 
+# Logrotate config
+install -D -m 0644 "${SCRIPT_DIR}/logrotate/dr-load-recorder" \
+    "${SOURCES_DIR}/logrotate/dr-load-recorder"
+
 # ── Step 4: Copy spec file ─────────────────────────────────────────────────────
 echo ">> Copying spec to rpmbuild SPECS..."
 cp "${SCRIPT_DIR}/dr-load.spec" "${RPMBUILD_DIR}/SPECS/dr-load.spec"
