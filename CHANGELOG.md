@@ -87,13 +87,26 @@ Default store location (in priority order):
 automatically excluded from the error-rate count so they do not
 artificially degrade the traffic-light verdict.
 
-**98 unit tests** added at `tests/test_recorder.py`. All pass with no
-live server required.
+**112 unit tests** at `tests/test_recorder.py` (98 in the initial pass
+plus 14 regression tests for the fixes below). All pass with no live
+server required.
 
-**Three bugs filed** against the Phase A code — see [BUG_LOG §A](BUG_LOG.md#a--open-today-quick-scan):
-BUG-1 (PID collision), BUG-2 (false GREEN on empty store), BUG-3
-(urllib3 flood in recorder log). None affect the existing `admin` CLI
-or the test suite.
+**Three bugs found, filed, and fixed in v0.15** against the Phase A
+code — see [BUG_LOG §C](BUG_LOG.md#c--full-table-every-issue-ever-found):
+
+- **BUG-1 (PID file collision):** `commands/record.py` derives PID and
+  log paths from the store *stem*, not the parent dir, so two stores
+  in the same directory no longer share PID files.
+- **BUG-2 (false-GREEN verdict on empty store):** `commands/report.py`
+  emits a `NO DATA` verdict + `WARNING` line and exits 2 when the
+  window contains zero samples.
+- **BUG-3 (urllib3 InsecureRequestWarning flood):** suppression now
+  lives in `helpers/api_client.py` at module import (conditional on
+  `verify_ssl=False`). The daemon-side and preflight-side calls are
+  retained as belt-and-suspenders defense, but the authoritative
+  home is the api_client because every TLS path goes through it.
+
+None of the three affected the existing `admin` CLI or the test suite.
 
 ### Added — Digital Reef brand palette
 
